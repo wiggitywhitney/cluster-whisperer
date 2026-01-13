@@ -32,6 +32,21 @@ Viktor's examples for patterns to follow:
 - kubectl tools: https://github.com/vfarcic/dot-ai/blob/main/src/core/kubectl-tools.ts
 - Agent with tools: https://github.com/vfarcic/dot-ai/blob/main/src/tools/query.ts
 
+## Secrets Management with Teller
+
+This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [Teller](https://github.com/tellerops/teller).
+
+Run commands with secrets:
+```bash
+teller run -- npm start
+teller run -- node dist/index.js "your question"
+```
+
+Verify secrets are configured:
+```bash
+teller show
+```
+
 ## Git Workflow
 
 - Create PRs to merge to main
