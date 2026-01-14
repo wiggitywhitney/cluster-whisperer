@@ -4,6 +4,25 @@ This guide explains how we build tools that let an AI agent run kubectl commands
 
 ---
 
+## What Parts Are Actually LangChain?
+
+Most of this code is plain TypeScript. LangChain is just one function:
+
+```typescript
+import { tool } from "@langchain/core/tools";
+```
+
+That's it. The `tool()` function wraps your code so an agent can call it.
+
+Everything else is not LangChain:
+- **Zod schema** - just Zod, a TypeScript validation library
+- **execSync** - Node.js built-in for running shell commands
+- **executeKubectl helper** - plain TypeScript function
+
+If you switched to a different agent framework, you'd only change how the tool is wrapped. The schema and kubectl execution would stay the same.
+
+---
+
 ## What Is a Tool?
 
 A tool is a function that an AI agent can call. When you ask the agent "Why are pods failing?", it decides which tools to use, calls them, and reasons about the results.
