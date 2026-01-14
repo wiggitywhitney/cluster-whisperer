@@ -135,22 +135,22 @@ Keeping tools separate allows:
 
 - [ ] **M2**: Agentic loop with visible reasoning
   - LangChain agent setup with `createReactAgent` and tool binding
-  - System prompt in separate file (`prompts/investigator.md`) for easy iteration
+  - Minimal system prompt in `prompts/investigator.md` (~10 lines: role + thoroughness + output format)
   - Enhanced kubectl_get description (explicit table format, when to use vs describe)
   - Visible "thinking" output via `streamEvents()` - show tool calls as they happen
   - Manual test: agent can answer simple question using kubectl_get (see Testing section)
 
 - [ ] **M3**: Add kubectl_describe tool
   - Tool implementation with directive description (tells agent WHEN to use it vs kubectl_get)
-  - Description emphasizes: "Use when you need comprehensive details, events, or to understand why something isn't working"
-  - Update system prompt with investigation flow guidance (list → find problem → describe for details)
+  - Description guides flow: "Use kubectl_get first to find resources, then kubectl_describe for details"
+  - Description emphasizes: "Check Events section to understand why something isn't working"
   - Manual test: agent uses describe when appropriate (see Testing section)
 
 - [ ] **M4**: Add kubectl_logs tool
   - Tool implementation with `args` array for flexible options (following Viktor's pattern)
   - Supported args: `--previous` (crashed containers), `--tail=N` (limit output), `-c container` (multi-container pods)
-  - Description emphasizes crash loop debugging: "Essential for understanding application errors. Use --previous for crashed containers."
-  - Update system prompt with full investigation flow (list → describe → logs for app perspective)
+  - Description guides flow: "Events show K8s perspective, logs show app perspective"
+  - Description emphasizes: "Use --previous for crashed/restarted containers"
   - Manual test: agent investigates crash loops using logs (see Testing section)
 
 - [ ] **M5**: Demo prep and polish
@@ -355,6 +355,36 @@ cd ~/Documents/Repositories/spider-rainbows && echo "y" | ./destroy.sh
 5. **Tool naming convention** - All kubectl tools use `kubectl_` prefix for consistent routing.
 
 **Impact**: Updated all milestone descriptions. M2 adds system prompt file and enhanced descriptions. M3/M4 include directive descriptions that contrast with other tools. Tool Definition Pattern section updated with full examples.
+
+### 2026-01-14: Minimal System Prompt with Thoroughness Guidance
+**Decision**: Keep the system prompt minimal (~10 lines) and add explicit thoroughness guidance.
+**Rationale**: Viktor's `query-system.md` is surprisingly short - just role, thoroughness guidance, and output format. The tool descriptions do the heavy lifting for guiding agent behavior. A minimal prompt prevents conflicting instructions and lets the agent focus on the tools.
+
+**Key patterns from Viktor's system prompt:**
+
+1. **One-line role statement** - "You are a Kubernetes cluster investigator"
+2. **Thoroughness guidance** - "Don't stop at the first result - verify you've found the root cause"
+3. **Let tools guide behavior** - Tool descriptions tell the agent WHEN to use each tool
+
+**Example system prompt structure:**
+```markdown
+# Kubernetes Investigation Assistant
+
+You are a Kubernetes cluster investigator. Use the available tools to answer
+the user's question about their cluster.
+
+## Investigation Approach
+
+- Start broad, then narrow down to specific problems
+- Don't stop at the first result - verify you've found the root cause
+- When you find something unhealthy, dig deeper with describe or logs
+
+## Response Format
+
+Provide a clear, concise summary of what you found and what it means.
+```
+
+**Impact**: M2 implementation should use a minimal system prompt. Investigation flow guidance lives in tool descriptions, not the system prompt. Added thoroughness guidance to prevent shallow investigations.
 
 ---
 
