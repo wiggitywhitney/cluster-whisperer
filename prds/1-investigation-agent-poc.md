@@ -1,6 +1,6 @@
 # PRD #1: Kubernetes Investigation Agent (POC)
 
-**Status**: Not Started
+**Status**: In Progress
 **Created**: 2026-01-13
 **GitHub Issue**: [#1](https://github.com/wiggitywhitney/cluster-whisperer/issues/1)
 **Deadline**: 1 week (KubeCon demo prep)
@@ -128,7 +128,7 @@ Keeping tools separate allows:
 
 ## Milestones
 
-- [ ] **M1**: Project setup + kubectl_get tool working standalone
+- [x] **M1**: Project setup + kubectl_get tool working standalone
   - package.json, tsconfig, basic structure
   - kubectl_get tool that executes and returns output
   - Manual test: tool works when called directly
@@ -161,12 +161,15 @@ Keeping tools separate allows:
 
 ```json
 {
-  "@langchain/anthropic": "latest",
-  "@langchain/core": "latest",
-  "zod": "latest",
-  "commander": "latest"
+  "@langchain/anthropic": "^0.3.14",
+  "@langchain/core": "^0.3.27",
+  "@langchain/langgraph": "^0.2.42",
+  "commander": "^13.0.0",
+  "zod": "3.25.67"
 }
 ```
+
+**Note**: Zod must be pinned to 3.25.67 due to a [known TypeScript bug](https://github.com/langchain-ai/langchainjs/issues/8468) with the `tool()` function in newer Zod versions.
 
 ### Tool Definition Pattern
 
@@ -232,10 +235,36 @@ Patterns to follow:
 
 ## Design Decisions
 
-*(To be filled in during implementation)*
+### 2026-01-14: LangGraph for Agentic Loop
+**Decision**: Use `@langchain/langgraph` with `createReactAgent` instead of older LangChain agent patterns.
+**Rationale**: LangGraph is the current recommended approach for building agents (2025+). The older `AgentExecutor` pattern is being deprecated.
+**Impact**: Added `@langchain/langgraph` to dependencies. M2 implementation will use `createReactAgent` from `@langchain/langgraph/prebuilt`.
+
+### 2026-01-14: Pin Zod to 3.25.67
+**Decision**: Pin Zod version to 3.25.67 using npm overrides.
+**Rationale**: Zod 3.25.68+ has a TypeScript bug causing "Type instantiation is excessively deep" errors with LangChain's `tool()` function. See [langchainjs #8468](https://github.com/langchain-ai/langchainjs/issues/8468).
+**Impact**: Added `overrides` section to package.json. Must maintain this pin until LangChain or Zod fixes the issue.
+
+### 2026-01-14: Tool Definition Pattern
+**Decision**: Use LangChain's `tool()` function from `@langchain/core/tools` with Zod schemas.
+**Rationale**: This is the current recommended pattern for defining tools. Simpler than `DynamicStructuredTool` class, better TypeScript integration with the Zod pin.
+**Impact**: All kubectl tools follow this pattern. See `src/tools/kubectl-get.ts` for reference implementation.
+
+### 2026-01-14: Test Cluster Setup
+**Decision**: Use the spider-rainbows Kind cluster setup for testing.
+**Rationale**: Provides realistic complexity with multiple namespaces (default, argocd, ingress-nginx), various resource types (deployments, services, ingress, configmaps), and real workloads. Better for demo scenarios than a bare cluster.
+**Impact**: Testing requires running `~/Documents/Repositories/spider-rainbows/setup-platform.sh` with Kind option. Prerequisites: Docker running, ports 80/443 free.
+**Setup command**: `~/Documents/Repositories/spider-rainbows/setup-platform.sh` (select option 1 for Kind)
 
 ---
 
 ## Progress Log
 
-*(To be filled in during implementation)*
+### 2026-01-14: M1 Complete
+- Created project structure: `package.json`, `tsconfig.json`
+- Implemented `src/utils/kubectl.ts` - shared kubectl execution helper with subprocess pattern
+- Implemented `src/tools/kubectl-get.ts` - first tool using LangChain `tool()` function with Zod schema
+- Created `src/index.ts` - CLI entry point (M1 test mode)
+- Fixed Zod TypeScript bug by pinning to 3.25.67 with npm overrides
+- Tested against Kind cluster (spider-rainbows setup) - successfully returned 21 pods across 5 namespaces
+- Created learning-focused documentation: `docs/kubectl-tools.md`
