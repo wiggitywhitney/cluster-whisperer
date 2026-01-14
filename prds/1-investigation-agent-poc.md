@@ -131,26 +131,26 @@ Keeping tools separate allows:
 - [x] **M1**: Project setup + kubectl_get tool working standalone
   - package.json, tsconfig, basic structure
   - kubectl_get tool that executes and returns output
-  - Manual test: tool works when called directly
+  - Manual test: tool works when called directly (see Testing section)
 
 - [ ] **M2**: Agentic loop with visible reasoning
   - LangChain agent setup with tool binding
   - System prompt for Kubernetes investigation
   - Visible "thinking" output at each step
-  - Manual test: agent can answer simple question using kubectl_get
+  - Manual test: agent can answer simple question using kubectl_get (see Testing section)
 
 - [ ] **M3**: Add kubectl_describe tool
   - Tool implementation following same pattern
   - Agent can now get details about specific resources
-  - Manual test: agent uses describe when appropriate
+  - Manual test: agent uses describe when appropriate (see Testing section)
 
 - [ ] **M4**: Add kubectl_logs tool
   - Tool implementation with --previous flag support
   - Agent can now check container logs
-  - Manual test: agent investigates crash loops using logs
+  - Manual test: agent investigates crash loops using logs (see Testing section)
 
 - [ ] **M5**: Demo prep and polish
-  - Test against real cluster (minikube/kind/dev cluster)
+  - Test against real cluster (see Testing section)
   - Error handling for common failures
   - README with setup instructions
   - Practice demo script
@@ -232,6 +232,22 @@ Patterns to follow:
 - `kubectl` CLI installed and in PATH
 - Valid kubeconfig with cluster access
 - `ANTHROPIC_API_KEY` environment variable
+
+## Testing
+
+**Every milestone must be tested against a real cluster. Do not skip testing.**
+
+**Prerequisites:** Docker running, ports 80/443 free
+
+**Start cluster:**
+```bash
+cd ~/Documents/Repositories/spider-rainbows && ./setup-platform.sh kind
+```
+
+**Tear down cluster:**
+```bash
+cd ~/Documents/Repositories/spider-rainbows && echo "y" | ./destroy.sh
+```
 
 ## Design Decisions
 
