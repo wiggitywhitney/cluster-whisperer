@@ -134,24 +134,30 @@ Keeping tools separate allows:
   - Manual test: tool works when called directly (see Testing section)
 
 - [ ] **M2**: Agentic loop with visible reasoning
-  - LangChain agent setup with tool binding
-  - System prompt for Kubernetes investigation
-  - Visible "thinking" output at each step
+  - LangChain agent setup with `createReactAgent` and tool binding
+  - System prompt in separate file (`prompts/investigator.md`) for easy iteration
+  - Enhanced kubectl_get description (explicit table format, when to use vs describe)
+  - Visible "thinking" output via `streamEvents()` - show tool calls as they happen
   - Manual test: agent can answer simple question using kubectl_get (see Testing section)
 
 - [ ] **M3**: Add kubectl_describe tool
-  - Tool implementation following same pattern
-  - Agent can now get details about specific resources
+  - Tool implementation with directive description (tells agent WHEN to use it vs kubectl_get)
+  - Description emphasizes: "Use when you need comprehensive details, events, or to understand why something isn't working"
+  - Update system prompt with investigation flow guidance (list → find problem → describe for details)
   - Manual test: agent uses describe when appropriate (see Testing section)
 
 - [ ] **M4**: Add kubectl_logs tool
-  - Tool implementation with --previous flag support
-  - Agent can now check container logs
+  - Tool implementation with `args` array for flexible options (following Viktor's pattern)
+  - Supported args: `--previous` (crashed containers), `--tail=N` (limit output), `-c container` (multi-container pods)
+  - Description emphasizes crash loop debugging: "Essential for understanding application errors. Use --previous for crashed containers."
+  - Update system prompt with full investigation flow (list → describe → logs for app perspective)
   - Manual test: agent investigates crash loops using logs (see Testing section)
 
 - [ ] **M5**: Demo prep and polish
   - Test against real cluster (see Testing section)
   - Error handling for common failures
+  - Polish output format for demo visibility (tool name, args, truncated result)
+  - Verify tool descriptions guide coherent investigation flow
   - README with setup instructions
   - Practice demo script
 
@@ -173,43 +179,100 @@ Keeping tools separate allows:
 
 ### Tool Definition Pattern
 
-Following the pattern from reference examples:
+Following Viktor's pattern of **directive descriptions** that tell the AI WHEN to use each tool:
 
 ```typescript
-const kubectlGetTool = {
-  name: "kubectl_get",
-  description: "List Kubernetes resources. Use this to see what resources exist and their current status.",
-  inputSchema: z.object({
-    resource: z.string().describe("Resource type (e.g., pods, deployments, services)"),
-    namespace: z.string().optional().describe("Namespace to query (omit for all namespaces)"),
-    name: z.string().optional().describe("Specific resource name (omit to list all)"),
-  }),
-  execute: async (params) => {
-    // Build and execute kubectl command
-    // Return stdout
+// kubectl_get - note the explicit format and guidance on when to use alternatives
+const kubectlGetTool = tool(
+  async (input) => { /* ... */ },
+  {
+    name: "kubectl_get",
+    description: `List Kubernetes resources in TABLE FORMAT (compact and efficient).
+
+Returns a table with columns like NAME, STATUS, READY, AGE. Use this to:
+- See what resources exist
+- Check basic status (Running, Pending, CrashLoopBackOff, etc.)
+- Find resources that need further investigation
+
+For detailed information about a specific resource (events, configuration,
+conditions), use kubectl_describe instead.`,
+    schema: kubectlGetSchema,
   }
-};
+);
+
+// kubectl_describe - contrasts with kubectl_get
+const kubectlDescribeTool = tool(
+  async (input) => { /* ... */ },
+  {
+    name: "kubectl_describe",
+    description: `Get detailed information about a specific Kubernetes resource.
+
+Returns comprehensive details including configuration, status, events, and
+relationships. Use this when you need to understand:
+- Why a resource isn't working (check Events section)
+- Current configuration and conditions
+- Related resources and dependencies
+
+Use kubectl_get first to find resources, then kubectl_describe for details.`,
+    schema: kubectlDescribeSchema,
+  }
+);
+
+// kubectl_logs - includes args array for flexibility
+const kubectlLogsTool = tool(
+  async (input) => { /* ... */ },
+  {
+    name: "kubectl_logs",
+    description: `Get container logs from a pod. Essential for debugging application
+crashes, errors, and understanding runtime behavior.
+
+Use --previous flag to get logs from crashed/restarted containers.`,
+    schema: z.object({
+      pod: z.string().describe("Pod name"),
+      namespace: z.string().describe("Namespace (required for logs)"),
+      args: z.array(z.string()).optional().describe(
+        'Additional args: ["--previous"], ["--tail=50"], ["-c", "container-name"]'
+      ),
+    }),
+  }
+);
 ```
 
 ### Agentic Loop Pattern
 
-Following the pattern from reference examples:
+Using LangGraph's `createReactAgent` with `streamEvents` for visible reasoning:
 
 ```typescript
-const result = await agent.invoke({
-  messages: [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userQuestion }
-  ],
+import { ChatAnthropic } from "@langchain/anthropic";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import * as fs from "fs";
+
+// Load system prompt from separate file (easier to iterate)
+const systemPrompt = fs.readFileSync("prompts/investigator.md", "utf8");
+
+// Create the agent
+const model = new ChatAnthropic({ model: "claude-sonnet-4-20250514", temperature: 0 });
+const agent = createReactAgent({
+  llm: model,
   tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
-  maxIterations: 10,
-  onToolCall: (tool, args, result) => {
-    // Print visible reasoning
-    console.log(`🔧 Tool: ${tool.name}`);
-    console.log(`   Args: ${JSON.stringify(args)}`);
-    console.log(`   Result: ${result}`);
-  }
+  stateModifier: systemPrompt,  // Injects system prompt
 });
+
+// Stream events for visible reasoning
+const eventStream = agent.streamEvents(
+  { messages: [{ role: "user", content: userQuestion }] },
+  { version: "v2" }
+);
+
+for await (const event of eventStream) {
+  if (event.event === "on_tool_start") {
+    console.log(`🔧 Tool: ${event.name}`);
+    console.log(`   Args: ${JSON.stringify(event.data.input)}`);
+  }
+  if (event.event === "on_tool_end") {
+    console.log(`   Result: ${truncate(event.data.output, 500)}`);
+  }
+}
 ```
 
 ## Reference Examples
@@ -271,6 +334,27 @@ cd ~/Documents/Repositories/spider-rainbows && echo "y" | ./destroy.sh
 **Rationale**: Provides realistic complexity with multiple namespaces (default, argocd, ingress-nginx), various resource types (deployments, services, ingress, configmaps), and real workloads. Better for demo scenarios than a bare cluster.
 **Impact**: Testing requires running `~/Documents/Repositories/spider-rainbows/setup-platform.sh` with Kind option. Prerequisites: Docker running, ports 80/443 free.
 **Setup command**: `~/Documents/Repositories/spider-rainbows/setup-platform.sh` (select option 1 for Kind)
+
+### 2026-01-14: Adopt Viktor's Tool Design Patterns
+**Decision**: Follow patterns from Viktor's dot-ai reference implementation across all milestones.
+**Rationale**: Viktor's kubectl-tools.ts demonstrates battle-tested patterns for AI tool design that improve agent decision-making and investigation flow.
+
+**Key patterns adopted:**
+
+1. **Directive tool descriptions** - Tell the AI WHEN to use each tool relative to others:
+   - kubectl_get: "For basic status. For details, use kubectl_describe instead."
+   - kubectl_describe: "Use when you need comprehensive details or to understand why something isn't working."
+   - kubectl_logs: "Essential for debugging crashes. Use --previous for crashed containers."
+
+2. **Explicit output format** - kubectl_get description states "TABLE FORMAT (compact and efficient)" so the AI knows what to expect.
+
+3. **System prompt in separate file** - Store in `prompts/investigator.md` for easy iteration without code changes.
+
+4. **Args array for flexibility** - kubectl_logs uses `args: string[]` for options like `--previous`, `--tail=50`, `-c container`.
+
+5. **Tool naming convention** - All kubectl tools use `kubectl_` prefix for consistent routing.
+
+**Impact**: Updated all milestone descriptions. M2 adds system prompt file and enhanced descriptions. M3/M4 include directive descriptions that contrast with other tools. Tool Definition Pattern section updated with full examples.
 
 ---
 
