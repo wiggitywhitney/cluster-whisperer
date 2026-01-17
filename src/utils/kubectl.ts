@@ -1,11 +1,6 @@
 /**
  * kubectl.ts - Executes kubectl commands as subprocesses
  *
- * Why a separate file for this?
- * All our kubectl tools (get, describe, logs) need to run kubectl commands.
- * Instead of repeating the subprocess logic in each tool, we put it here once.
- * This is called "separation of concerns" - each file does one job well.
- *
  * How it works:
  * 1. Takes an array of kubectl arguments (e.g., ["get", "pods", "-n", "default"])
  * 2. Spawns kubectl as a child process

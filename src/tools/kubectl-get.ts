@@ -94,18 +94,14 @@ export const kubectlGetTool = tool(
   },
   {
     name: "kubectl_get",
-    description: `List Kubernetes resources and their current status.
+    description: `List Kubernetes resources in TABLE FORMAT (compact, one line per resource).
 
-Use this tool to see what resources exist in the cluster. Common resources include:
-- pods: Running containers
-- deployments: Desired state for pod replicas
-- services: Network endpoints for accessing pods
-- nodes: The machines in the cluster
-- configmaps, secrets: Configuration data
-- namespaces: Logical groupings of resources
+Returns columns like NAME, STATUS, READY, AGE. Use this to:
+- See what resources exist in a namespace or cluster
+- Check basic status (Running, Pending, CrashLoopBackOff, etc.)
+- Find resources that need further investigation
 
-The output shows resource names, status, and basic info like age and ready state.
-For more details about a specific resource, use kubectl_describe instead.`,
+Common resources: pods, deployments, services, nodes, configmaps, namespaces.`,
     schema: kubectlGetSchema,
   }
 );

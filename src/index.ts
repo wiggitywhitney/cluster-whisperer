@@ -4,12 +4,8 @@
  *
  * What this file does:
  * This is the main entry point when you run the cluster-whisperer command.
- * It parses command-line arguments using Commander.js and routes to the
- * appropriate functionality.
- *
- * Current state (M1 - POC):
- * For now, this just tests the kubectl_get tool directly.
- * In M2, we'll add the agentic loop that decides which tools to call.
+ * It takes a natural language question, sends it to the agent, and streams
+ * the investigation process to the terminal so you can see what's happening.
  *
  * The shebang (#!/usr/bin/env node):
  * This line tells the OS to run this file with Node.js.
@@ -17,20 +13,19 @@
  */
 
 import { Command } from "commander";
-import { kubectlGetTool } from "./tools/kubectl-get";
+import { HumanMessage } from "@langchain/core/messages";
+import { investigatorAgent, truncate } from "./agent/investigator";
 
 /**
- * Main function - sets up the CLI and handles commands
+ * Main function - sets up the CLI and runs the agent
  *
  * Why async?
- * Our tools make kubectl calls which are async operations.
- * Making main() async lets us use await for cleaner code.
+ * The agent streams events as it works. We use `for await` to process
+ * each event as it arrives, which requires an async context.
  */
 async function main() {
   const program = new Command();
 
-  // Configure the CLI with name, description, and version
-  // This info shows up when users run --help
   program
     .name("cluster-whisperer")
     .description(
@@ -38,43 +33,107 @@ async function main() {
     )
     .version("0.1.0");
 
-  // Define the main command - takes a question as an argument
-  // The angle brackets <question> mean it's required
   program
     .argument("<question>", "Natural language question about your cluster")
     .action(async (question: string) => {
       console.log(`\nQuestion: ${question}\n`);
 
-      // M1: Test kubectl_get directly
-      // In M2, this will be replaced with the agentic loop that decides
-      // which tools to call based on the question
-      console.log("--- M1 Test Mode: Calling kubectl_get directly ---\n");
-
-      // For testing, we'll list pods across all namespaces
-      // This proves the tool works end-to-end
-      console.log("Testing kubectl_get tool with: get pods in all namespaces");
-      console.log("-".repeat(50));
-
-      const result = await kubectlGetTool.invoke({
-        resource: "pods",
-        namespace: "all",
-      });
-
-      console.log(result);
-      console.log("-".repeat(50));
-      console.log(
-        "\nM1 complete: kubectl_get tool is working."
+      /**
+       * Stream events from the agent as it works.
+       *
+       * Why streamEvents instead of invoke?
+       * invoke() waits until the agent is completely done, then returns the
+       * final result. streamEvents() gives us a live feed of what's happening:
+       * - When the agent decides to call a tool
+       * - What arguments it passes
+       * - What result it gets back
+       *
+       * This visibility is valuable for learning (see how the agent thinks)
+       * and debugging (understand why it made certain choices).
+       *
+       * The version: "v2" parameter specifies the event format. v2 is the
+       * current recommended format for LangGraph agents.
+       */
+      const eventStream = investigatorAgent.streamEvents(
+        { messages: [new HumanMessage(question)] },
+        { version: "v2" }
       );
-      console.log(
-        "Next milestone (M2): Add agentic loop to answer questions.\n"
-      );
+
+      /**
+       * Track the final answer so we can display it at the end.
+       * The agent might produce multiple messages, but we want the last
+       * AI message which contains the summary answer.
+       */
+      let finalAnswer = "";
+
+      /**
+       * Process events as they stream in.
+       *
+       * Event types we care about:
+       * - on_tool_start: Agent decided to call a tool, shows name and args
+       * - on_tool_end: Tool finished, shows the result
+       * - on_chat_model_end: Model finished generating, capture final answer
+       *
+       * There are many other event types (on_chain_start, on_llm_stream, etc.)
+       * but these three give us the visibility we need without noise.
+       */
+      for await (const event of eventStream) {
+        if (event.event === "on_tool_start") {
+          // Agent is calling a tool - show which one and with what arguments
+          // event.data.input contains the tool arguments
+          const toolName = event.name;
+          const toolInput = event.data.input;
+
+          // The input might be nested in an 'input' property if it was serialized
+          const args =
+            typeof toolInput === "object" && toolInput?.input
+              ? JSON.parse(toolInput.input)
+              : toolInput;
+
+          console.log(`🔧 Tool: ${toolName}`);
+          console.log(`   Args: ${JSON.stringify(args)}`);
+        }
+
+        if (event.event === "on_tool_end") {
+          // Tool finished - show the result (truncated to avoid flooding terminal)
+          // event.data.output is a ToolMessage object with a .content property
+          const output = event.data.output;
+          const content = output?.content ?? output;
+          console.log(`   Result:\n${truncate(String(content), 2000)}`);
+          console.log(); // blank line between tool calls
+        }
+
+        if (event.event === "on_chat_model_end") {
+          // Model finished generating - capture the response for final display
+          // The output contains the message(s) the model produced
+          // Content might be a string or an array of content blocks
+          const output = event.data.output;
+          if (output?.content) {
+            const content = output.content;
+            if (typeof content === "string") {
+              finalAnswer = content;
+            } else if (Array.isArray(content)) {
+              // Claude returns content as array of blocks, extract text
+              finalAnswer = content
+                .filter((block: { type: string }) => block.type === "text")
+                .map((block: { text: string }) => block.text)
+                .join("\n");
+            }
+          }
+        }
+      }
+
+      // Display the final answer
+      if (finalAnswer) {
+        console.log("📋 Answer:");
+        console.log(finalAnswer);
+        console.log();
+      }
     });
 
-  // Parse command line arguments and execute
   await program.parseAsync(process.argv);
 }
 
-// Run the main function and handle any top-level errors
 main().catch((error) => {
   console.error("Error:", error.message);
   process.exit(1);

@@ -133,17 +133,19 @@ Keeping tools separate allows:
   - kubectl_get tool that executes and returns output
   - Manual test: tool works when called directly (see Testing section)
 
-- [ ] **M2**: Agentic loop with visible reasoning
+- [x] **M2**: Agentic loop with visible reasoning
   - LangChain agent setup with `createReactAgent` and tool binding
   - Minimal system prompt in `prompts/investigator.md` (~10 lines: role + thoroughness + output format)
-  - Enhanced kubectl_get description (explicit table format, when to use vs describe)
-  - Visible "thinking" output via `streamEvents()` - show tool calls as they happen
+  - Enhanced kubectl_get description (explicit table format mention)
+  - Visible tool calls via `streamEvents()` - show tool name, args, truncated result (2000 chars)
+  - Learning documentation: `docs/agentic-loop.md` explaining ReAct pattern and LangChain agent setup
   - Manual test: agent can answer simple question using kubectl_get (see Testing section)
 
 - [ ] **M3**: Add kubectl_describe tool
   - Tool implementation with directive description (tells agent WHEN to use it vs kubectl_get)
   - Description guides flow: "Use kubectl_get first to find resources, then kubectl_describe for details"
   - Description emphasizes: "Check Events section to understand why something isn't working"
+  - Update kubectl_get description to reference kubectl_describe ("For details, use kubectl_describe")
   - Manual test: agent uses describe when appropriate (see Testing section)
 
 - [ ] **M4**: Add kubectl_logs tool
@@ -270,7 +272,7 @@ for await (const event of eventStream) {
     console.log(`   Args: ${JSON.stringify(event.data.input)}`);
   }
   if (event.event === "on_tool_end") {
-    console.log(`   Result: ${truncate(event.data.output, 500)}`);
+    console.log(`   Result: ${truncate(event.data.output, 2000)}`);
   }
 }
 ```
@@ -386,9 +388,32 @@ Provide a clear, concise summary of what you found and what it means.
 
 **Impact**: M2 implementation should use a minimal system prompt. Investigation flow guidance lives in tool descriptions, not the system prompt. Added thoroughness guidance to prevent shallow investigations.
 
+### 2026-01-17: Output Truncation at 2000 Characters
+**Decision**: Truncate tool output display to 2000 characters.
+**Rationale**: kubectl output is line-based, typically 80-100 chars per line. 2000 chars shows ~20-25 lines, which covers a complete `kubectl get` table for a typical namespace without flooding the terminal. Long enough to see patterns (multiple CrashLoopBackOff pods), short enough to keep the investigation flow readable when the agent makes multiple tool calls.
+**Impact**: M2's `streamEvents` output handler will truncate displayed results to 2000 chars. Future milestones may use different strategies (kubectl_describe's Events section is at the end, kubectl_logs benefits from `--tail`).
+
+### 2026-01-17: No Explicit Thinking Messages
+**Decision**: Show tool calls only, not "🤔 Thinking..." messages between them.
+**Rationale**: The tool calls themselves show what the agent is doing. Adding explicit thinking messages would be redundant and clutter the output.
+**Impact**: M2 output format shows tool name, args, and truncated result. Updated example interaction in PRD may be misleading - the "🤔 Thinking" lines won't appear in actual output.
+
+### 2026-01-17: Milestone Documentation Pattern
+**Decision**: Each milestone creates a corresponding `docs/` file explaining new concepts introduced.
+**Rationale**: This is a learning-focused repository. Code comments explain *what* and *why* for individual files, but docs/ files teach broader concepts that span multiple files. M1 created `docs/kubectl-tools.md`; M2 will create `docs/agentic-loop.md`.
+**Impact**: M2 deliverables include `docs/agentic-loop.md` covering: ReAct pattern, createReactAgent, streamEvents for visibility, system prompt design philosophy.
+
 ---
 
 ## Progress Log
+
+### 2026-01-17: M2 Complete
+- Created `prompts/investigator.md` - minimal system prompt (~10 lines)
+- Created `src/agent/investigator.ts` - agent using `createReactAgent` with tool binding
+- Updated `src/tools/kubectl-get.ts` - enhanced description with explicit table format mention
+- Updated `src/index.ts` - replaced M1 test mode with full agent using `streamEvents()` for visible tool calls
+- Created `docs/agentic-loop.md` - learning documentation explaining ReAct pattern and LangChain agent setup
+- Tested against Kind cluster - agent successfully answered "What pods are running?" using kubectl_get tool
 
 ### 2026-01-14: M1 Complete
 - Created project structure: `package.json`, `tsconfig.json`
