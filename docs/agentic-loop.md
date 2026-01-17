@@ -128,38 +128,110 @@ This visibility helps you understand how the agent reasons and debug unexpected 
 
 ### Event Types
 
+The agent emits many events as it works. Here are the three we care about:
+
+#### `on_tool_start`
+**When**: The model has decided to call a tool and is about to execute it.
+
+**What happened before**: The model received the question (or previous tool results), reasoned about what to do next, and output a "tool call" requesting a specific tool with specific arguments.
+
+**What you get**:
+- `event.name` - which tool (e.g., "kubectl_get")
+- `event.data.input` - the arguments the model chose (e.g., `{resource: "pods", namespace: "default"}`)
+
+#### `on_tool_end`
+**When**: The tool finished executing and returned a result.
+
+**What happened**: Our code ran the tool (e.g., executed `kubectl get pods`), and now the result is ready to send back to the model.
+
+**What you get**:
+- `event.data.output` - the tool's return value (e.g., the kubectl output string)
+
+**What happens next**: The result gets added to the conversation, and the model will see it on its next turn to decide what to do.
+
+#### `on_chat_model_end`
+**When**: The model finished generating a response.
+
+**What you get**:
+- `event.data.output.content` - what the model said
+
+**Important**: This fires multiple times during an investigation:
+1. After the model decides to call a tool (content contains the tool call)
+2. After the model sees tool results and decides to call another tool
+3. After the model has enough info and generates the final answer
+
+We capture the content each time, so by the end, `finalAnswer` holds the last thing the model said (the summary).
+
+### Putting It Together
+
+```
+User asks question
+    ↓
+[on_chat_model_end] → model decides to call kubectl_get
+    ↓
+[on_tool_start] → kubectl_get is about to run
+    ↓
+[on_tool_end] → kubectl_get finished, here's the output
+    ↓
+[on_chat_model_end] → model sees output, decides it has enough info
+    ↓
+Final answer displayed
+```
+
+### Code Example
+
 ```typescript
-const eventStream = agent.streamEvents(
+const eventStream = investigatorAgent.streamEvents(
   { messages: [new HumanMessage(question)] },
   { version: "v2" }
 );
 
 for await (const event of eventStream) {
   if (event.event === "on_tool_start") {
-    // Agent decided to call a tool
     console.log(`Tool: ${event.name}`);
     console.log(`Args: ${JSON.stringify(event.data.input)}`);
   }
 
   if (event.event === "on_tool_end") {
-    // Tool finished, here's the result
-    console.log(`Result: ${event.data.output}`);
+    console.log(`Result: ${event.data.output.content}`);
   }
 
   if (event.event === "on_chat_model_end") {
-    // Model finished generating (might be final answer)
-    const content = event.data.output?.content;
+    // Capture each time - the last one will be the final answer
+    finalAnswer = event.data.output?.content;
   }
 }
 ```
 
-There are many event types (on_chain_start, on_llm_stream, etc.) but these three show the essential flow.
+There are many other event types (on_chain_start, on_llm_stream, etc.) but these three show the essential flow.
 
 ---
 
 ## The System Prompt
 
-The system prompt tells the agent how to behave. Ours is minimal - about 10 lines:
+### What Makes It a "System" Prompt?
+
+When you send messages to an LLM, each message has a **role**:
+
+| Role | Who it's from | Purpose |
+|------|---------------|---------|
+| `system` | The application developer (you) | Set the model's behavior, role, constraints |
+| `user` | The end user | The actual question or request |
+| `assistant` | The model | The model's response |
+
+"System prompt" means instructions from the **system** (your application), not from the user. The user never sees or types it - it's injected behind the scenes.
+
+```
+[system] You are a Kubernetes investigator...  ← system prompt (from your app)
+[user] What pods are running?                   ← user prompt (from the human)
+[assistant] Let me check...                     ← model's response
+```
+
+**Tool descriptions** are different - they're metadata attached to each tool, not messages in the conversation. The model sees them as "here are the tools you can use" rather than as conversation history.
+
+### Our System Prompt
+
+Ours is minimal - about 10 lines:
 
 ```markdown
 # Kubernetes Investigation Assistant
@@ -183,6 +255,38 @@ Provide a clear, concise summary of what you found and what it means.
 The tool descriptions do most of the work. Each tool tells the agent when to use it and what to expect. The system prompt just sets the role and investigation style.
 
 A longer prompt with detailed investigation procedures would conflict with the tool descriptions and make behavior harder to predict.
+
+### Where Is It Used in the Code?
+
+The system prompt lives in `prompts/investigator.md` as a separate file. Here's how it gets to the agent:
+
+**Step 1: Load the file** (in `src/agent/investigator.ts`)
+```typescript
+const promptPath = path.join(__dirname, "../../prompts/investigator.md");
+const systemPrompt = fs.readFileSync(promptPath, "utf8");
+```
+
+**Step 2: Pass it to createReactAgent via the `stateModifier` option**
+```typescript
+export const investigatorAgent = createReactAgent({
+  llm: model,                    // which model to use
+  tools: [kubectlGetTool],       // which tools the agent can call
+  stateModifier: systemPrompt,   // what to prepend to conversations
+});
+```
+
+Note: `stateModifier` isn't something you import - it's just a configuration option that `createReactAgent` accepts. Like how you don't import `timeout` when you write `{ timeout: 5000 }`.
+
+**What the `stateModifier` option does**: It tells `createReactAgent` to prepend the system prompt to every conversation. When the user asks "What pods are running?", the model actually receives:
+
+```
+[System] You are a Kubernetes cluster investigator...
+[User] What pods are running?
+```
+
+The user never sees or types the system prompt - it's automatically injected by `createReactAgent` before every request.
+
+**Why a separate file?** It's easier to iterate on the prompt wording without touching code. You can tweak the tone, add examples, or adjust instructions without recompiling TypeScript.
 
 ---
 

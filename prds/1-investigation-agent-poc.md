@@ -407,6 +407,14 @@ Provide a clear, concise summary of what you found and what it means.
 
 ## Progress Log
 
+### 2026-01-17: M2 Documentation Polish
+- Expanded `docs/agentic-loop.md` Event Types section with detailed explanations and flow diagram
+- Added "What Makes It a 'System' Prompt?" section explaining message roles (system/user/assistant)
+- Added "Where Is It Used in the Code?" section showing how system prompt flows through the code
+- Clarified `stateModifier` is a config option, not an import
+- Clarified `streamEvents()` is a LangChain method built into the agent object
+- Updated README with correct example output and project structure
+
 ### 2026-01-17: M2 Complete
 - Created `prompts/investigator.md` - minimal system prompt (~10 lines)
 - Created `src/agent/investigator.ts` - agent using `createReactAgent` with tool binding
