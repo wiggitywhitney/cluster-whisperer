@@ -60,7 +60,7 @@ The loop continues until the agent has enough information to answer the question
 
 ## What Parts Are LangChain?
 
-Most of our code is plain TypeScript. LangChain provides two key pieces:
+Most of our code is plain TypeScript. LangChain provides three key pieces:
 
 ### 1. ChatAnthropic
 
@@ -92,6 +92,19 @@ const agent = createReactAgent({
   stateModifier: systemPrompt,  // "You are a Kubernetes investigator..."
 });
 ```
+
+### 3. streamEvents()
+
+A method on the agent that streams internal events as they happen. All LangChain/LangGraph runnables have this method - it's part of their common interface.
+
+```typescript
+// These methods come with the agent automatically - no extra import needed:
+agent.invoke()        // Run and return final result
+agent.stream()        // Stream output chunks
+agent.streamEvents()  // Stream detailed internal events
+```
+
+There's no separate import for these methods. The object returned by `createReactAgent` already has them built in - like how a JavaScript array already has `.map()` and `.filter()` without importing anything extra.
 
 Everything else - the tools themselves, the kubectl execution, the CLI - is plain TypeScript.
 

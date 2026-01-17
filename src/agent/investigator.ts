@@ -16,6 +16,8 @@
  * - ChatAnthropic: LangChain's wrapper for calling Claude
  * - createReactAgent: LangChain's implementation of the ReAct loop
  * - The tools array: LangChain binds these to the agent
+ * - LangChain methods like .invoke() and .streamEvents() come built into the
+ *   object returned by createReactAgent (no extra import needed)
  *
  * Everything else is plain TypeScript - reading files, exporting functions.
  */
@@ -68,6 +70,11 @@ const model = new ChatAnthropic({
  * - Sends the user's question plus system prompt to the model
  * - If the model wants to call a tool, executes it and feeds back the result
  * - Keeps looping until the model produces a final answer (no more tool calls)
+ *
+ * The returned object (investigatorAgent) has LangChain methods built in:
+ * - investigatorAgent.invoke() - run and return final result
+ * - investigatorAgent.stream() - stream output chunks
+ * - investigatorAgent.streamEvents() - stream detailed internal events (used in index.ts)
  *
  * stateModifier injects our system prompt at the start of every conversation.
  * This is how we tell the agent "you are a Kubernetes investigator" without

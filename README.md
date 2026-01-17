@@ -9,22 +9,21 @@ A CLI tool that lets you ask questions about your Kubernetes cluster in plain En
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
-🤔 Thinking: I'll start by listing pods in the payments namespace...
-
 🔧 Tool: kubectl_get
    Args: {"resource":"pods","namespace":"payments"}
-   Result: payments-api-7d4f9-x2k  0/1  CrashLoopBackOff  5
+   Result:
+   NAME                      READY   STATUS             RESTARTS
+   payments-api-7d4f9-x2k    0/1     CrashLoopBackOff   5
 
-🤔 Thinking: I see a crash loop. Let me check the details...
-
-📋 Answer: The payments-api pod is crashing due to memory limits...
+📋 Answer:
+The payments-api pod is crashing due to memory limits...
 ```
 
 The agent investigates by running kubectl commands, showing its reasoning along the way.
 
 ## Status
 
-🚧 **POC in development** - M1 complete, M2 in progress
+🚧 **POC in development** - M1 and M2 complete, working on M3
 
 See [PRD #1](./prds/1-investigation-agent-poc.md) for the full implementation plan.
 
@@ -85,14 +84,20 @@ The agent has access to read-only kubectl tools:
 
 ```
 src/
-├── index.ts              # CLI entry point
-├── agent/                # ReAct agent setup (M2)
-│   ├── investigator.ts   # Agent creation and execution
-│   └── prompts.ts        # System prompt
-├── tools/                # kubectl tools
+├── index.ts              # CLI entry point with streamEvents
+├── agent/
+│   └── investigator.ts   # ReAct agent setup (M2 ✅)
+├── tools/
 │   └── kubectl-get.ts    # kubectl_get tool (M1 ✅)
 └── utils/
     └── kubectl.ts        # Shared kubectl execution helper
+
+prompts/
+└── investigator.md       # System prompt (separate file for easy iteration)
+
+docs/
+├── kubectl-tools.md      # How tools work (M1)
+└── agentic-loop.md       # How the agent works (M2)
 ```
 
 ## License

@@ -41,6 +41,9 @@ async function main() {
       /**
        * Stream events from the agent as it works.
        *
+       * streamEvents() is a LangChain method that comes built into
+       * investigatorAgent (see src/agent/investigator.ts for details).
+       *
        * Why streamEvents instead of invoke?
        * invoke() waits until the agent is completely done, then returns the
        * final result. streamEvents() gives us a live feed of what's happening:
