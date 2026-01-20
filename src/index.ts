@@ -18,10 +18,6 @@ import { investigatorAgent, truncate } from "./agent/investigator";
 
 /**
  * Main function - sets up the CLI and runs the agent
- *
- * Why async?
- * The agent streams events as it works. We use `for await` to process
- * each event as it arrives, which requires an async context.
  */
 async function main() {
   const program = new Command();

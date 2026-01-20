@@ -157,8 +157,126 @@ We create separate tools for each kubectl operation (get, describe, logs) instea
 
 ---
 
+## Our Tool: kubectl_describe
+
+### When to Use It
+
+`kubectl_get` shows you what exists. `kubectl_describe` shows you why something isn't working.
+
+The killer feature is the **Events section** at the bottom of describe output. Events show what Kubernetes has been doing with the resource:
+- Scheduling decisions ("Successfully assigned pod to node-1")
+- Image operations ("Pulling image nginx:latest")
+- Container lifecycle ("Started container", "Back-off restarting failed container")
+- Probe failures ("Liveness probe failed: connection refused")
+
+When something is broken, Events tell you why from Kubernetes' perspective.
+
+### Schema
+
+```typescript
+const kubectlDescribeSchema = z.object({
+  resource: z
+    .string()
+    .describe("The type of Kubernetes resource (e.g., 'pod', 'deployment')"),
+  name: z
+    .string()
+    .describe("The name of the specific resource to describe"),
+  namespace: z
+    .string()
+    .optional()
+    .describe("The namespace containing the resource"),
+});
+```
+
+**Why is `name` required?** You describe ONE resource to see its details. Unlike `kubectl_get` which can list all pods, `kubectl_describe` needs a specific target. This creates a natural investigation flow: use get to find resources, then describe to understand them.
+
+### Tool Definition
+
+```typescript
+export const kubectlDescribeTool = tool(
+  async (input) => {
+    const { resource, name, namespace } = input;
+    const args: string[] = ["describe", resource, name];
+
+    if (namespace) {
+      args.push("-n", namespace);
+    }
+
+    return executeKubectl(args);
+  },
+  {
+    name: "kubectl_describe",
+    description: `Get detailed information about a specific Kubernetes resource.
+
+Returns comprehensive details including configuration, status, and events.
+The Events section shows WHY from Kubernetes' perspective.
+
+Use kubectl_get first to find resource names, then kubectl_describe for details.`,
+    schema: kubectlDescribeSchema,
+  }
+);
+```
+
+---
+
+## Directive Descriptions
+
+Notice how the tool descriptions tell the agent **when** to use each tool:
+
+| Tool | Description says... |
+|------|---------------------|
+| `kubectl_get` | "For detailed information... use kubectl_describe instead" |
+| `kubectl_describe` | "Use kubectl_get first to find resource names, then kubectl_describe for details" |
+
+This is the **directive description pattern**. Instead of just explaining what a tool does, we guide the agent's decision-making:
+
+```
+Regular description:     "Gets detailed information about a resource"
+Directive description:   "Gets detailed information about a resource.
+                         Use kubectl_get first to find resources,
+                         then kubectl_describe for details."
+```
+
+The directive version tells the agent:
+1. What the tool does
+2. When to use it relative to other tools
+3. The expected investigation flow
+
+### Why This Matters
+
+Without directive descriptions, the agent might:
+- Jump straight to `kubectl_describe` without knowing the pod name
+- Use `kubectl_get` repeatedly without diving deeper into problems
+- Miss the Events section that explains why things fail
+
+With directive descriptions, tools naturally chain together into an investigation flow:
+
+```
+User: "Why is my pod failing?"
+    │
+    ▼
+Agent reads kubectl_get description:
+"Find resources that need further investigation.
+ For detailed information, use kubectl_describe."
+    │
+    ▼
+kubectl_get pods → sees CrashLoopBackOff
+    │
+    ▼
+Agent reads kubectl_describe description:
+"Check Events to understand why something isn't working."
+    │
+    ▼
+kubectl_describe pod → sees OOMKilled in Events
+    │
+    ▼
+Agent: "Your pod is running out of memory."
+```
+
+The descriptions create the investigation logic. The system prompt stays minimal.
+
+---
+
 ## What's Next
 
-In M2, we connect this tool to an agentic loop. The agent will receive a question, decide to call `kubectl_get`, see the results, maybe call `kubectl_describe`, and keep going until it has an answer.
-
-The tool pattern stays the same - we just add more tools following this structure.
+M4 adds `kubectl_logs` - for debugging application-level issues. Events show what Kubernetes is doing, but logs show what the application itself is saying. The agent will learn when cluster events aren't enough and it needs to see application output.

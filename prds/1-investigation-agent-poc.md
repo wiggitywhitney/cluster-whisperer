@@ -141,7 +141,7 @@ Keeping tools separate allows:
   - Learning documentation: `docs/agentic-loop.md` explaining ReAct pattern and LangChain agent setup
   - Manual test: agent can answer simple question using kubectl_get (see Testing section)
 
-- [ ] **M3**: Add kubectl_describe tool
+- [x] **M3**: Add kubectl_describe tool
   - Tool implementation with directive description (tells agent WHEN to use it vs kubectl_get)
   - Description guides flow: "Use kubectl_get first to find resources, then kubectl_describe for details"
   - Description emphasizes: "Check Events section to understand why something isn't working"
@@ -406,6 +406,14 @@ Provide a clear, concise summary of what you found and what it means.
 ---
 
 ## Progress Log
+
+### 2026-01-19: M3 Complete
+- Created `src/tools/kubectl-describe.ts` - tool with directive description emphasizing Events section
+- Updated `src/tools/kubectl-get.ts` - added cross-reference to kubectl_describe
+- Updated `src/agent/investigator.ts` - added kubectlDescribeTool to tools array
+- Updated `docs/kubectl-tools.md` - added kubectl_describe section and Directive Descriptions pattern
+- Updated `docs/agentic-loop.md` - updated "What's Next" to reflect M3 complete
+- Tested against Kind cluster - agent successfully used get → describe investigation flow
 
 ### 2026-01-17: M2 Documentation Polish
 - Expanded `docs/agentic-loop.md` Event Types section with detailed explanations and flow diagram

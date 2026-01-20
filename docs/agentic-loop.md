@@ -331,8 +331,6 @@ The user never sees or types the system prompt - it's automatically injected by 
 
 ## What's Next
 
-M2 gives us an agent that can investigate using `kubectl_get`. It can list resources and reason about what it sees.
+M3 added `kubectl_describe` - the agent can now get detailed information about specific resources. The tool descriptions guide the investigation flow: use get to find resources, describe to understand them. See `docs/kubectl-tools.md` for details on directive descriptions.
 
-M3 adds `kubectl_describe` - the agent will be able to get detailed information about specific resources. The tool descriptions will guide it: use get to find resources, describe to understand them.
-
-M4 adds `kubectl_logs` - for debugging application-level issues. The agent will learn when cluster events aren't enough and it needs to see what the application itself is saying.
+M4 adds `kubectl_logs` - for debugging application-level issues. Events show what Kubernetes is doing, but logs show what the application itself is saying. The agent will learn when cluster events aren't enough and it needs to see application output.

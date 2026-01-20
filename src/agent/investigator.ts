@@ -27,6 +27,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import * as fs from "fs";
 import * as path from "path";
 import { kubectlGetTool } from "../tools/kubectl-get";
+import { kubectlDescribeTool } from "../tools/kubectl-describe";
 
 /**
  * Load the system prompt from a separate file.
@@ -82,7 +83,7 @@ const model = new ChatAnthropic({
  */
 export const investigatorAgent = createReactAgent({
   llm: model,
-  tools: [kubectlGetTool],
+  tools: [kubectlGetTool, kubectlDescribeTool],
   stateModifier: systemPrompt,
 });
 

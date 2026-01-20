@@ -101,6 +101,9 @@ Returns columns like NAME, STATUS, READY, AGE. Use this to:
 - Check basic status (Running, Pending, CrashLoopBackOff, etc.)
 - Find resources that need further investigation
 
+For detailed information about a specific resource (events, configuration,
+conditions), use kubectl_describe instead.
+
 Common resources: pods, deployments, services, nodes, configmaps, namespaces.`,
     schema: kubectlGetSchema,
   }
