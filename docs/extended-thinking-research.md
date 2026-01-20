@@ -149,6 +149,60 @@ When Claude decides to call a tool while thinking is enabled, the thinking happe
 
 The thinking blocks must be preserved when sending tool results back to the API. LangChain's `createReactAgent` handles this automatically.
 
+## Interleaved Thinking (Critical for Agentic Loops)
+
+By default, extended thinking only happens at the **start** of each assistant turn. This means you get one thinking block, then multiple tool calls without any visible reasoning between them.
+
+**To see thinking between every tool call**, you need the `interleaved-thinking-2025-05-14` beta header.
+
+### Without Interleaved Thinking
+```
+Thinking: "I'll check pods, then describe, then logs..."
+Tool: kubectl_get
+Tool: kubectl_describe
+Tool: kubectl_logs
+Answer
+```
+
+### With Interleaved Thinking
+```
+Thinking: "I should start by checking pods..."
+Tool: kubectl_get
+Thinking: "I see a Pending pod. Let me investigate why..."
+Tool: kubectl_describe
+Thinking: "Found a node taint issue. Let me check the deployment..."
+Tool: kubectl_get deployments
+Thinking: "Now I understand the full picture..."
+Answer
+```
+
+### How to Enable It
+
+Pass the beta header via `clientOptions.defaultHeaders`:
+
+```typescript
+const model = new ChatAnthropic({
+  model: "claude-sonnet-4-20250514",
+  maxTokens: 10000,
+  thinking: { type: "enabled", budget_tokens: 4000 },
+  clientOptions: {
+    defaultHeaders: {
+      "anthropic-beta": "interleaved-thinking-2025-05-14",
+    },
+  },
+});
+```
+
+### Why This Matters for Learning
+
+Interleaved thinking shows the true agentic loop in action:
+- **Reason** → Think about what to do
+- **Act** → Call a tool
+- **Observe** → See the result
+- **Reason again** → Adapt based on what was learned
+
+Without interleaved thinking, you only see the first "Reason" step. With it, you see how the agent adapts its investigation based on each discovery.
+
 ## Claude 4 vs Claude 3.7
 
 There's an important difference:

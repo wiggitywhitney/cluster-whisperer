@@ -1,6 +1,6 @@
 # PRD #3: Extended Thinking Visibility
 
-**Status**: In Progress (M1 Complete)
+**Status**: In Progress (M2 Complete)
 **Priority**: Medium
 **Created**: 2026-01-20
 **Last Updated**: 2026-01-20
@@ -36,10 +36,10 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
 ## Success Criteria
 
-- [ ] Extended thinking is enabled and working
-- [ ] Thinking content streams to terminal with clear visual distinction from tool calls
-- [ ] Implementation is based on official documentation, not guesswork
-- [ ] Documentation updated to explain the feature
+- [x] Extended thinking is enabled and working
+- [x] Thinking content streams to terminal with clear visual distinction from tool calls
+- [x] Implementation is based on official documentation, not guesswork
+- [x] Documentation updated to explain the feature
 
 ---
 
@@ -59,18 +59,18 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 ### M2: Implementation
 **Goal**: Enable extended thinking and display it in the CLI
 
-- [ ] Update ChatAnthropic configuration to enable thinking
-- [ ] Add event handler for thinking content in the stream loop
-- [ ] Display thinking with visual distinction (emoji, formatting)
-- [ ] Test with various questions to verify thinking appears
+- [x] Update ChatAnthropic configuration to enable thinking
+- [x] Add event handler for thinking content in the stream loop
+- [x] Display thinking with visual distinction (italic formatting)
+- [x] Test with various questions to verify thinking appears
 
 **Deliverable**: Working CLI that shows thinking alongside tool calls
 
 ### M3: Polish & Documentation
 **Goal**: Refine the UX and document the feature
 
-- [ ] Tune thinking budget for good balance of insight vs. verbosity
-- [ ] Update docs/agentic-loop.md to explain thinking visibility
+- [x] Tune thinking budget for good balance of insight vs. verbosity
+- [x] Update docs/agentic-loop.md to explain thinking visibility
 - [ ] Update README if needed
 - [ ] Test edge cases (long thinking, streaming interruption)
 
@@ -89,8 +89,17 @@ const model = new ChatAnthropic({
   maxTokens: 10000,  // Must be > budget_tokens
   thinking: { type: "enabled", budget_tokens: 4000 },
   // Note: temperature must NOT be set (defaults handled by API)
+  // Enable interleaved thinking so Claude reasons between every tool call
+  clientOptions: {
+    defaultHeaders: {
+      "anthropic-beta": "interleaved-thinking-2025-05-14",
+    },
+  },
 });
 ```
+
+**Interleaved Thinking (Critical Discovery):**
+By default, extended thinking only happens at the **start** of each assistant turn. To see thinking between every tool call (true agentic loop visibility), the `interleaved-thinking-2025-05-14` beta header is required.
 
 **Critical Constraints:**
 - `budget_tokens` minimum: **1,024 tokens**
@@ -172,7 +181,19 @@ For cluster-whisperer: Start with **4,000** tokens - investigation tasks benefit
 
 ## Design Decisions
 
-*To be filled in during implementation*
+### Thinking Display Format
+**Decision**: Use italic text formatting instead of emoji prefix
+**Rationale**: User preference - emoji felt too busy alongside tool output. Italic text provides clear visual distinction while keeping output clean.
+**Implementation**: ANSI escape codes (`\x1b[3m` for italic start, `\x1b[0m` for reset)
+
+### Interleaved vs Start-Only Thinking
+**Decision**: Enable interleaved thinking via beta header
+**Rationale**: Without interleaved thinking, you only see one thinking block at the start. With it, Claude reasons after each tool result - showing the true Reason→Act→Observe→Reason loop.
+**Implementation**: `anthropic-beta: interleaved-thinking-2025-05-14` header
+
+### Tool Output Truncation
+**Decision**: Reduce truncation from 2000 to 1100 characters
+**Rationale**: With thinking visible, the reasoning is the more interesting output. Tool results just need enough context to follow along.
 
 ---
 
@@ -187,6 +208,17 @@ For cluster-whisperer: Start with **4,000** tokens - investigation tasks benefit
   - Documented configuration, constraints, and streaming event structure
   - Created standalone docs: `docs/extended-thinking-research.md`, `docs/langgraph-vs-langchain.md`
   - Key finding: Must remove `temperature: 0` setting, use `budget_tokens: 4000`
+- M2 Implementation completed:
+  - Updated ChatAnthropic config with thinking enabled
+  - Added thinking block handler in `on_chat_model_end` event
+  - Discovered critical insight: interleaved thinking requires beta header
+  - Without `interleaved-thinking-2025-05-14`, thinking only appears at start of turn
+  - With beta header, thinking appears between every tool call (true agentic loop)
+  - Tested with spider-rainbows node taint scenario - agent adapts reasoning based on discoveries
+  - User requested italic formatting instead of emoji for thinking display
+- M3 partial progress:
+  - Tuned thinking budget (4000 tokens) and truncation (1100 chars)
+  - Updated docs/agentic-loop.md and docs/extended-thinking-research.md
 
 ---
 
