@@ -86,7 +86,7 @@ The packages:
 
 `createReactAgent` is a pre-built agent pattern. It implements the ReAct loop (Reason + Act):
 
-```
+```text
 Question → Think → Act (tool) → Observe (result) → Think → ... → Answer
 ```
 
@@ -94,7 +94,7 @@ You could build this yourself with LangGraph's graph primitives, but `createReac
 
 ## Package Relationships
 
-```
+```text
 @langchain/core          ← Shared foundation (messages, tools, interfaces)
       ↑
 @langchain/anthropic     ← Claude-specific implementation
