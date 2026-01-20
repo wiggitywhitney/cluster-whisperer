@@ -199,6 +199,33 @@ User asks question
 Final answer displayed
 ```
 
+### Parallel Tool Calls
+
+Claude can request multiple tools in a single response when the operations are independent. For example, when comparing resources across several pods:
+
+```text
+[on_chat_model_end] → thinking: "I need to describe all these pods..." + 4 tool_use blocks
+    ↓
+[on_tool_start] → kubectl_describe pod-1
+[on_tool_start] → kubectl_describe pod-2
+[on_tool_start] → kubectl_describe pod-3
+[on_tool_start] → kubectl_describe pod-4
+    ↓
+[on_tool_end] → result for pod-1
+[on_tool_end] → result for pod-2
+[on_tool_end] → result for pod-3
+[on_tool_end] → result for pod-4
+    ↓
+[on_chat_model_end] → thinking: "Now I can compare..." + next action
+```
+
+**Why this matters**:
+- Investigations complete faster - no waiting between independent operations
+- Claude decides when parallelism is safe (operations don't depend on each other)
+- LangGraph handles the parallel execution automatically
+
+**How it appears in the CLI**: You'll see multiple "Tool:" lines in sequence, then all their "Result:" lines together. This batched output indicates parallel execution happened.
+
 ### Code Example
 
 ```typescript

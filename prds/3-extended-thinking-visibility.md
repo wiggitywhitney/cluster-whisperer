@@ -1,6 +1,6 @@
 # PRD #3: Extended Thinking Visibility
 
-**Status**: In Progress (M2 Complete)
+**Status**: In Progress (M3 Nearly Complete)
 **Priority**: Medium
 **Created**: 2026-01-20
 **Last Updated**: 2026-01-20
@@ -72,7 +72,7 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 - [x] Tune thinking budget for good balance of insight vs. verbosity
 - [x] Update docs/agentic-loop.md to explain thinking visibility
 - [ ] Update README if needed
-- [ ] Test edge cases (long thinking, streaming interruption)
+- [x] Test edge cases (long thinking, streaming interruption)
 
 **Deliverable**: Feature complete and documented
 
@@ -219,6 +219,13 @@ For cluster-whisperer: Start with **4,000** tokens - investigation tasks benefit
 - M3 partial progress:
   - Tuned thinking budget (4000 tokens) and truncation (1100 chars)
   - Updated docs/agentic-loop.md and docs/extended-thinking-research.md
+- M3 edge case testing completed:
+  - Test 1 (long thinking): 6 thinking blocks displayed correctly, interleaved between tool calls
+  - Test 2 (Ctrl+C interruption): Clean exit at all stages, no stack traces, terminal returns to normal
+  - Key finding: Thinking arrives as complete blocks in `on_chat_model_end`, not streamed token-by-token - eliminates risk of stuck ANSI formatting on interrupt
+  - Test 3 (rapid successive blocks): Multiple blocks rendered correctly, parallel tool calls handled well
+  - Discovered parallel tool calls behavior: Claude batches independent operations, LangGraph executes them together
+  - Added "Parallel Tool Calls" section to docs/agentic-loop.md documenting this behavior
 
 ---
 
