@@ -114,29 +114,60 @@ The tool calls `executeKubectl()` which runs kubectl as a subprocess.
 
 When your code needs to run another program (like kubectl), it spawns a "child process." Your code waits for that process to finish, then gets whatever it printed to the terminal.
 
-Node.js provides `execSync` for this. "Exec" means execute a command, "Sync" means wait for it to finish before continuing.
+Node.js provides two main ways to do this synchronously:
+
+| Method | How it works | Shell involved? |
+|--------|--------------|-----------------|
+| `execSync(string)` | Passes command to shell | Yes (`/bin/sh -c`) |
+| `spawnSync(cmd, args[])` | Calls program directly | No |
+
+### Why spawnSync matters: Shell injection
+
+When you pass a string to `execSync`, Node.js spawns a shell to interpret it. This means shell metacharacters like `;`, `|`, `` ` ``, and `$()` are processed:
 
 ```typescript
-import { execSync } from "child_process";
+// DANGEROUS: execSync with string
+execSync(`kubectl get ${userInput}`);
 
-const output = execSync("kubectl get pods", { encoding: "utf-8" });
-// output now contains whatever kubectl printed
+// If userInput = "pods; rm -rf /"
+// Shell sees TWO commands: "kubectl get pods" AND "rm -rf /"
 ```
+
+With `spawnSync`, there's no shell. Each array element becomes a separate argument:
+
+```typescript
+// SAFE: spawnSync with array
+spawnSync("kubectl", ["get", userInput]);
+
+// If userInput = "pods; rm -rf /"
+// kubectl receives ONE argument: "pods; rm -rf /"
+// kubectl fails with "resource not found" - no injection
+```
+
+**Rule of thumb**: Always use `spawnSync` with an args array when arguments come from external sources (user input, API calls, AI agents).
 
 ### Our implementation
 
 ```typescript
+import { spawnSync } from "child_process";
+
 export function executeKubectl(args: string[]): string {
-  try {
-    const output = execSync(`kubectl ${args.join(" ")}`, {
-      encoding: "utf-8",  // Return a string, not raw bytes
-      timeout: 30000,     // Give up after 30 seconds
-    });
-    return output;
-  } catch (error) {
-    // Return error message instead of throwing
-    return `Error: ${errorMessage}`;
+  const command = `kubectl ${args.join(" ")}`; // For logging only
+
+  const result = spawnSync("kubectl", args, {
+    encoding: "utf-8",  // Return a string, not raw bytes
+    timeout: 30000,     // Give up after 30 seconds
+  });
+
+  if (result.error) {
+    return `Error executing "${command}": ${result.error.message}`;
   }
+
+  if (result.status !== 0) {
+    return `Error executing "${command}": ${result.stderr || "Unknown error"}`;
+  }
+
+  return result.stdout;
 }
 ```
 
@@ -262,6 +293,8 @@ const kubectlLogsSchema = z.object({
 
 **Why an `args` array?** kubectl logs has many useful flags (`--previous`, `--tail`, `-c`, `--since`). Rather than defining each as a separate parameter, we use a flexible array. The description tells the agent which flags are most useful.
 
+**Validating the args array**: Since `namespace` is an explicit parameter, we reject `-n`/`--namespace` in the args array. This prevents confusion where the stated namespace doesn't match what kubectl actually queries. The same principle applies to any parameter that's explicit in the schema - don't allow it to be overridden via the flexible args.
+
 ### Tool Definition
 
 ```typescript
@@ -270,7 +303,13 @@ export const kubectlLogsTool = tool(
     const { pod, namespace, args: extraArgs } = input;
     const args: string[] = ["logs", pod, "-n", namespace];
 
+    // Reject namespace flags in args - use the namespace parameter instead
     if (extraArgs && extraArgs.length > 0) {
+      for (const arg of extraArgs) {
+        if (arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=")) {
+          return "Error: Do not pass -n/--namespace in args; use the namespace parameter instead.";
+        }
+      }
       args.push(...extraArgs);
     }
 

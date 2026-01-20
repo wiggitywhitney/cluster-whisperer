@@ -26,7 +26,7 @@ The agent investigates by running kubectl commands, showing its reasoning along 
 
 This agent uses the **ReAct** pattern (Reasoning + Acting):
 
-```
+```text
 Think → Act → Observe → Think → Act → Observe → ... → Answer
 ```
 
@@ -63,7 +63,7 @@ npm start "Why is my-app pod crashing?"
 
 ## Architecture
 
-```
+```text
 User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
                     ↑              |
                     └──────────────┘
@@ -78,7 +78,7 @@ The agent has access to read-only kubectl tools:
 
 ## Project Structure
 
-```
+```text
 src/
 ├── index.ts               # CLI entry point with streamEvents
 ├── agent/

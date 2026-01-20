@@ -73,7 +73,13 @@ export const kubectlLogsTool = tool(
     const args: string[] = ["logs", pod, "-n", namespace];
 
     // Append any extra args (--previous, --tail=N, -c container, etc.)
+    // But reject namespace flags - use the namespace parameter instead
     if (extraArgs && extraArgs.length > 0) {
+      for (const arg of extraArgs) {
+        if (arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=")) {
+          return "Error: Do not pass -n/--namespace in args; use the namespace parameter instead.";
+        }
+      }
       args.push(...extraArgs);
     }
 

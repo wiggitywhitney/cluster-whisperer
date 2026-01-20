@@ -26,31 +26,27 @@ Build a CLI tool that:
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
-🤔 Thinking: I'll start by listing pods in the payments namespace...
-
 🔧 Tool: kubectl_get
-   Command: kubectl get pods -n payments
+   Args: {"resource":"pods","namespace":"payments"}
    Result:
    NAME                      READY   STATUS             RESTARTS
    payments-api-7d4f9-x2k    0/1     CrashLoopBackOff   5
 
-🤔 Thinking: payments-api is crash looping. Let me get details...
-
 🔧 Tool: kubectl_describe
-   Command: kubectl describe pod payments-api-7d4f9-x2k -n payments
+   Args: {"resource":"pod","name":"payments-api-7d4f9-x2k","namespace":"payments"}
    Result:
    Last State: Terminated - OOMKilled
 
-🤔 Thinking: Out of memory. Let me check logs for context...
-
 🔧 Tool: kubectl_logs
-   Command: kubectl logs payments-api-7d4f9-x2k -n payments --previous
+   Args: {"pod":"payments-api-7d4f9-x2k","namespace":"payments","args":["--previous"]}
    Result:
    [ERROR] Failed to allocate memory for request cache
 
-📋 Answer: The payments-api pod is crashing due to memory limits.
-   The container is being OOMKilled. Consider increasing memory
-   limits or optimizing the application's memory usage.
+────────────────────────────────────────────────────────────
+📋 Answer:
+The payments-api pod is crashing due to memory limits.
+The container is being OOMKilled. Consider increasing memory
+limits or optimizing the application's memory usage.
 ```
 
 ## Architecture

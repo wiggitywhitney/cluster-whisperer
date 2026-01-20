@@ -8,7 +8,7 @@ This guide explains how we turn tools into an agent that can reason and investig
 
 A regular program follows a fixed path: do step 1, then step 2, then step 3. An agent decides what to do at each step based on what it's learned so far.
 
-```
+```text
 Regular Program:           Agent:
 1. Get pods         →      1. Get pods
 2. Describe first   →      2. See CrashLoopBackOff, decide to describe that pod
@@ -31,7 +31,7 @@ Our agent uses the ReAct pattern: **Re**ason + **Act**. Each cycle:
 
 The loop continues until the agent has enough information to answer the question.
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                    User Question                     │
 └─────────────────────────┬───────────────────────────┘
@@ -164,7 +164,7 @@ We capture the content each time, so by the end, `finalAnswer` holds the last th
 
 ### Putting It Together
 
-```
+```text
 User asks question
     ↓
 [on_chat_model_end] → model decides to call kubectl_get
@@ -221,7 +221,7 @@ When you send messages to an LLM, each message has a **role**:
 
 "System prompt" means instructions from the **system** (your application), not from the user. The user never sees or types it - it's injected behind the scenes.
 
-```
+```text
 [system] You are a Kubernetes investigator...  ← system prompt (from your app)
 [user] What pods are running?                   ← user prompt (from the human)
 [assistant] Let me check...                     ← model's response
@@ -260,18 +260,32 @@ A longer prompt with detailed investigation procedures would conflict with the t
 
 The system prompt lives in `prompts/investigator.md` as a separate file. Here's how it gets to the agent:
 
-**Step 1: Load the file** (in `src/agent/investigator.ts`)
+**Step 1: Define a lazy loader** (in `src/agent/investigator.ts`)
 ```typescript
 const promptPath = path.join(__dirname, "../../prompts/investigator.md");
-const systemPrompt = fs.readFileSync(promptPath, "utf8");
+let cachedPrompt: string | null = null;
+
+function getSystemPrompt(): string {
+  if (!cachedPrompt) {
+    try {
+      cachedPrompt = fs.readFileSync(promptPath, "utf8");
+    } catch {
+      console.error(`Error: Could not load system prompt from ${promptPath}`);
+      process.exit(1);
+    }
+  }
+  return cachedPrompt;
+}
 ```
+
+**Why lazy loading?** If we read the file at module import time and it's missing, Node.js throws a cryptic error before our code can show a friendly message. Lazy loading lets us catch the error and provide helpful guidance.
 
 **Step 2: Pass it to createReactAgent via the `stateModifier` option**
 ```typescript
-export const investigatorAgent = createReactAgent({
-  llm: model,                    // which model to use
-  tools: [kubectlGetTool],       // which tools the agent can call
-  stateModifier: systemPrompt,   // what to prepend to conversations
+cachedAgent = createReactAgent({
+  llm: model,                      // which model to use
+  tools: [kubectlGetTool, ...],    // which tools the agent can call
+  stateModifier: getSystemPrompt(), // what to prepend to conversations
 });
 ```
 
@@ -279,7 +293,7 @@ Note: `stateModifier` isn't something you import - it's just a configuration opt
 
 **What the `stateModifier` option does**: It tells `createReactAgent` to prepend the system prompt to every conversation. When the user asks "What pods are running?", the model actually receives:
 
-```
+```text
 [System] You are a Kubernetes cluster investigator...
 [User] What pods are running?
 ```
@@ -292,7 +306,7 @@ The user never sees or types the system prompt - it's automatically injected by 
 
 ## Putting It Together
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                            CLI                                   │
 │                     (src/index.ts)                               │

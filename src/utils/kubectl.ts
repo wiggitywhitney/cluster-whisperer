@@ -6,12 +6,25 @@
  * 2. Spawns kubectl as a child process
  * 3. Returns the output as a string, or an error message if it fails
  *
- * Why execSync instead of spawn?
- * execSync blocks until the command finishes, which is simpler for our use case.
- * The agent waits for the result anyway, so async doesn't help here.
+ * Why spawnSync instead of execSync?
+ * Both are synchronous (block until complete), but they differ in how they
+ * handle arguments:
+ *
+ * - execSync(string): Passes the string to a shell (/bin/sh -c "...").
+ *   This means shell metacharacters like ; | ` $() are interpreted.
+ *   If args contained ["get", "pods; rm -rf /"], the shell would see TWO
+ *   commands: "kubectl get pods" AND "rm -rf /". This is shell injection.
+ *
+ * - spawnSync(cmd, args[]): Bypasses the shell entirely. Each array element
+ *   becomes a separate argument to the process. The string "pods; rm -rf /"
+ *   is passed as a single argument to kubectl, which safely fails with
+ *   "resource not found" instead of executing the injected command.
+ *
+ * Rule of thumb: Always use spawnSync with an args array when the arguments
+ * come from any external source (user input, API calls, AI agents).
  */
 
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 
 /**
  * Executes a kubectl command and returns the output.
@@ -24,34 +37,26 @@ import { execSync } from "child_process";
  *   // Returns: "NAME    READY   STATUS    RESTARTS   AGE\nmy-pod  1/1     Running   0          1d"
  */
 export function executeKubectl(args: string[]): string {
-  // Build the full command for display purposes
+  // Build the full command for display purposes (logging only, not execution)
   const command = `kubectl ${args.join(" ")}`;
 
-  try {
-    // execSync runs the command and waits for it to complete.
-    // We pass the args as an array to avoid shell injection vulnerabilities.
-    // If we passed a string like `kubectl ${userInput}`, a malicious user
-    // could inject extra commands. Arrays are safer.
-    const output = execSync(`kubectl ${args.join(" ")}`, {
-      encoding: "utf-8", // Return a string instead of a Buffer
-      timeout: 30000, // 30 second timeout to avoid hanging
-      stdio: ["pipe", "pipe", "pipe"], // Capture stdout and stderr
-    });
+  // spawnSync bypasses the shell - each array element is a separate argument.
+  // This prevents shell injection even if args contain malicious characters.
+  const result = spawnSync("kubectl", args, {
+    encoding: "utf-8", // Return strings instead of Buffers
+    timeout: 30000, // 30 second timeout to avoid hanging
+  });
 
-    return output;
-  } catch (error) {
-    // When kubectl fails (e.g., resource not found, no permission),
-    // we return the error message instead of throwing.
-    // This lets the AI agent see what went wrong and decide what to do next.
-    // For example, if a namespace doesn't exist, the agent might try a different one.
-
-    if (error instanceof Error) {
-      // Node.js adds stderr to the error message for exec failures
-      const execError = error as Error & { stderr?: string; stdout?: string };
-      const errorMessage = execError.stderr || execError.message;
-      return `Error executing "${command}": ${errorMessage}`;
-    }
-
-    return `Error executing "${command}": Unknown error`;
+  // Handle spawn errors (e.g., kubectl not found)
+  if (result.error) {
+    return `Error executing "${command}": ${result.error.message}`;
   }
+
+  // Handle non-zero exit codes (e.g., resource not found, permission denied)
+  if (result.status !== 0) {
+    const errorMessage = result.stderr || "Unknown error";
+    return `Error executing "${command}": ${errorMessage}`;
+  }
+
+  return result.stdout;
 }

@@ -31,7 +31,7 @@ import { kubectlDescribeTool } from "../tools/kubectl-describe";
 import { kubectlLogsTool } from "../tools/kubectl-logs";
 
 /**
- * Load the system prompt from a separate file.
+ * Path to the system prompt file.
  *
  * Why a separate file?
  * The system prompt tells the agent how to behave - its role, investigation
@@ -45,7 +45,30 @@ import { kubectlLogsTool } from "../tools/kubectl-logs";
  * This works regardless of where you run the command from.
  */
 const promptPath = path.join(__dirname, "../../prompts/investigator.md");
-const systemPrompt = fs.readFileSync(promptPath, "utf8");
+
+/**
+ * Cached system prompt - loaded lazily on first use.
+ *
+ * Why lazy loading?
+ * If we read the file at module import time and it's missing, Node.js throws
+ * a cryptic ENOENT error before our code can show a friendly message. By
+ * loading lazily, we can catch the error and provide helpful guidance.
+ */
+let cachedPrompt: string | null = null;
+
+function getSystemPrompt(): string {
+  if (!cachedPrompt) {
+    try {
+      cachedPrompt = fs.readFileSync(promptPath, "utf8");
+    } catch {
+      console.error(`Error: Could not load system prompt from ${promptPath}`);
+      console.error("");
+      console.error("Make sure prompts/investigator.md exists in the project root.");
+      process.exit(1);
+    }
+  }
+  return cachedPrompt;
+}
 
 /**
  * Cached agent instance - created lazily on first use.
@@ -97,7 +120,7 @@ export function getInvestigatorAgent() {
     cachedAgent = createReactAgent({
       llm: model,
       tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
-      stateModifier: systemPrompt,
+      stateModifier: getSystemPrompt(),
     });
   }
   return cachedAgent;

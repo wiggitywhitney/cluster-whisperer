@@ -120,10 +120,14 @@ async function main() {
           const toolInput = event.data.input;
 
           // The input might be nested in an 'input' property if it was serialized
-          const args =
-            typeof toolInput === "object" && toolInput?.input
-              ? JSON.parse(toolInput.input)
-              : toolInput;
+          let args = toolInput;
+          try {
+            if (typeof toolInput === "object" && toolInput?.input) {
+              args = JSON.parse(toolInput.input);
+            }
+          } catch {
+            // If parsing fails, use the raw input - better than crashing
+          }
 
           console.log(`🔧 Tool: ${toolName}`);
           console.log(`   Args: ${JSON.stringify(args)}`);
