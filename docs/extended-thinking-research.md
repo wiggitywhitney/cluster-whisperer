@@ -9,13 +9,13 @@ This document summarizes how Claude's extended thinking feature works and how to
 Extended thinking gives Claude a dedicated space to reason before answering. Instead of jumping straight to an answer, the model can think through the problem step by step in a way that's visible to you.
 
 Without extended thinking:
-```
+```text
 User: Why is my pod failing?
 Assistant: The pod is failing because... [answer]
 ```
 
 With extended thinking:
-```
+```text
 User: Why is my pod failing?
 [Thinking: I should first check the pod status, then look at events...]
 Assistant: The pod is failing because... [answer]
@@ -115,7 +115,7 @@ Anthropic's API returns thinking as a content block:
 
 When streaming, thinking arrives as delta events:
 
-```
+```text
 content_block_start  → {"type": "thinking"}
 content_block_delta  → {"type": "thinking_delta", "thinking": "..."}
 content_block_delta  → {"type": "signature_delta", "signature": "..."}
@@ -158,7 +158,7 @@ By default, extended thinking only happens at the **start** of each assistant tu
 **To see thinking between every tool call**, you need the `interleaved-thinking-2025-05-14` beta header.
 
 ### Without Interleaved Thinking
-```
+```text
 Thinking: "I'll check pods, then describe, then logs..."
 Tool: kubectl_get
 Tool: kubectl_describe
@@ -167,7 +167,7 @@ Answer
 ```
 
 ### With Interleaved Thinking
-```
+```text
 Thinking: "I should start by checking pods..."
 Tool: kubectl_get
 Thinking: "I see a Pending pod. Let me investigate why..."
