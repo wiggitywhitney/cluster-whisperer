@@ -163,7 +163,7 @@ async function main() {
                   console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
                 } else if (block.type === "text") {
                   // Capture text for final answer display
-                  finalAnswer = block.text;
+                  finalAnswer += block.text;
                 }
               }
             }

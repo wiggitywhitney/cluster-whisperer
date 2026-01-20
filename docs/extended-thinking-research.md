@@ -1,5 +1,7 @@
 # Extended Thinking in Claude: Research Findings
 
+_Last verified: 2026-01-20 (recheck Anthropic/LangChain docs when updating)_
+
 This document summarizes how Claude's extended thinking feature works and how to use it with LangChain.
 
 ## What is Extended Thinking?
