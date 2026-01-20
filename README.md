@@ -21,10 +21,11 @@ Thinking: The pod is in CrashLoopBackOff. Let me check the logs to see why...
 
 🔧 Tool: kubectl_logs
    Args: {"pod":"payments-api-7d4f9-x2k","namespace":"payments"}
-   Result: Error: Cannot find module '/app/server.js'
+   Result:
+Error: Cannot find module '/app/server.js'
 
 ────────────────────────────────────────────────────────────
-📋 Answer:
+Answer:
 The payments-api pod is crashing because it can't find the entrypoint
 file '/app/server.js'. This usually means the Docker image was built
 incorrectly or the working directory is misconfigured.
