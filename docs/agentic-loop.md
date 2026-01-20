@@ -224,7 +224,7 @@ Claude can request multiple tools in a single response when the operations are i
 - Claude decides when parallelism is safe (operations don't depend on each other)
 - LangGraph handles the parallel execution automatically
 
-**How it appears in the CLI**: You'll see multiple "Tool:" lines in sequence, then all their "Result:" lines together. This batched output indicates parallel execution happened.
+**How it appears in the CLI**: You'll often see several "Tool:" lines in quick succession. Results can arrive as each tool completes, so ordering may interleave when calls run in parallel.
 
 ### Code Example
 
