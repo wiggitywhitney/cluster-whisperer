@@ -9,18 +9,28 @@ A CLI tool that lets you ask questions about your Kubernetes cluster in plain En
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
+Thinking: I need to list pods in the payments namespace to see their current status...
+
 🔧 Tool: kubectl_get
    Args: {"resource":"pods","namespace":"payments"}
    Result:
    NAME                      READY   STATUS             RESTARTS
    payments-api-7d4f9-x2k    0/1     CrashLoopBackOff   5
 
+Thinking: The pod is in CrashLoopBackOff. Let me check the logs to see why...
+
+🔧 Tool: kubectl_logs
+   Args: {"pod":"payments-api-7d4f9-x2k","namespace":"payments"}
+   Result: Error: Cannot find module '/app/server.js'
+
 ────────────────────────────────────────────────────────────
 📋 Answer:
-The payments-api pod is crashing due to memory limits...
+The payments-api pod is crashing because it can't find the entrypoint
+file '/app/server.js'. This usually means the Docker image was built
+incorrectly or the working directory is misconfigured.
 ```
 
-The agent investigates by running kubectl commands, showing its reasoning along the way.
+The agent investigates by running kubectl commands, showing its reasoning along the way. The "Thinking:" lines appear in italic in your terminal.
 
 ## How it works: The ReAct Pattern
 
@@ -94,8 +104,10 @@ prompts/
 └── investigator.md        # System prompt (separate file for easy iteration)
 
 docs/
-├── kubectl-tools.md       # How kubectl tools work
-└── agentic-loop.md        # How the ReAct agent works
+├── kubectl-tools.md                # How kubectl tools work
+├── agentic-loop.md                 # How the ReAct agent works
+├── extended-thinking-research.md   # Extended thinking implementation notes
+└── langgraph-vs-langchain.md       # LangChain vs LangGraph explained
 ```
 
 ## License
