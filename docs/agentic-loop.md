@@ -331,6 +331,6 @@ The user never sees or types the system prompt - it's automatically injected by 
 
 ## What's Next
 
-M3 added `kubectl_describe` - the agent can now get detailed information about specific resources. The tool descriptions guide the investigation flow: use get to find resources, describe to understand them. See `docs/kubectl-tools.md` for details on directive descriptions.
+M4 added `kubectl_logs` - the agent can now see application-level output. While `kubectl_describe` shows Kubernetes' perspective (events, scheduling), logs show what's happening inside the container: stack traces, error messages, startup failures. The tool description emphasizes using `--previous` for crashed containers.
 
-M4 adds `kubectl_logs` - for debugging application-level issues. Events show what Kubernetes is doing, but logs show what the application itself is saying. The agent will learn when cluster events aren't enough and it needs to see application output.
+With all three investigation tools complete, M5 focuses on demo prep and polish: testing against real clusters, error handling, and README documentation for KubeCon.

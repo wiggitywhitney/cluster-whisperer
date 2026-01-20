@@ -28,6 +28,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { kubectlGetTool } from "../tools/kubectl-get";
 import { kubectlDescribeTool } from "../tools/kubectl-describe";
+import { kubectlLogsTool } from "../tools/kubectl-logs";
 
 /**
  * Load the system prompt from a separate file.
@@ -83,7 +84,7 @@ const model = new ChatAnthropic({
  */
 export const investigatorAgent = createReactAgent({
   llm: model,
-  tools: [kubectlGetTool, kubectlDescribeTool],
+  tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
   stateModifier: systemPrompt,
 });
 

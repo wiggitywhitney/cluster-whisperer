@@ -36,9 +36,13 @@ Viktor's examples for patterns to follow:
 
 This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [Teller](https://github.com/tellerops/teller).
 
-Run commands with secrets:
+**IMPORTANT**: `teller run` doesn't inherit shell PATH. You must use full path to `node`:
+
 ```bash
-teller run -- npm start
+# ✅ Correct - full path to node
+teller run -- /opt/homebrew/bin/node dist/index.js "your question"
+
+# ❌ Wrong - will fail with "No such file or directory"
 teller run -- node dist/index.js "your question"
 ```
 

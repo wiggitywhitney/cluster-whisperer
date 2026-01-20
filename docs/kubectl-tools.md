@@ -219,6 +219,79 @@ Use kubectl_get first to find resource names, then kubectl_describe for details.
 
 ---
 
+## Our Tool: kubectl_logs
+
+### When to Use It
+
+`kubectl_describe` shows what Kubernetes is doing. `kubectl_logs` shows what the application is doing.
+
+When a pod is in CrashLoopBackOff, describe tells you "container exited with code 1" - but that's just the symptom. Logs show you the actual error: a stack trace, a configuration error, a missing environment variable.
+
+### The --previous Flag
+
+Here's the critical detail: when a container crashes and restarts, the current container is brand new. Its logs might just show "Starting up..." because it hasn't crashed yet.
+
+The `--previous` flag gets logs from the **previous** container instance - the one that actually crashed. This is essential for debugging CrashLoopBackOff:
+
+```bash
+# Current container (might be empty or just starting)
+kubectl logs my-pod -n default
+
+# Previous container (the one that crashed - has the error)
+kubectl logs my-pod -n default --previous
+```
+
+### Schema
+
+```typescript
+const kubectlLogsSchema = z.object({
+  pod: z
+    .string()
+    .describe("The pod name to get logs from"),
+  namespace: z
+    .string()
+    .describe("The namespace containing the pod (required for logs)"),
+  args: z
+    .array(z.string())
+    .optional()
+    .describe('Optional flags: ["--previous"], ["--tail=50"], ["-c", "container-name"]'),
+});
+```
+
+**Why is `namespace` required?** Unlike `kubectl_get` which can work without a namespace, logs always need one. Making it required ensures the agent explicitly specifies where to look.
+
+**Why an `args` array?** kubectl logs has many useful flags (`--previous`, `--tail`, `-c`, `--since`). Rather than defining each as a separate parameter, we use a flexible array. The description tells the agent which flags are most useful.
+
+### Tool Definition
+
+```typescript
+export const kubectlLogsTool = tool(
+  async (input) => {
+    const { pod, namespace, args: extraArgs } = input;
+    const args: string[] = ["logs", pod, "-n", namespace];
+
+    if (extraArgs && extraArgs.length > 0) {
+      args.push(...extraArgs);
+    }
+
+    return executeKubectl(args);
+  },
+  {
+    name: "kubectl_logs",
+    description: `Get container logs from a pod. Shows the APPLICATION's perspective.
+
+CRITICAL: Use --previous flag for crashed/restarted containers.
+
+Other useful flags:
+- --tail=N: Limit to last N lines
+- -c <name>: Specify container in multi-container pods`,
+    schema: kubectlLogsSchema,
+  }
+);
+```
+
+---
+
 ## Directive Descriptions
 
 Notice how the tool descriptions tell the agent **when** to use each tool:
@@ -227,6 +300,7 @@ Notice how the tool descriptions tell the agent **when** to use each tool:
 |------|---------------------|
 | `kubectl_get` | "For detailed information... use kubectl_describe instead" |
 | `kubectl_describe` | "Use kubectl_get first to find resource names, then kubectl_describe for details" |
+| `kubectl_logs` | "Use --previous flag for crashed/restarted containers" |
 
 This is the **directive description pattern**. Instead of just explaining what a tool does, we guide the agent's decision-making:
 
@@ -267,10 +341,17 @@ Agent reads kubectl_describe description:
 "Check Events to understand why something isn't working."
     │
     ▼
-kubectl_describe pod → sees OOMKilled in Events
+kubectl_describe pod → sees "Back-off restarting failed container" in Events
     │
     ▼
-Agent: "Your pod is running out of memory."
+Agent reads kubectl_logs description:
+"Use --previous flag for crashed/restarted containers."
+    │
+    ▼
+kubectl_logs --previous → sees actual error/stack trace
+    │
+    ▼
+Agent: "Your pod is crashing because of [specific error from logs]."
 ```
 
 The descriptions create the investigation logic. The system prompt stays minimal.
@@ -279,4 +360,4 @@ The descriptions create the investigation logic. The system prompt stays minimal
 
 ## What's Next
 
-M4 adds `kubectl_logs` - for debugging application-level issues. Events show what Kubernetes is doing, but logs show what the application itself is saying. The agent will learn when cluster events aren't enough and it needs to see application output.
+With all three investigation tools complete (`kubectl_get`, `kubectl_describe`, `kubectl_logs`), M5 focuses on demo prep and polish: testing against real clusters, error handling, and README documentation for KubeCon.

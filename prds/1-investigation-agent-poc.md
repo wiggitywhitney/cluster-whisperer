@@ -122,7 +122,7 @@ Keeping tools separate allows:
 - [ ] CLI accepts natural language question as argument
 - [ ] Agent uses agentic loop to investigate (not hardcoded flow)
 - [ ] Agent outputs reasoning at each step (visible thinking)
-- [ ] At least 3 kubectl tools available (get, describe, logs)
+- [x] At least 3 kubectl tools available (get, describe, logs)
 - [ ] Works against any kubeconfig-accessible cluster
 - [ ] Demo-ready for KubeCon presentation
 
@@ -148,7 +148,7 @@ Keeping tools separate allows:
   - Update kubectl_get description to reference kubectl_describe ("For details, use kubectl_describe")
   - Manual test: agent uses describe when appropriate (see Testing section)
 
-- [ ] **M4**: Add kubectl_logs tool
+- [x] **M4**: Add kubectl_logs tool
   - Tool implementation with `args` array for flexible options (following Viktor's pattern)
   - Supported args: `--previous` (crashed containers), `--tail=N` (limit output), `-c container` (multi-container pods)
   - Description guides flow: "Events show K8s perspective, logs show app perspective"
@@ -406,6 +406,14 @@ Provide a clear, concise summary of what you found and what it means.
 ---
 
 ## Progress Log
+
+### 2026-01-20: M4 Complete
+- Created `src/tools/kubectl-logs.ts` - tool with args array for flexible options (--previous, --tail, -c)
+- Updated `src/agent/investigator.ts` - added kubectlLogsTool to tools array
+- Updated `docs/kubectl-tools.md` - added kubectl_logs section and args array pattern documentation
+- Updated `docs/agentic-loop.md` - updated "What's Next" to reflect M4 complete
+- Tested against Kind cluster - agent successfully used --previous flag when investigating argocd-dex-server restarts
+- Documented teller PATH issue in CLAUDE.md, README.md, and ~/.claude/CLAUDE.md
 
 ### 2026-01-19: M3 Complete
 - Created `src/tools/kubectl-describe.ts` - tool with directive description emphasizing Events section
