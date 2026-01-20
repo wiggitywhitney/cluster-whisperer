@@ -79,7 +79,7 @@ You cannot set a budget below 1,024 tokens. The API will reject it.
 
 ### 4. Incompatible with Forced Tool Use
 
-If you're using `tool_choice` to force a specific tool, extended thinking won't work. Only `tool_choice: "any"` is supported.
+Extended thinking does not work with forced tool calling. When thinking is enabled, only `tool_choice: "auto"` (let Claude decide) or `tool_choice: "none"` are supported. Using `tool_choice: "any"` or forcing a specific tool will produce an error.
 
 ## Supported Models
 
