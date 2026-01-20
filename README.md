@@ -9,22 +9,39 @@ A CLI tool that lets you ask questions about your Kubernetes cluster in plain En
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
-📋 Answer: The payments-api pod is crashing due to memory limits...
+🔧 Tool: kubectl_get
+   Args: {"resource":"pods","namespace":"payments"}
+   Result:
+   NAME                      READY   STATUS             RESTARTS
+   payments-api-7d4f9-x2k    0/1     CrashLoopBackOff   5
+
+────────────────────────────────────────────────────────────
+📋 Answer:
+The payments-api pod is crashing due to memory limits...
 ```
 
 The agent investigates by running kubectl commands, showing its reasoning along the way.
 
-## Status
+## How it works: The ReAct Pattern
 
-🚧 **POC in development** - Not yet functional
+This agent uses the **ReAct** pattern (Reasoning + Acting):
 
-See [PRD #1](./prds/1-investigation-agent-poc.md) for the implementation plan.
+```text
+Think → Act → Observe → Think → Act → Observe → ... → Answer
+```
+
+1. **Reason** - Agent thinks about what to do next
+2. **Act** - Agent calls a kubectl tool
+3. **Observe** - Agent sees the result
+4. Repeat until the agent has enough information to answer
+
+Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing to do with the React.js frontend framework.
 
 ## Prerequisites
 
 - Node.js 18+
 - kubectl CLI installed and configured
-- `ANTHROPIC_API_KEY` environment variable
+- `ANTHROPIC_API_KEY` environment variable (managed via [Teller](https://github.com/tellerops/teller))
 
 ## Setup
 
@@ -36,23 +53,50 @@ npm run build
 ## Usage
 
 ```bash
-# Ask a question about your cluster
-cluster-whisperer "What's running in the default namespace?"
+# Run with Teller to inject ANTHROPIC_API_KEY
+# Note: teller run requires full path to node (doesn't inherit shell PATH)
+teller run -- /opt/homebrew/bin/node dist/index.js "What's running in the default namespace?"
 
-# Investigate an issue
-cluster-whisperer "Why is my-app pod crashing?"
+# Or if you have the key exported directly
+npm start -- "Why is my-app pod crashing?"
 ```
 
 ## Architecture
 
-```
-User Question → Agentic Loop → [kubectl tools] → Cluster → Answer
+```text
+User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
+                    ↑              |
+                    └──────────────┘
+                   (agent sees result,
+                    decides next action)
 ```
 
 The agent has access to read-only kubectl tools:
-- `kubectl_get` - List resources
-- `kubectl_describe` - Get resource details
+- `kubectl_get` - List resources and their status
+- `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
+
+## Project Structure
+
+```text
+src/
+├── index.ts               # CLI entry point with streamEvents
+├── agent/
+│   └── investigator.ts    # ReAct agent setup
+├── tools/
+│   ├── kubectl-get.ts     # kubectl_get tool
+│   ├── kubectl-describe.ts # kubectl_describe tool
+│   └── kubectl-logs.ts    # kubectl_logs tool
+└── utils/
+    └── kubectl.ts         # Shared kubectl execution helper
+
+prompts/
+└── investigator.md        # System prompt (separate file for easy iteration)
+
+docs/
+├── kubectl-tools.md       # How kubectl tools work
+└── agentic-loop.md        # How the ReAct agent works
+```
 
 ## License
 

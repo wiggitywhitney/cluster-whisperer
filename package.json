@@ -1,0 +1,36 @@
+{
+  "name": "cluster-whisperer",
+  "version": "0.1.0",
+  "description": "AI agent that answers natural language questions about Kubernetes clusters",
+  "main": "dist/index.js",
+  "bin": {
+    "cluster-whisperer": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "keywords": [
+    "kubernetes",
+    "ai",
+    "langchain",
+    "kubectl"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/anthropic": "^0.3.14",
+    "@langchain/core": "^0.3.27",
+    "@langchain/langgraph": "^0.2.42",
+    "commander": "^13.0.0",
+    "zod": "3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "zod": "3.25.67"
+  }
+}
