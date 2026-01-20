@@ -105,16 +105,29 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
  * more capable but slower and more expensive. Haiku would be faster but might
  * miss nuances in complex investigations.
  *
- * Why temperature: 0?
- * Temperature controls randomness. At 0, the model gives the most deterministic
- * response - it picks the most likely next token every time. For investigation
- * tasks, we want consistent, predictable behavior rather than creative variation.
+ * Why extended thinking?
+ * Extended thinking lets Claude show its reasoning process - the "why" behind
+ * each decision. This is valuable for learning and debugging. Users can see
+ * how the agent thinks through problems, not just what actions it takes.
+ *
+ * Configuration constraints:
+ * - budget_tokens: How many tokens Claude can use for thinking (min 1024)
+ * - maxTokens: Must be greater than budget_tokens
+ * - temperature: Cannot be set when using extended thinking (API requirement)
  */
 export function getInvestigatorAgent() {
   if (!cachedAgent) {
     const model = new ChatAnthropic({
       model: "claude-sonnet-4-20250514",
-      temperature: 0,
+      maxTokens: 10000,
+      thinking: { type: "enabled", budget_tokens: 4000 },
+      // Enable interleaved thinking so Claude can reason between tool calls
+      // Without this, thinking only happens at the start of each turn
+      clientOptions: {
+        defaultHeaders: {
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+        },
+      },
     });
 
     cachedAgent = createReactAgent({
@@ -132,14 +145,14 @@ export function getInvestigatorAgent() {
  * Why truncate?
  * kubectl output can be very long (imagine 100 pods, or verbose describe output).
  * When displaying tool results in the terminal, we want enough to understand
- * what happened without flooding the screen. 2000 chars shows about 20-25 lines
- * of typical kubectl output - enough to see patterns without overwhelming.
+ * what happened without flooding the screen. The thinking content is the main
+ * focus, so tool results just need enough context to follow along.
  *
  * @param text - The string to truncate
- * @param maxLength - Maximum length (default 2000)
+ * @param maxLength - Maximum length (default 1100)
  * @returns The truncated string with "..." suffix if it was shortened
  */
-export function truncate(text: string, maxLength: number = 2000): string {
+export function truncate(text: string, maxLength: number = 1100): string {
   if (text.length <= maxLength) {
     return text;
   }

@@ -1,6 +1,6 @@
 # PRD #3: Extended Thinking Visibility
 
-**Status**: Not Started
+**Status**: Complete
 **Priority**: Medium
 **Created**: 2026-01-20
 **Last Updated**: 2026-01-20
@@ -36,10 +36,10 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
 ## Success Criteria
 
-- [ ] Extended thinking is enabled and working
-- [ ] Thinking content streams to terminal with clear visual distinction from tool calls
-- [ ] Implementation is based on official documentation, not guesswork
-- [ ] Documentation updated to explain the feature
+- [x] Extended thinking is enabled and working
+- [x] Thinking content streams to terminal with clear visual distinction from tool calls
+- [x] Implementation is based on official documentation, not guesswork
+- [x] Documentation updated to explain the feature
 
 ---
 
@@ -48,31 +48,31 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 ### M1: Research Phase
 **Goal**: Understand exactly how extended thinking works from official docs
 
-- [ ] Review Anthropic's extended thinking documentation
-- [ ] Review LangChain.js ChatAnthropic source code for thinking support
-- [ ] Understand event stream structure for thinking content
-- [ ] Document findings: configuration options, event format, constraints
-- [ ] Identify any limitations (temperature requirements, token budgets, etc.)
+- [x] Review Anthropic's extended thinking documentation
+- [x] Review LangChain.js ChatAnthropic source code for thinking support
+- [x] Understand event stream structure for thinking content
+- [x] Document findings: configuration options, event format, constraints
+- [x] Identify any limitations (temperature requirements, token budgets, etc.)
 
 **Deliverable**: Research notes documenting exactly how to implement this
 
 ### M2: Implementation
 **Goal**: Enable extended thinking and display it in the CLI
 
-- [ ] Update ChatAnthropic configuration to enable thinking
-- [ ] Add event handler for thinking content in the stream loop
-- [ ] Display thinking with visual distinction (emoji, formatting)
-- [ ] Test with various questions to verify thinking appears
+- [x] Update ChatAnthropic configuration to enable thinking
+- [x] Add event handler for thinking content in the stream loop
+- [x] Display thinking with visual distinction (italic formatting)
+- [x] Test with various questions to verify thinking appears
 
 **Deliverable**: Working CLI that shows thinking alongside tool calls
 
 ### M3: Polish & Documentation
 **Goal**: Refine the UX and document the feature
 
-- [ ] Tune thinking budget for good balance of insight vs. verbosity
-- [ ] Update docs/agentic-loop.md to explain thinking visibility
-- [ ] Update README if needed
-- [ ] Test edge cases (long thinking, streaming interruption)
+- [x] Tune thinking budget for good balance of insight vs. verbosity
+- [x] Update docs/agentic-loop.md to explain thinking visibility
+- [x] Update README if needed
+- [x] Test edge cases (long thinking, streaming interruption)
 
 **Deliverable**: Feature complete and documented
 
@@ -80,23 +80,120 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 
 ## Technical Notes
 
-### What We Know
-- `@langchain/anthropic` has a `thinking` config option
-- Configuration: `thinking: { type: "enabled", budget_tokens: N }`
-- Temperature must be set to 1 (not 0) for thinking to work
-- Thinking content arrives via `thinking_delta` events when streaming
+### Configuration (Confirmed)
 
-### Open Questions (M1 will answer)
-- Exact event structure in LangGraph's `streamEvents()`
-- How thinking interleaves with tool calls
-- Recommended budget_tokens for this use case
-- Any interaction with createReactAgent
+**ChatAnthropic Setup:**
+```typescript
+const model = new ChatAnthropic({
+  model: "claude-sonnet-4-20250514",
+  maxTokens: 10000,  // Must be > budget_tokens
+  thinking: { type: "enabled", budget_tokens: 4000 },
+  // Note: temperature must NOT be set (defaults handled by API)
+  // Enable interleaved thinking so Claude reasons between every tool call
+  clientOptions: {
+    defaultHeaders: {
+      "anthropic-beta": "interleaved-thinking-2025-05-14",
+    },
+  },
+});
+```
+
+**Interleaved Thinking (Critical Discovery):**
+By default, extended thinking only happens at the **start** of each assistant turn. To see thinking between every tool call (true agentic loop visibility), the `interleaved-thinking-2025-05-14` beta header is required.
+
+**Critical Constraints:**
+- `budget_tokens` minimum: **1,024 tokens**
+- `budget_tokens` must be less than `max_tokens`
+- Extended thinking is **NOT compatible** with:
+  - `temperature` modifications (remove our current `temperature: 0`)
+  - `top_p` / `top_k` modifications
+  - Forced tool use (only `tool_choice: any` works)
+  - Response pre-filling
+
+**Supported Models:**
+- Claude Sonnet 4 / 4.5
+- Claude Opus 4 / 4.5
+- Claude Haiku 4.5
+- Claude 3.7 Sonnet
+
+### Streaming Event Structure (Confirmed)
+
+**Raw API Events (what Anthropic sends):**
+```
+content_block_start  → {"type": "thinking"}
+content_block_delta  → {"type": "thinking_delta", "thinking": "Let me analyze..."}
+content_block_delta  → {"type": "signature_delta", "signature": "..."}
+content_block_stop
+content_block_start  → {"type": "text"}
+content_block_delta  → {"type": "text_delta", "text": "Based on my analysis..."}
+```
+
+**LangChain Processing:**
+- Thinking arrives in `AIMessageChunk.content` array with `type: "thinking"`
+- In `on_chat_model_end` event, thinking blocks appear in `output.content[]`
+- Current code filters for `block.type === "text"` - need to also handle `block.type === "thinking"`
+
+### Implementation Approach
+
+**Option 1: Handle in `on_chat_model_end`**
+- Thinking blocks appear in `output.content` array alongside text blocks
+- Filter for `type === "thinking"` and display with 🤔 prefix
+- Simple but thinking appears after tool results, not before
+
+**Option 2: Handle via `on_llm_stream` events**
+- Get thinking tokens as they stream
+- More complex but shows thinking in real-time before tool calls
+- May have issues with tool binding (see LangGraph issue #253)
+
+**Recommendation:** Start with Option 1 for simplicity, iterate if needed.
+
+### Tool Use Integration
+
+When using extended thinking with tools:
+1. Thinking blocks must be preserved and passed back to the API
+2. When sending tool results, include complete thinking blocks from previous response
+3. LangChain/LangGraph should handle this automatically via `createReactAgent`
+
+### Budget Token Recommendations
+
+| Use Case | Budget | Rationale |
+|----------|--------|-----------|
+| Simple queries | 1,024 | Minimum, quick responses |
+| Investigation | 4,000 | Good balance for multi-step reasoning |
+| Complex analysis | 8,000+ | Deep reasoning, may timeout |
+
+For cluster-whisperer: Start with **4,000** tokens - investigation tasks benefit from visible reasoning.
+
+### Open Questions (Answered)
+
+| Question | Answer |
+|----------|--------|
+| Event structure in streamEvents() | Thinking in AIMessageChunk.content array, type: "thinking" |
+| How thinking interleaves with tools | Thinking happens before each tool call decision |
+| Recommended budget_tokens | 4,000 for investigation use case |
+| Interaction with createReactAgent | Should work - LangChain preserves thinking blocks automatically |
+
+### Notes
+
+- **Claude 4 vs 3.7**: Claude 4 returns summarized thinking, Claude 3.7 returns full thinking. We're on Claude Sonnet 4 so will get summaries.
 
 ---
 
 ## Design Decisions
 
-*To be filled in during implementation*
+### Thinking Display Format
+**Decision**: Use italic text formatting instead of emoji prefix
+**Rationale**: User preference - emoji felt too busy alongside tool output. Italic text provides clear visual distinction while keeping output clean.
+**Implementation**: ANSI escape codes (`\x1b[3m` for italic start, `\x1b[0m` for reset)
+
+### Interleaved vs Start-Only Thinking
+**Decision**: Enable interleaved thinking via beta header
+**Rationale**: Without interleaved thinking, you only see one thinking block at the start. With it, Claude reasons after each tool result - showing the true Reason→Act→Observe→Reason loop.
+**Implementation**: `anthropic-beta: interleaved-thinking-2025-05-14` header
+
+### Tool Output Truncation
+**Decision**: Reduce truncation from 2000 to 1100 characters
+**Rationale**: With thinking visible, the reasoning is the more interesting output. Tool results just need enough context to follow along.
 
 ---
 
@@ -105,6 +202,35 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
 ### 2026-01-20
 - PRD created
 - Feature identified during PRD #1 completion workflow
+- M1 Research completed:
+  - Reviewed Anthropic extended thinking documentation
+  - Reviewed LangChain.js ChatAnthropic source code
+  - Documented configuration, constraints, and streaming event structure
+  - Created standalone docs: `docs/extended-thinking-research.md`, `docs/langgraph-vs-langchain.md`
+  - Key finding: Must remove `temperature: 0` setting, use `budget_tokens: 4000`
+- M2 Implementation completed:
+  - Updated ChatAnthropic config with thinking enabled
+  - Added thinking block handler in `on_chat_model_end` event
+  - Discovered critical insight: interleaved thinking requires beta header
+  - Without `interleaved-thinking-2025-05-14`, thinking only appears at start of turn
+  - With beta header, thinking appears between every tool call (true agentic loop)
+  - Tested with spider-rainbows node taint scenario - agent adapts reasoning based on discoveries
+  - User requested italic formatting instead of emoji for thinking display
+- M3 partial progress:
+  - Tuned thinking budget (4000 tokens) and truncation (1100 chars)
+  - Updated docs/agentic-loop.md and docs/extended-thinking-research.md
+- M3 edge case testing completed:
+  - Test 1 (long thinking): 6 thinking blocks displayed correctly, interleaved between tool calls
+  - Test 2 (Ctrl+C interruption): Clean exit at all stages, no stack traces, terminal returns to normal
+  - Key finding: Thinking arrives as complete blocks in `on_chat_model_end`, not streamed token-by-token - eliminates risk of stuck ANSI formatting on interrupt
+  - Test 3 (rapid successive blocks): Multiple blocks rendered correctly, parallel tool calls handled well
+  - Discovered parallel tool calls behavior: Claude batches independent operations, LangGraph executes them together
+  - Added "Parallel Tool Calls" section to docs/agentic-loop.md documenting this behavior
+- M3 README update completed:
+  - Updated example to show thinking interleaved with tool calls
+  - Added note explaining italic formatting in terminal
+  - Added new docs (extended-thinking-research.md, langgraph-vs-langchain.md) to Project Structure
+- **PRD #3 Complete** - All milestones and success criteria met
 
 ---
 

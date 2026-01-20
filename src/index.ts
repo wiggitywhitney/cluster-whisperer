@@ -138,7 +138,7 @@ async function main() {
           // event.data.output is a ToolMessage object with a .content property
           const output = event.data.output;
           const content = output?.content ?? output;
-          console.log(`   Result:\n${truncate(String(content), 2000)}`);
+          console.log(`   Result:\n${truncate(String(content), 1100)}`);
           console.log(); // blank line between tool calls
         }
 
@@ -146,17 +146,26 @@ async function main() {
           // Model finished generating - capture the response for final display
           // The output contains the message(s) the model produced
           // Content might be a string or an array of content blocks
+          //
+          // With extended thinking enabled, content includes both:
+          // - type: "thinking" blocks - Claude's reasoning process
+          // - type: "text" blocks - the actual response text
           const output = event.data.output;
           if (output?.content) {
             const content = output.content;
             if (typeof content === "string") {
               finalAnswer = content;
             } else if (Array.isArray(content)) {
-              // Claude returns content as array of blocks, extract text
-              finalAnswer = content
-                .filter((block: { type: string }) => block.type === "text")
-                .map((block: { text: string }) => block.text)
-                .join("\n");
+              for (const block of content) {
+                if (block.type === "thinking") {
+                  // Display thinking content so users can see the reasoning
+                  // \x1b[3m starts italic, \x1b[0m resets formatting
+                  console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
+                } else if (block.type === "text") {
+                  // Capture text for final answer display
+                  finalAnswer += block.text;
+                }
+              }
             }
           }
         }
@@ -165,7 +174,7 @@ async function main() {
       // Display the final answer with a separator for visibility
       if (finalAnswer) {
         console.log("─".repeat(60));
-        console.log("📋 Answer:");
+        console.log("Answer:");
         console.log(finalAnswer);
         console.log();
       }

@@ -71,9 +71,19 @@ import { ChatAnthropic } from "@langchain/anthropic";
 
 const model = new ChatAnthropic({
   model: "claude-sonnet-4-20250514",
-  temperature: 0,  // Deterministic responses
+  maxTokens: 10000,
+  thinking: { type: "enabled", budget_tokens: 4000 },
+  clientOptions: {
+    defaultHeaders: {
+      "anthropic-beta": "interleaved-thinking-2025-05-14",
+    },
+  },
 });
 ```
+
+**Extended Thinking**: The `thinking` option enables Claude to show its reasoning process. With `interleaved-thinking-2025-05-14`, Claude reasons between every tool call - not just at the start. This makes the "Reason" step of ReAct visible.
+
+See [Extended Thinking Research](./extended-thinking-research.md) for details.
 
 ### 2. createReactAgent
 
@@ -153,35 +163,73 @@ The agent emits many events as it works. Here are the three we care about:
 **When**: The model finished generating a response.
 
 **What you get**:
-- `event.data.output.content` - what the model said
+- `event.data.output.content` - an array of content blocks
+
+**Content block types** (with extended thinking enabled):
+- `type: "thinking"` - Claude's reasoning before acting
+- `type: "text"` - The actual response text
+- `type: "tool_use"` - A tool call request
 
 **Important**: This fires multiple times during an investigation:
-1. After the model decides to call a tool (content contains the tool call)
-2. After the model sees tool results and decides to call another tool
-3. After the model has enough info and generates the final answer
+1. After the model decides to call a tool (content contains thinking + tool_use)
+2. After the model sees tool results and decides to call another tool (more thinking + tool_use)
+3. After the model has enough info and generates the final answer (thinking + text)
 
-We capture the content each time, so by the end, `finalAnswer` holds the last thing the model said (the summary).
+With interleaved thinking enabled, each event includes a thinking block showing Claude's reasoning at that step.
 
 ### Putting It Together
 
 ```text
 User asks question
     ↓
-[on_chat_model_end] → model decides to call kubectl_get
+[on_chat_model_end] → thinking: "I should check pods first..." + tool_use
     ↓
 [on_tool_start] → kubectl_get is about to run
     ↓
 [on_tool_end] → kubectl_get finished, here's the output
     ↓
-[on_chat_model_end] → model sees output, decides it has enough info
+[on_chat_model_end] → thinking: "I see a Pending pod..." + tool_use
+    ↓
+[on_tool_start] → kubectl_describe is about to run
+    ↓
+[on_tool_end] → kubectl_describe finished
+    ↓
+[on_chat_model_end] → thinking: "Found the issue..." + text (final answer)
     ↓
 Final answer displayed
 ```
 
+### Parallel Tool Calls
+
+Claude can request multiple tools in a single response when the operations are independent. For example, when comparing resources across several pods:
+
+```text
+[on_chat_model_end] → thinking: "I need to describe all these pods..." + 4 tool_use blocks
+    ↓
+[on_tool_start] → kubectl_describe pod-1
+[on_tool_start] → kubectl_describe pod-2
+[on_tool_start] → kubectl_describe pod-3
+[on_tool_start] → kubectl_describe pod-4
+    ↓
+[on_tool_end] → result for pod-1
+[on_tool_end] → result for pod-2
+[on_tool_end] → result for pod-3
+[on_tool_end] → result for pod-4
+    ↓
+[on_chat_model_end] → thinking: "Now I can compare..." + next action
+```
+
+**Why this matters**:
+- Investigations complete faster - no waiting between independent operations
+- Claude decides when parallelism is safe (operations don't depend on each other)
+- LangGraph handles the parallel execution automatically
+
+**How it appears in the CLI**: You'll often see several "Tool:" lines in quick succession. Results can arrive as each tool completes, so ordering may interleave when calls run in parallel.
+
 ### Code Example
 
 ```typescript
-const eventStream = investigatorAgent.streamEvents(
+const eventStream = agent.streamEvents(
   { messages: [new HumanMessage(question)] },
   { version: "v2" }
 );
@@ -197,8 +245,16 @@ for await (const event of eventStream) {
   }
 
   if (event.event === "on_chat_model_end") {
-    // Capture each time - the last one will be the final answer
-    finalAnswer = event.data.output?.content;
+    const content = event.data.output?.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === "thinking") {
+          console.log(`Thinking: ${block.thinking}`);
+        } else if (block.type === "text") {
+          finalAnswer = block.text;
+        }
+      }
+    }
   }
 }
 ```
