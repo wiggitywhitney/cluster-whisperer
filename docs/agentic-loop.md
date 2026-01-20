@@ -327,10 +327,3 @@ The user never sees or types the system prompt - it's automatically injected by 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## What's Next
-
-M4 added `kubectl_logs` - the agent can now see application-level output. While `kubectl_describe` shows Kubernetes' perspective (events, scheduling), logs show what's happening inside the container: stack traces, error messages, startup failures. The tool description emphasizes using `--previous` for crashed containers.
-
-With all three investigation tools complete, M5 focuses on demo prep and polish: testing against real clusters, error handling, and README documentation for KubeCon.

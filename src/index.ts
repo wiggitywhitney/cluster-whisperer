@@ -14,7 +14,40 @@
 
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
-import { investigatorAgent, truncate } from "./agent/investigator";
+import { execSync } from "child_process";
+import { getInvestigatorAgent, truncate } from "./agent/investigator";
+
+/**
+ * Validates that the environment is properly configured before running the agent.
+ *
+ * Why validate upfront?
+ * It's better to fail fast with a clear message than to get a cryptic error
+ * deep in the LangChain stack. These checks catch the most common setup issues.
+ */
+function validateEnvironment(): void {
+  // Check for Anthropic API key - required for the LLM
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
+    console.error("");
+    console.error("Export your API key:");
+    console.error("  export ANTHROPIC_API_KEY=your-key-here");
+    process.exit(1);
+  }
+
+  // Check that kubectl is available
+  try {
+    execSync("kubectl version --client", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    console.error("Error: kubectl is not installed or not in PATH.");
+    console.error("");
+    console.error("Install kubectl:");
+    console.error("  https://kubernetes.io/docs/tasks/tools/");
+    process.exit(1);
+  }
+}
 
 /**
  * Main function - sets up the CLI and runs the agent
@@ -32,13 +65,16 @@ async function main() {
   program
     .argument("<question>", "Natural language question about your cluster")
     .action(async (question: string) => {
+      // Validate environment before doing anything else
+      validateEnvironment();
+
       console.log(`\nQuestion: ${question}\n`);
 
       /**
        * Stream events from the agent as it works.
        *
        * streamEvents() is a LangChain method that comes built into
-       * investigatorAgent (see src/agent/investigator.ts for details).
+       * the agent (see src/agent/investigator.ts for details).
        *
        * Why streamEvents instead of invoke?
        * invoke() waits until the agent is completely done, then returns the
@@ -53,7 +89,7 @@ async function main() {
        * The version: "v2" parameter specifies the event format. v2 is the
        * current recommended format for LangGraph agents.
        */
-      const eventStream = investigatorAgent.streamEvents(
+      const eventStream = getInvestigatorAgent().streamEvents(
         { messages: [new HumanMessage(question)] },
         { version: "v2" }
       );
@@ -122,8 +158,9 @@ async function main() {
         }
       }
 
-      // Display the final answer
+      // Display the final answer with a separator for visibility
       if (finalAnswer) {
+        console.log("─".repeat(60));
         console.log("📋 Answer:");
         console.log(finalAnswer);
         console.log();

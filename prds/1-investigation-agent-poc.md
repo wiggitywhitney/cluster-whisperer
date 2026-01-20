@@ -1,6 +1,6 @@
 # PRD #1: Kubernetes Investigation Agent (POC)
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-01-13
 **GitHub Issue**: [#1](https://github.com/wiggitywhitney/cluster-whisperer/issues/1)
 **Deadline**: 1 week (KubeCon demo prep)
@@ -119,12 +119,12 @@ Keeping tools separate allows:
 
 ## Success Criteria
 
-- [ ] CLI accepts natural language question as argument
-- [ ] Agent uses agentic loop to investigate (not hardcoded flow)
-- [ ] Agent outputs reasoning at each step (visible thinking)
+- [x] CLI accepts natural language question as argument
+- [x] Agent uses agentic loop to investigate (not hardcoded flow)
+- [x] Agent outputs reasoning at each step (visible thinking)
 - [x] At least 3 kubectl tools available (get, describe, logs)
-- [ ] Works against any kubeconfig-accessible cluster
-- [ ] Demo-ready for KubeCon presentation
+- [x] Works against any kubeconfig-accessible cluster
+- [x] Demo-ready for KubeCon presentation
 
 ## Milestones
 
@@ -155,13 +155,12 @@ Keeping tools separate allows:
   - Description emphasizes: "Use --previous for crashed/restarted containers"
   - Manual test: agent investigates crash loops using logs (see Testing section)
 
-- [ ] **M5**: Demo prep and polish
+- [x] **M5**: Demo prep and polish
   - Test against real cluster (see Testing section)
   - Error handling for common failures
   - Polish output format for demo visibility (tool name, args, truncated result)
   - Verify tool descriptions guide coherent investigation flow
   - README with setup instructions
-  - Practice demo script
 
 ## Technical Approach
 
@@ -406,6 +405,15 @@ Provide a clear, concise summary of what you found and what it means.
 ---
 
 ## Progress Log
+
+### 2026-01-20: M5 Complete - PRD Complete
+- Added startup validation in `src/index.ts` - checks for ANTHROPIC_API_KEY and kubectl before running
+- Made agent creation lazy in `src/agent/investigator.ts` - `getInvestigatorAgent()` function enables validation to run first
+- Added output polish - separator line before final answer for demo visibility
+- Updated `README.md` - removed status section, updated project structure with all three tools
+- Removed "What's Next" sections from `docs/agentic-loop.md` and `docs/kubectl-tools.md`
+- Tested against Kind cluster - verified get→describe→logs investigation flow works naturally
+- All Success Criteria met - CLI works, agentic loop investigates dynamically, visible reasoning, demo-ready
 
 ### 2026-01-20: M4 Complete
 - Created `src/tools/kubectl-logs.ts` - tool with args array for flexible options (--previous, --tail, -c)

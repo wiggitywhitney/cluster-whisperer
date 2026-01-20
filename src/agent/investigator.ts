@@ -48,7 +48,34 @@ const promptPath = path.join(__dirname, "../../prompts/investigator.md");
 const systemPrompt = fs.readFileSync(promptPath, "utf8");
 
 /**
- * The language model that powers the agent.
+ * Cached agent instance - created lazily on first use.
+ *
+ * Why lazy creation?
+ * The ChatAnthropic constructor validates the API key immediately. If we create
+ * the agent at module load time (when this file is imported), it throws before
+ * our startup validation can show a friendly error message. By creating the
+ * agent lazily, we let index.ts validate the environment first.
+ */
+let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
+
+/**
+ * Gets the investigator agent, creating it on first call.
+ *
+ * The agent combines the model, tools, and system prompt into a reasoning loop.
+ *
+ * createReactAgent handles the loop mechanics:
+ * - Sends the user's question plus system prompt to the model
+ * - If the model wants to call a tool, executes it and feeds back the result
+ * - Keeps looping until the model produces a final answer (no more tool calls)
+ *
+ * The returned object has LangChain methods built in:
+ * - agent.invoke() - run and return final result
+ * - agent.stream() - stream output chunks
+ * - agent.streamEvents() - stream detailed internal events (used in index.ts)
+ *
+ * stateModifier injects our system prompt at the start of every conversation.
+ * This is how we tell the agent "you are a Kubernetes investigator" without
+ * the user having to say it.
  *
  * Why Claude Sonnet?
  * It's a good balance of capability and speed for this use case. Opus would be
@@ -60,33 +87,21 @@ const systemPrompt = fs.readFileSync(promptPath, "utf8");
  * response - it picks the most likely next token every time. For investigation
  * tasks, we want consistent, predictable behavior rather than creative variation.
  */
-const model = new ChatAnthropic({
-  model: "claude-sonnet-4-20250514",
-  temperature: 0,
-});
+export function getInvestigatorAgent() {
+  if (!cachedAgent) {
+    const model = new ChatAnthropic({
+      model: "claude-sonnet-4-20250514",
+      temperature: 0,
+    });
 
-/**
- * The agent - combines the model, tools, and system prompt into a reasoning loop.
- *
- * createReactAgent handles the loop mechanics:
- * - Sends the user's question plus system prompt to the model
- * - If the model wants to call a tool, executes it and feeds back the result
- * - Keeps looping until the model produces a final answer (no more tool calls)
- *
- * The returned object (investigatorAgent) has LangChain methods built in:
- * - investigatorAgent.invoke() - run and return final result
- * - investigatorAgent.stream() - stream output chunks
- * - investigatorAgent.streamEvents() - stream detailed internal events (used in index.ts)
- *
- * stateModifier injects our system prompt at the start of every conversation.
- * This is how we tell the agent "you are a Kubernetes investigator" without
- * the user having to say it.
- */
-export const investigatorAgent = createReactAgent({
-  llm: model,
-  tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
-  stateModifier: systemPrompt,
-});
+    cachedAgent = createReactAgent({
+      llm: model,
+      tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
+      stateModifier: systemPrompt,
+    });
+  }
+  return cachedAgent;
+}
 
 /**
  * Truncates a string to a maximum length, adding "..." if truncated.

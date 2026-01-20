@@ -15,17 +15,12 @@ $ cluster-whisperer "Why are pods failing in the payments namespace?"
    NAME                      READY   STATUS             RESTARTS
    payments-api-7d4f9-x2k    0/1     CrashLoopBackOff   5
 
+────────────────────────────────────────────────────────────
 📋 Answer:
 The payments-api pod is crashing due to memory limits...
 ```
 
 The agent investigates by running kubectl commands, showing its reasoning along the way.
-
-## Status
-
-🚧 **POC in development** - M1 and M2 complete, working on M3
-
-See [PRD #1](./prds/1-investigation-agent-poc.md) for the full implementation plan.
 
 ## How it works: The ReAct Pattern
 
@@ -78,27 +73,29 @@ User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
 
 The agent has access to read-only kubectl tools:
 - `kubectl_get` - List resources and their status
-- `kubectl_describe` - Get detailed resource information (M3)
-- `kubectl_logs` - Check container logs (M4)
+- `kubectl_describe` - Get detailed resource information
+- `kubectl_logs` - Check container logs
 
 ## Project Structure
 
 ```
 src/
-├── index.ts              # CLI entry point with streamEvents
+├── index.ts               # CLI entry point with streamEvents
 ├── agent/
-│   └── investigator.ts   # ReAct agent setup (M2 ✅)
+│   └── investigator.ts    # ReAct agent setup
 ├── tools/
-│   └── kubectl-get.ts    # kubectl_get tool (M1 ✅)
+│   ├── kubectl-get.ts     # kubectl_get tool
+│   ├── kubectl-describe.ts # kubectl_describe tool
+│   └── kubectl-logs.ts    # kubectl_logs tool
 └── utils/
-    └── kubectl.ts        # Shared kubectl execution helper
+    └── kubectl.ts         # Shared kubectl execution helper
 
 prompts/
-└── investigator.md       # System prompt (separate file for easy iteration)
+└── investigator.md        # System prompt (separate file for easy iteration)
 
 docs/
-├── kubectl-tools.md      # How tools work (M1)
-└── agentic-loop.md       # How the agent works (M2)
+├── kubectl-tools.md       # How kubectl tools work
+└── agentic-loop.md        # How the ReAct agent works
 ```
 
 ## License

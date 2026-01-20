@@ -356,8 +356,3 @@ Agent: "Your pod is crashing because of [specific error from logs]."
 
 The descriptions create the investigation logic. The system prompt stays minimal.
 
----
-
-## What's Next
-
-With all three investigation tools complete (`kubectl_get`, `kubectl_describe`, `kubectl_logs`), M5 focuses on demo prep and polish: testing against real clusters, error handling, and README documentation for KubeCon.
