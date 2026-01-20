@@ -16,7 +16,7 @@ That's it. The `tool()` function wraps your code so an agent can call it.
 
 Everything else is not LangChain:
 - **Zod schema** - just Zod, a TypeScript validation library
-- **execSync** - Node.js built-in for running shell commands
+- **spawnSync** - Node.js built-in for running subprocesses
 - **executeKubectl helper** - plain TypeScript function
 
 If you switched to a different agent framework, you'd only change how the tool is wrapped. The schema and kubectl execution would stay the same.
@@ -29,7 +29,7 @@ A tool is a function that an AI agent can call. When you ask the agent "Why are 
 
 The agent doesn't run kubectl directly. Instead, it calls your tools, and your tools run kubectl. This separation gives you control over what the agent can do.
 
-```
+```text
 User Question → Agent → Tool → kubectl → Cluster
                   ↑       |
                   └───────┘
@@ -343,7 +343,7 @@ Notice how the tool descriptions tell the agent **when** to use each tool:
 
 This is the **directive description pattern**. Instead of just explaining what a tool does, we guide the agent's decision-making:
 
-```
+```text
 Regular description:     "Gets detailed information about a resource"
 Directive description:   "Gets detailed information about a resource.
                          Use kubectl_get first to find resources,
@@ -364,7 +364,7 @@ Without directive descriptions, the agent might:
 
 With directive descriptions, tools naturally chain together into an investigation flow:
 
-```
+```text
 User: "Why is my pod failing?"
     │
     ▼

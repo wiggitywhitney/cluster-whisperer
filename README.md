@@ -58,7 +58,7 @@ npm run build
 teller run -- /opt/homebrew/bin/node dist/index.js "What's running in the default namespace?"
 
 # Or if you have the key exported directly
-npm start "Why is my-app pod crashing?"
+npm start -- "Why is my-app pod crashing?"
 ```
 
 ## Architecture
