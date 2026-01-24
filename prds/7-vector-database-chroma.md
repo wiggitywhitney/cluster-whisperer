@@ -31,23 +31,33 @@ This keeps the vector DB in sync with the actual cluster state.
 
 ---
 
-## Viktor's Implementation Reference
+## Research Approach
 
-**Before implementation, research Viktor's vector DB patterns in dot-ai:**
+**Primary sources first, then reference implementations.**
 
-### Files to Study
-- Chroma/Qdrant setup and configuration
-- Vector embedding approach (what gets embedded)
-- Controller implementation for K8s event watching
-- Sync mechanism between cluster and vector DB
-- Query tool implementation
+### Official Documentation (Primary)
+- **Chroma**: https://docs.trychroma.com/
+  - Getting started and core concepts
+  - Embedding functions and models
+  - Collections and querying
+  - Deployment options (in-memory, persistent, client/server)
+- **LangChain + Chroma**: Integration patterns if using LangChain's vector store abstraction
 
 ### Questions to Answer During Research
-1. What does Viktor embed - CRD specs, descriptions, examples?
-2. How does the controller watch for changes?
-3. What's the sync architecture (push vs pull, real-time vs batch)?
-4. How does the query tool format results for the LLM?
-5. What embedding model does he use?
+1. What are current Chroma versions and recommended patterns?
+2. What embedding models work well for technical documentation?
+3. What's the recommended way to structure collections for K8s resources?
+4. How should we chunk/structure CRD specs for embedding?
+5. What query patterns does Chroma support (similarity, filtering, etc.)?
+6. What deployment mode makes sense for our use case?
+
+### Viktor's Implementation (Architecture Reference)
+Study Viktor's dot-ai vector DB implementation for architecture patterns:
+- What does he embed (CRD specs, descriptions, examples)?
+- How does his controller watch for K8s changes?
+- What's his sync architecture (push vs pull, real-time vs batch)?
+- How does the query tool format results for the LLM?
+- Note: Viktor uses Qdrant, not Chroma - patterns may transfer, details won't
 
 ### Decisions to Make
 - What to embed (CRD specs, API docs, examples, all of the above)
@@ -73,10 +83,10 @@ This PRD may need to split into multiple PRDs if research reveals the controller
 ## Milestones
 
 - [ ] **M1**: Research Phase
-  - Study Viktor's dot-ai vector DB implementation
-  - Research current Chroma versions and patterns
+  - Study Chroma documentation and official examples
+  - Research current Chroma versions and patterns (landscape changing rapidly)
   - Research embedding models for technical documentation
-  - Understand Viktor's controller pattern for K8s sync
+  - Study Viktor's architecture for K8s sync (he uses Qdrant, patterns may transfer)
   - Document findings in `docs/vector-db-research.md`
   - Decide if PRD needs to split (controller as separate PRD)
   - Update this PRD with specific implementation decisions
@@ -116,11 +126,11 @@ This PRD may need to split into multiple PRDs if research reveals the controller
 - Sync strategy (manual, scripted, controller)
 - Query result format
 
-## Reference Examples
+## Reference Sources
 
-- **Viktor's dot-ai**: Primary reference for vector DB patterns
-- **Chroma**: https://docs.trychroma.com/
-- **Viktor's controller**: To be identified in research
+- **Chroma**: https://docs.trychroma.com/ (primary)
+- **LangChain Vector Stores**: If using LangChain abstraction
+- **Viktor's dot-ai**: Reference for K8s sync architecture (uses Qdrant, not Chroma)
 
 ## Out of Scope (potentially separate PRD)
 

@@ -27,28 +27,37 @@ The audience can see the full investigation trace - from user question through t
 
 ---
 
-## Viktor's Implementation Reference
+## Research Approach
 
-**Before implementation, research Viktor's Datadog patterns (he uses Jaeger, but principles apply):**
+**Primary sources first, then reference implementations.**
 
-### Files to Study
-- OTLP exporter configuration
-- Trace attributes for LLM observability
-- Service naming and tagging
-- Environment configuration
+### Official Documentation (Primary)
+- **Datadog OTLP Ingestion**: https://docs.datadoghq.com/tracing/trace_collection/otlp_ingest_in_datadog/
+- **Datadog APM**: Trace visualization, service maps, flame graphs
+- **Datadog LLM Observability**: https://docs.datadoghq.com/llm_observability/ (if applicable)
+  - What LLM-specific features does Datadog offer?
+  - What trace attributes enable these features?
 
 ### Questions to Answer During Research
-1. What's the current Datadog OTLP ingestion setup?
-2. What trace attributes does Datadog use for LLM observability?
-3. How does Viktor structure service names and tags?
-4. What Datadog-specific configuration is needed?
-5. Are there Datadog LLM observability features we should leverage?
+1. What's the current Datadog OTLP ingestion setup and configuration?
+2. Does Datadog have LLM Observability features? What attributes enable them?
+3. What are Datadog's recommended service naming conventions?
+4. What environment tagging strategy does Datadog recommend?
+5. How do OTel semantic conventions map to Datadog's expected attributes?
+6. What Datadog-specific configuration optimizes trace visualization?
+
+### Viktor's Implementation (Architecture Reference)
+Study Viktor's observability setup for integration patterns:
+- How does he configure OTLP export?
+- What service naming conventions does he use?
+- Note: Viktor uses Jaeger, not Datadog - the OTLP patterns transfer, but Datadog-specific features won't
 
 ### Decisions to Make
-- Datadog API key management
-- Service naming convention
+- Datadog API key management (via Teller)
+- Service naming convention (follow Datadog recommendations)
 - Environment tagging strategy
 - Which Datadog features to highlight in demo
+- Whether to use Datadog LLM Observability features
 
 ---
 
@@ -62,9 +71,10 @@ The audience can see the full investigation trace - from user question through t
 ## Milestones
 
 - [ ] **M1**: Research Phase
-  - Research current Datadog OTLP ingestion patterns
-  - Research Datadog LLM observability features
-  - Study Viktor's observability patterns (Jaeger-based but principles transfer)
+  - Study Datadog OTLP ingestion documentation
+  - Research Datadog LLM Observability features and requirements
+  - Research Datadog service naming and tagging conventions
+  - Reference Viktor's OTLP patterns (he uses Jaeger, principles may transfer)
   - Document findings in `docs/datadog-research.md`
   - Update this PRD with specific configuration decisions
 
@@ -96,11 +106,13 @@ The audience can see the full investigation trace - from user question through t
 - Service naming and tagging
 - Datadog-specific optimizations
 
-## Reference Examples
+## Reference Sources
 
-- **Viktor's dot-ai**: Jaeger patterns (principles transfer)
+- **Datadog OTLP Ingestion**: https://docs.datadoghq.com/tracing/trace_collection/otlp_ingest_in_datadog/ (primary)
+- **Datadog LLM Observability**: https://docs.datadoghq.com/llm_observability/ (evaluate applicability)
+- **Datadog APM Best Practices**: Service naming, tagging, etc.
 - **Viktor's observability guide**: https://devopstoolkit.ai/docs/mcp/guides/observability-guide
-- **Datadog OTLP**: https://docs.datadoghq.com/tracing/trace_collection/otlp_ingest_in_datadog/
+- **Viktor's dot-ai**: Reference for OTLP patterns (uses Jaeger, not Datadog)
 
 ## Out of Scope
 

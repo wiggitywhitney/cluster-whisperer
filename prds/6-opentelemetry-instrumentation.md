@@ -29,27 +29,44 @@ This creates a hierarchy: MCP invocation → tool execution → kubectl call
 
 ---
 
-## Viktor's Implementation Reference
+## Research Approach
 
-**Before implementation, research Viktor's OTel patterns in dot-ai:**
+**Primary sources first, semantic conventions from the ground up.**
 
-### Files to Study
-- OpenTelemetry setup and configuration
-- Span creation patterns for MCP tools
-- Span creation patterns for agentic tools
-- Trace context propagation
-- Exporter configuration
+### Official Documentation (Primary)
+- **OpenTelemetry JS SDK**: https://opentelemetry.io/docs/languages/js/
+- **OpenTelemetry Semantic Conventions**: https://opentelemetry.io/docs/specs/semconv/
+  - General conventions for spans, attributes, resources
+  - GenAI semantic conventions (if available for LLM observability)
+- **OpenTelemetry Weaver**: Tool for working with semantic conventions - evaluate if applicable
+
+### Semantic Conventions Focus
+Start with official semantic conventions rather than inventing attribute names:
+- What conventions exist for HTTP/RPC calls?
+- What conventions exist for subprocess/command execution?
+- What conventions exist for GenAI/LLM operations?
+- How should we name spans according to conventions?
 
 ### Questions to Answer During Research
-1. What OTel SDK does Viktor use for Node.js/TypeScript?
-2. How does he structure the span hierarchy?
-3. What attributes does he add to spans (model name, token counts, etc.)?
-4. How does he handle async operations and tool calls?
-5. What exporters does he configure?
+1. What are the current OTel JS SDK packages and versions?
+2. What semantic conventions apply to our span types (tool calls, subprocess execution)?
+3. Are there GenAI semantic conventions for LLM tool use?
+4. Does OpenTelemetry Weaver help with convention compliance?
+5. What's the recommended tracer/provider setup pattern?
+6. How do official examples structure span hierarchies?
+
+### Viktor's Implementation (Compare, Don't Copy)
+Study Viktor's dot-ai OTel implementation to understand his approach:
+- What naming conventions does he use for spans and attributes?
+- How does he structure the span hierarchy?
+- **Compare against semantic conventions** - if Viktor's conventions differ from semconv, prefer semconv
+- What can we learn from his integration architecture?
 
 ### Decisions to Make
 - OTel SDK version and packages
-- Span naming conventions
+- Which semantic conventions to follow (semconv takes precedence)
+- Whether OpenTelemetry Weaver applies to our use case
+- Span naming conventions (following semconv, noting where Viktor differs)
 - What attributes to capture on each span type
 - Default exporter (console for dev, OTLP for production)
 
@@ -66,9 +83,11 @@ This creates a hierarchy: MCP invocation → tool execution → kubectl call
 ## Milestones
 
 - [ ] **M1**: Research Phase
-  - Study Viktor's dot-ai OTel implementation
-  - Research current OpenTelemetry JS SDK versions and patterns
-  - Research LLM observability best practices (what attributes matter)
+  - Study OpenTelemetry JS SDK documentation and official examples
+  - Research OpenTelemetry semantic conventions (general + GenAI if available)
+  - Evaluate OpenTelemetry Weaver for convention compliance
+  - Study Viktor's naming conventions and compare against semconv
+  - Research current SDK versions and patterns (landscape changing rapidly)
   - Document findings in `docs/opentelemetry-research.md`
   - Update this PRD with specific implementation decisions
 
@@ -107,11 +126,13 @@ This creates a hierarchy: MCP invocation → tool execution → kubectl call
 - Context propagation approach
 - Exporter configuration strategy
 
-## Reference Examples
+## Reference Sources
 
-- **Viktor's dot-ai**: Primary reference for OTel patterns
+- **OpenTelemetry JS SDK**: https://opentelemetry.io/docs/languages/js/ (primary)
+- **OpenTelemetry Semantic Conventions**: https://opentelemetry.io/docs/specs/semconv/ (primary)
+- **OpenTelemetry Weaver**: https://github.com/open-telemetry/weaver (evaluate applicability)
 - **Viktor's observability guide**: https://devopstoolkit.ai/docs/mcp/guides/observability-guide
-- **OpenTelemetry JS**: https://opentelemetry.io/docs/languages/js/
+- **Viktor's dot-ai**: Reference for integration architecture, compare naming conventions
 
 ## Out of Scope
 

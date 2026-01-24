@@ -26,23 +26,26 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ---
 
-## Viktor's Implementation Reference
+## Research Approach
 
-**Before implementation, research Viktor's MCP patterns in dot-ai:**
+**Primary sources first, then reference implementations.**
 
-### Files to Study
-- MCP server setup and configuration
-- How tools are exposed via MCP
-- Output format choices (JSON vs YAML vs plain text)
-- Schema validation patterns
-- Error handling in MCP context
+### Official Documentation (Primary)
+- **MCP Specification**: https://modelcontextprotocol.io/
+- **MCP TypeScript SDK**: Official SDK documentation and examples
+- **MCP tool patterns**: How the spec recommends structuring tools
 
 ### Questions to Answer During Research
-1. How does Viktor structure MCP tool definitions vs CLI tool definitions?
-2. What output format does he use for MCP responses?
-3. How does he handle errors in MCP context?
-4. Does he share code between CLI and MCP, or are they separate?
-5. What MCP SDK/library does he use?
+1. What does the MCP spec say about tool definition structure?
+2. What are current MCP SDK versions and their recommended patterns?
+3. What output formats do MCP clients expect? (JSON vs YAML vs plain text)
+4. How should errors be returned in MCP context?
+5. What are the official examples for MCP servers with similar tools?
+
+### Reference Implementations
+- **Viktor's dot-ai**: One example of MCP + kubectl integration - useful for seeing how pieces connect, but may use different patterns
+- **Official MCP examples**: From the MCP SDK repository
+
 
 ### Decisions to Make
 - Reuse existing tool code or create MCP-specific wrappers?
@@ -61,9 +64,10 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 ## Milestones
 
 - [ ] **M1**: Research Phase
-  - Study Viktor's dot-ai MCP implementation
+  - Study MCP specification and official TypeScript SDK documentation
   - Research current MCP SDK versions and patterns (landscape changing rapidly)
-  - Research MCP output format best practices
+  - Review official MCP examples and community servers for patterns
+  - Reference Viktor's dot-ai for integration architecture (not implementation details)
   - Document findings and decisions in `docs/mcp-research.md`
   - Update this PRD with specific implementation decisions
 
@@ -94,10 +98,11 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 - Output format strategy
 - Configuration approach (how clients discover/connect to server)
 
-## Reference Examples
+## Reference Sources
 
-- **Viktor's dot-ai**: Primary reference for MCP patterns
-- **MCP specification**: https://modelcontextprotocol.io/
+- **MCP specification**: https://modelcontextprotocol.io/ (primary)
+- **MCP TypeScript SDK**: Official SDK and examples
+- **Viktor's dot-ai**: Reference for integration architecture
 
 ## Out of Scope
 
