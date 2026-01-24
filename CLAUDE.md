@@ -32,23 +32,16 @@ Viktor's examples for patterns to follow:
 - kubectl tools: https://github.com/vfarcic/dot-ai/blob/main/src/core/kubectl-tools.ts
 - Agent with tools: https://github.com/vfarcic/dot-ai/blob/main/src/tools/query.ts
 
-## Secrets Management with Teller
+## Secrets Management with vals
 
-This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [Teller](https://github.com/tellerops/teller).
-
-**IMPORTANT**: `teller run` doesn't inherit shell PATH. You must use full path to `node`:
+This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [vals](https://github.com/helmfile/vals).
 
 ```bash
-# ✅ Correct - full path to node
-teller run -- /opt/homebrew/bin/node dist/index.js "your question"
+# Run with secrets injected
+vals exec -f .vals.yaml -- node dist/index.js "your question"
 
-# ❌ Wrong - will fail with "No such file or directory"
-teller run -- node dist/index.js "your question"
-```
-
-Verify secrets are configured:
-```bash
-teller show
+# Verify secrets are configured
+vals eval -f .vals.yaml
 ```
 
 ## Git Workflow

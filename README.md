@@ -52,7 +52,7 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 
 - Node.js 18+
 - kubectl CLI installed and configured
-- `ANTHROPIC_API_KEY` environment variable (managed via [Teller](https://github.com/tellerops/teller))
+- `ANTHROPIC_API_KEY` environment variable (managed via [vals](https://github.com/helmfile/vals))
 
 ## Setup
 
@@ -64,9 +64,8 @@ npm run build
 ## Usage
 
 ```bash
-# Run with Teller to inject ANTHROPIC_API_KEY
-# Note: teller run requires full path to node (doesn't inherit shell PATH)
-teller run -- /opt/homebrew/bin/node dist/index.js "What's running in the default namespace?"
+# Run with vals to inject ANTHROPIC_API_KEY
+vals exec -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
 
 # Or if you have the key exported directly
 npm start -- "Why is my-app pod crashing?"
