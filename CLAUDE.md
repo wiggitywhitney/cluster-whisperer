@@ -37,8 +37,8 @@ Viktor's examples for patterns to follow:
 This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [vals](https://github.com/helmfile/vals).
 
 ```bash
-# Run with secrets injected
-vals exec -f .vals.yaml -- node dist/index.js "your question"
+# Run with secrets injected (-i inherits PATH so kubectl is found)
+vals exec -i -f .vals.yaml -- node dist/index.js "your question"
 
 # Verify secrets are configured
 vals eval -f .vals.yaml

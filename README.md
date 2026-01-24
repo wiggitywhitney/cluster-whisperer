@@ -64,8 +64,8 @@ npm run build
 ## Usage
 
 ```bash
-# Run with vals to inject ANTHROPIC_API_KEY
-vals exec -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
+# Run with vals to inject ANTHROPIC_API_KEY (-i inherits PATH so kubectl is found)
+vals exec -i -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
 
 # Or if you have the key exported directly
 npm start -- "Why is my-app pod crashing?"
