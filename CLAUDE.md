@@ -36,13 +36,17 @@ Viktor's examples for patterns to follow:
 
 This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [vals](https://github.com/helmfile/vals).
 
+**IMPORTANT**: Always use the `-i` flag with `vals exec`:
+
 ```bash
-# Run with secrets injected (-i inherits PATH so kubectl is found)
+# -i inherits environment variables (including PATH)
 vals exec -i -f .vals.yaml -- node dist/index.js "your question"
 
 # Verify secrets are configured
 vals eval -f .vals.yaml
 ```
+
+**Why `-i` is required**: By default, vals resets the environment to a minimal PATH (`/usr/local/bin:/bin:/usr/bin`). This means kubectl at `/opt/homebrew/bin/kubectl` won't be found when node spawns it as a subprocess. The `-i` flag tells vals to inherit the current shell's environment variables, preserving your full PATH.
 
 ## Git Workflow
 
