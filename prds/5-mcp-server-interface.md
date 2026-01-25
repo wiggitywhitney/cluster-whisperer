@@ -63,7 +63,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Milestones
 
-- [ ] **M1**: Research Phase
+- [x] **M1**: Research Phase
   - Study MCP specification and official TypeScript SDK documentation
   - Research current MCP SDK versions and patterns (landscape changing rapidly)
   - Review official MCP examples and community servers for patterns
@@ -91,12 +91,53 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Technical Approach
 
-*To be determined during M1 research phase. Key decisions:*
+*Determined during M1 research phase. See `docs/mcp-research.md` for full analysis.*
 
-- MCP SDK choice and version
-- Code sharing strategy between CLI and MCP
-- Output format strategy
-- Configuration approach (how clients discover/connect to server)
+### MCP SDK
+**Package**: `@modelcontextprotocol/server` v1.x with `zod` peer dependency
+
+### Transport
+**stdio**: Local server running on user's machine. Claude Code and other MCP clients connect via process stdio.
+
+### Code Sharing Strategy
+Extract core tool logic into shared modules, with separate wrappers for LangChain (CLI) and MCP:
+
+```
+src/
+├── tools/
+│   ├── core/              # Shared logic
+│   │   ├── kubectl-get.ts
+│   │   ├── kubectl-describe.ts
+│   │   └── kubectl-logs.ts
+│   ├── langchain/         # CLI agent tools
+│   │   └── index.ts
+│   └── mcp/               # MCP server tools
+│       └── index.ts
+```
+
+### Output Format
+Keep native kubectl output (tables for get, structured text for describe/logs).
+
+**Rationale** (see `docs/output-format-research.md`):
+- Plain text is 80% more token-efficient than JSON (verified by research)
+- Tool output flows to LLM context only, not to vector DB (PRD #7 uses controller sync)
+- LLMs parse tables well
+
+### MCP Server Entry Point
+`src/mcp-server.ts` - Creates McpServer, registers tools, starts stdio transport.
+
+### Client Configuration
+`.mcp.json` for Claude Code:
+```json
+{
+  "mcpServers": {
+    "cluster-whisperer": {
+      "command": "node",
+      "args": ["dist/mcp-server.js"]
+    }
+  }
+}
+```
 
 ## Reference Sources
 
@@ -132,4 +173,10 @@ Test against real cluster using spider-rainbows Kind setup.
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-01-25: M1 Research Phase Complete
+- Researched MCP specification (Protocol Revision 2025-06-18)
+- Evaluated MCP TypeScript SDK v1.x patterns
+- Reviewed official MCP servers (filesystem, git) and Viktor's dot-ai
+- Researched output format token efficiency (verified by external research)
+- Documented findings in `docs/mcp-research.md` and `docs/output-format-research.md`
+- Key decisions: stdio transport, plain text output, shared tool core with MCP/LangChain wrappers
