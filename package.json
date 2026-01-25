@@ -4,12 +4,14 @@
   "description": "AI agent that answers natural language questions about Kubernetes clusters",
   "main": "dist/index.js",
   "bin": {
-    "cluster-whisperer": "dist/index.js"
+    "cluster-whisperer": "dist/index.js",
+    "cluster-whisperer-mcp": "dist/mcp-server.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js"
+    "dev": "tsc && node dist/index.js",
+    "mcp": "node dist/mcp-server.js"
   },
   "keywords": [
     "kubernetes",
@@ -23,6 +25,7 @@
     "@langchain/anthropic": "^0.3.14",
     "@langchain/core": "^0.3.27",
     "@langchain/langgraph": "^0.2.42",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "commander": "^13.0.0",
     "zod": "3.25.67"
   },

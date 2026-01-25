@@ -45,7 +45,7 @@ For backward compatibility, structured tools should also include serialized JSON
 
 ### 2. What are current MCP SDK versions and their recommended patterns?
 
-**Package**: `@modelcontextprotocol/server` (with `zod` peer dependency)
+**Package**: `@modelcontextprotocol/sdk` (with `zod` peer dependency)
 
 **Version Status** (as of Jan 2026):
 - v1.x: Stable, recommended for production
@@ -53,31 +53,33 @@ For backward compatibility, structured tools should also include serialized JSON
 
 **Recommended Installation**:
 ```bash
-npm install @modelcontextprotocol/server zod
+npm install @modelcontextprotocol/sdk zod
 ```
 
-**Server Creation Pattern** (from SDK examples):
+**Server Creation Pattern** (recommended API):
 ```typescript
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 const server = new McpServer({
   name: "cluster-whisperer",
   version: "1.0.0"
-}, {
-  capabilities: { tools: {} }
 });
 
+// Define schema separately for reuse
+const kubectlGetSchema = z.object({
+  resource: z.string().describe("Resource type"),
+  namespace: z.string().optional().describe("Namespace")
+});
+
+// Use registerTool() - the tool() method is deprecated
 server.registerTool(
   "kubectl_get",
   {
     description: "List Kubernetes resources...",
-    inputSchema: {
-      resource: z.string().describe("Resource type"),
-      namespace: z.string().optional().describe("Namespace")
-    }
+    inputSchema: kubectlGetSchema.shape  // Pass .shape for Zod schemas
   },
-  async ({ resource, namespace }): Promise<CallToolResult> => {
+  async (input) => {
     // Execute kubectl
     return {
       content: [{ type: "text", text: output }]
@@ -237,9 +239,11 @@ See `docs/output-format-research.md` for full research details.
 Based on this research, here are the recommended decisions for PRD #5:
 
 ### SDK Choice
-**Use**: `@modelcontextprotocol/server` v1.x with `zod`
+**Use**: `@modelcontextprotocol/sdk` v1.x with `zod`
 
 **Rationale**: Stable, well-documented, TypeScript native, same Zod we already use.
+
+**Note**: The SDK exposes `registerTool()` as the recommended method. The older `tool()` method is deprecated but still works for backward compatibility.
 
 ### Transport
 **Use**: stdio transport

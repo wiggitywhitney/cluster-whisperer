@@ -63,6 +63,8 @@ npm run build
 
 ## Usage
 
+### CLI Agent
+
 ```bash
 # Run with vals to inject ANTHROPIC_API_KEY (-i inherits PATH so kubectl is found)
 vals exec -i -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
@@ -71,7 +73,30 @@ vals exec -i -f .vals.yaml -- node dist/index.js "What's running in the default 
 npm start -- "Why is my-app pod crashing?"
 ```
 
+### MCP Server (Claude Code, Cursor, etc.)
+
+Add to your `.mcp.json` (in project root or `~/.claude/`):
+
+```json
+{
+  "mcpServers": {
+    "cluster-whisperer": {
+      "command": "node",
+      "args": ["/path/to/cluster-whisperer/dist/mcp-server.js"]
+    }
+  }
+}
+```
+
+Restart your MCP client. The kubectl tools will be available alongside your other tools.
+
+See `docs/mcp-server.md` for details on how MCP works.
+
 ## Architecture
+
+cluster-whisperer exposes kubectl tools via two interfaces:
+
+### CLI Agent
 
 ```text
 User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
@@ -81,7 +106,22 @@ User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
                     decides next action)
 ```
 
-The agent has access to read-only kubectl tools:
+The CLI agent has its own reasoning loop - it decides which tools to call and interprets the results.
+
+### MCP Server
+
+```text
+User Question → [Claude Code / Cursor] → MCP → [kubectl tools] → Cluster → Answer
+                        ↑                         |
+                        └─────────────────────────┘
+                       (external LLM orchestrates)
+```
+
+The MCP server exposes the same tools to any MCP-compatible client. The client's LLM does the reasoning.
+
+### Available Tools
+
+Both interfaces provide these read-only kubectl tools:
 - `kubectl_get` - List resources and their status
 - `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
@@ -90,13 +130,19 @@ The agent has access to read-only kubectl tools:
 
 ```text
 src/
-├── index.ts               # CLI entry point with streamEvents
+├── index.ts               # CLI entry point
+├── mcp-server.ts          # MCP server entry point
 ├── agent/
 │   └── investigator.ts    # ReAct agent setup
 ├── tools/
-│   ├── kubectl-get.ts     # kubectl_get tool
-│   ├── kubectl-describe.ts # kubectl_describe tool
-│   └── kubectl-logs.ts    # kubectl_logs tool
+│   ├── core/              # Shared tool logic (schemas, execution)
+│   │   ├── kubectl-get.ts
+│   │   ├── kubectl-describe.ts
+│   │   └── kubectl-logs.ts
+│   ├── langchain/         # CLI agent wrappers
+│   │   └── index.ts
+│   └── mcp/               # MCP server wrappers
+│       └── index.ts
 └── utils/
     └── kubectl.ts         # Shared kubectl execution helper
 
@@ -106,6 +152,8 @@ prompts/
 docs/
 ├── kubectl-tools.md                # How kubectl tools work
 ├── agentic-loop.md                 # How the ReAct agent works
+├── mcp-server.md                   # MCP server architecture
+├── mcp-research.md                 # MCP research findings
 ├── extended-thinking-research.md   # Extended thinking implementation notes
 └── langgraph-vs-langchain.md       # LangChain vs LangGraph explained
 ```

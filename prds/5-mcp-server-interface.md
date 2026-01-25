@@ -1,6 +1,6 @@
 # PRD #5: MCP Server Interface
 
-**Status**: Not Started
+**Status**: In Progress
 **Created**: 2026-01-24
 **GitHub Issue**: [#5](https://github.com/wiggitywhitney/cluster-whisperer/issues/5)
 
@@ -77,7 +77,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
   - Create `docs/mcp-server.md` explaining MCP concepts and our architecture
   - Manual test: server starts and responds to tool list request
 
-- [ ] **M3**: Expose kubectl Tools via MCP
+- [x] **M3**: Expose kubectl Tools via MCP
   - Wrap/adapt existing kubectl tools for MCP
   - Determine output format based on research
   - Schema validation for MCP inputs
@@ -94,7 +94,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 *Determined during M1 research phase. See `docs/mcp-research.md` for full analysis.*
 
 ### MCP SDK
-**Package**: `@modelcontextprotocol/server` v1.x with `zod` peer dependency
+**Package**: `@modelcontextprotocol/sdk` v1.x with `zod` peer dependency
 
 ### Transport
 **stdio**: Local server running on user's machine. Claude Code and other MCP clients connect via process stdio.
@@ -180,3 +180,15 @@ Test against real cluster using spider-rainbows Kind setup.
 - Researched output format token efficiency (verified by external research)
 - Documented findings in `docs/mcp-research.md` and `docs/output-format-research.md`
 - Key decisions: stdio transport, plain text output, shared tool core with MCP/LangChain wrappers
+
+### 2026-01-25: M3 Expose kubectl Tools via MCP Complete
+- Extracted core tool logic into `src/tools/core/` (schemas + execution functions)
+- Created LangChain wrappers in `src/tools/langchain/` for CLI agent
+- Created MCP wrappers in `src/tools/mcp/` using `registerTool()` (recommended API)
+- Verified against current MCP SDK documentation (deprecated `tool()` vs recommended `registerTool()`)
+- Created MCP server entry point `src/mcp-server.ts`
+- Configured `.mcp.json` for Claude Code integration
+- Tested all three tools from Claude Code (investigated pending pod with get/describe/logs)
+- Updated `docs/mcp-research.md` with correct API patterns
+- Updated README with MCP usage instructions and new project structure
+- Remaining: M2 review, M4 error handling and full CLI verification
