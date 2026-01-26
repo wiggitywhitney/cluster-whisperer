@@ -71,7 +71,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
   - Document findings and decisions in `docs/mcp-research.md`
   - Update this PRD with specific implementation decisions
 
-- [ ] **M2**: MCP Server Setup
+- [x] **M2**: MCP Server Setup
   - Set up MCP server infrastructure
   - Configure tool registration
   - Create `docs/mcp-server.md` explaining MCP concepts and our architecture
@@ -192,3 +192,16 @@ Test against real cluster using spider-rainbows Kind setup.
 - Updated `docs/mcp-research.md` with correct API patterns
 - Updated README with MCP usage instructions and new project structure
 - Remaining: M2 review, M4 error handling and full CLI verification
+
+### 2026-01-26: M2 MCP Server Setup Complete
+- Confirmed all M2 deliverables were completed during M3 implementation
+- `src/mcp-server.ts` provides MCP server infrastructure
+- `src/tools/mcp/index.ts` handles tool registration via `registerKubectlTools()`
+- `docs/mcp-server.md` created with comprehensive MCP concepts documentation:
+  - What MCP is and why it matters
+  - CLI Agent vs MCP Server architecture comparison
+  - Tools exposed and how to configure
+  - stdio transport explanation
+  - Error handling patterns
+- Server tested via Claude Code integration (verified during M3)
+- Remaining: M4 error handling polish and CLI verification
