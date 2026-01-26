@@ -1,6 +1,6 @@
 # PRD #5: MCP Server Interface
 
-**Status**: Not Started
+**Status**: Complete
 **Created**: 2026-01-24
 **GitHub Issue**: [#5](https://github.com/wiggitywhitney/cluster-whisperer/issues/5)
 
@@ -56,14 +56,14 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Success Criteria
 
-- [ ] MCP server exposes kubectl_get, kubectl_describe, kubectl_logs tools
-- [ ] Tools work correctly when called from Claude Code or another MCP client
-- [ ] CLI continues to work unchanged
-- [ ] Documentation explains MCP concepts and our implementation
+- [x] MCP server exposes kubectl_get, kubectl_describe, kubectl_logs tools
+- [x] Tools work correctly when called from Claude Code or another MCP client
+- [x] CLI continues to work unchanged
+- [x] Documentation explains MCP concepts and our implementation
 
 ## Milestones
 
-- [ ] **M1**: Research Phase
+- [x] **M1**: Research Phase
   - Study MCP specification and official TypeScript SDK documentation
   - Research current MCP SDK versions and patterns (landscape changing rapidly)
   - Review official MCP examples and community servers for patterns
@@ -71,19 +71,19 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
   - Document findings and decisions in `docs/mcp-research.md`
   - Update this PRD with specific implementation decisions
 
-- [ ] **M2**: MCP Server Setup
+- [x] **M2**: MCP Server Setup
   - Set up MCP server infrastructure
   - Configure tool registration
   - Create `docs/mcp-server.md` explaining MCP concepts and our architecture
   - Manual test: server starts and responds to tool list request
 
-- [ ] **M3**: Expose kubectl Tools via MCP
+- [x] **M3**: Expose kubectl Tools via MCP
   - Wrap/adapt existing kubectl tools for MCP
   - Determine output format based on research
   - Schema validation for MCP inputs
   - Manual test: tools work when called from MCP client
 
-- [ ] **M4**: Integration and Polish
+- [x] **M4**: Integration and Polish
   - Test with Claude Code as MCP client
   - Error handling for MCP context
   - Update README with MCP usage instructions
@@ -91,12 +91,53 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Technical Approach
 
-*To be determined during M1 research phase. Key decisions:*
+Determined during M1 research phase. See `docs/mcp-research.md` for full analysis.
 
-- MCP SDK choice and version
-- Code sharing strategy between CLI and MCP
-- Output format strategy
-- Configuration approach (how clients discover/connect to server)
+### MCP SDK
+**Package**: `@modelcontextprotocol/sdk` v1.x with `zod` peer dependency
+
+### Transport
+**stdio**: Local server running on user's machine. Claude Code and other MCP clients connect via process stdio.
+
+### Code Sharing Strategy
+Extract core tool logic into shared modules, with separate wrappers for LangChain (CLI) and MCP:
+
+```text
+src/
+├── tools/
+│   ├── core/              # Shared logic
+│   │   ├── kubectl-get.ts
+│   │   ├── kubectl-describe.ts
+│   │   └── kubectl-logs.ts
+│   ├── langchain/         # CLI agent tools
+│   │   └── index.ts
+│   └── mcp/               # MCP server tools
+│       └── index.ts
+```
+
+### Output Format
+Keep native kubectl output (tables for get, structured text for describe/logs).
+
+**Rationale** (see `docs/output-format-research.md`):
+- Plain text is 80% more token-efficient than JSON (verified by research)
+- Tool output flows to LLM context only, not to vector DB (PRD #7 uses controller sync)
+- LLMs parse tables well
+
+### MCP Server Entry Point
+`src/mcp-server.ts` - Creates McpServer, registers tools, starts stdio transport.
+
+### Client Configuration
+`.mcp.json` for Claude Code:
+```json
+{
+  "mcpServers": {
+    "cluster-whisperer": {
+      "command": "node",
+      "args": ["dist/mcp-server.js"]
+    }
+  }
+}
+```
 
 ## Reference Sources
 
@@ -126,10 +167,49 @@ Test against real cluster using spider-rainbows Kind setup.
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+Decisions are logged in the Progress Log below as they're made during implementation.
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-01-25: M1 Research Phase Complete
+- Researched MCP specification (Protocol Revision 2025-06-18)
+- Evaluated MCP TypeScript SDK v1.x patterns
+- Reviewed official MCP servers (filesystem, git) and Viktor's dot-ai
+- Researched output format token efficiency (verified by external research)
+- Documented findings in `docs/mcp-research.md` and `docs/output-format-research.md`
+- Key decisions: stdio transport, plain text output, shared tool core with MCP/LangChain wrappers
+
+### 2026-01-25: M3 Expose kubectl Tools via MCP Complete
+- Extracted core tool logic into `src/tools/core/` (schemas + execution functions)
+- Created LangChain wrappers in `src/tools/langchain/` for CLI agent
+- Created MCP wrappers in `src/tools/mcp/` using `registerTool()` (recommended API)
+- Verified against current MCP SDK documentation (deprecated `tool()` vs recommended `registerTool()`)
+- Created MCP server entry point `src/mcp-server.ts`
+- Configured `.mcp.json` for Claude Code integration
+- Tested all three tools from Claude Code (investigated pending pod with get/describe/logs)
+- Updated `docs/mcp-research.md` with correct API patterns
+- Updated README with MCP usage instructions and new project structure
+- Remaining: M2 review, M4 error handling and full CLI verification
+
+### 2026-01-26: M2 MCP Server Setup Complete
+- Confirmed all M2 deliverables were completed during M3 implementation
+- `src/mcp-server.ts` provides MCP server infrastructure
+- `src/tools/mcp/index.ts` handles tool registration via `registerKubectlTools()`
+- `docs/mcp-server.md` created with comprehensive MCP concepts documentation:
+  - What MCP is and why it matters
+  - CLI Agent vs MCP Server architecture comparison
+  - Tools exposed and how to configure
+  - stdio transport explanation
+  - Error handling patterns
+- Server tested via Claude Code integration (verified during M3)
+
+### 2026-01-26: M4 Integration and Polish Complete - PRD COMPLETE
+- Added `isError` flag to all MCP tool responses for proper error signaling
+- Updated README to include `output-format-research.md` in project structure
+- CLI verification passed:
+  - Simple query: namespace listing worked correctly
+  - Multi-tool investigation: agent diagnosed pending pod with taint issue using get + describe
+  - All tool calls, thinking output, and final answers formatted correctly
+- All milestones complete, all success criteria met

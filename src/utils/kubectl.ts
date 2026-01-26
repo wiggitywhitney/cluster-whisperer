@@ -27,16 +27,34 @@
 import { spawnSync } from "child_process";
 
 /**
- * Executes a kubectl command and returns the output.
+ * Result from executing a kubectl command.
+ *
+ * Why a structured result instead of just a string?
+ * MCP tool responses include an `isError` flag to signal failures to clients.
+ * Previously we detected errors by checking if output started with "Error",
+ * but this caused false positives when legitimate output (like application logs)
+ * contained error messages. By returning the error state explicitly based on
+ * kubectl's exit code, we avoid content-based detection entirely.
+ */
+export interface KubectlResult {
+  output: string;
+  isError: boolean;
+}
+
+/**
+ * Executes a kubectl command and returns a structured result.
  *
  * @param args - Array of arguments to pass to kubectl (e.g., ["get", "pods"])
- * @returns The command output as a string, or an error message if it failed
+ * @returns Object with output string and isError flag based on exit code
  *
  * Example:
  *   executeKubectl(["get", "pods", "-n", "default"])
- *   // Returns: "NAME    READY   STATUS    RESTARTS   AGE\nmy-pod  1/1     Running   0          1d"
+ *   // Returns: { output: "NAME  READY  STATUS...", isError: false }
+ *
+ *   executeKubectl(["get", "nonexistent"])
+ *   // Returns: { output: "Error executing...", isError: true }
  */
-export function executeKubectl(args: string[]): string {
+export function executeKubectl(args: string[]): KubectlResult {
   // Build the full command for display purposes (logging only, not execution)
   const command = `kubectl ${args.join(" ")}`;
 
@@ -49,14 +67,23 @@ export function executeKubectl(args: string[]): string {
 
   // Handle spawn errors (e.g., kubectl not found)
   if (result.error) {
-    return `Error executing "${command}": ${result.error.message}`;
+    return {
+      output: `Error executing "${command}": ${result.error.message}`,
+      isError: true,
+    };
   }
 
   // Handle non-zero exit codes (e.g., resource not found, permission denied)
   if (result.status !== 0) {
     const errorMessage = result.stderr || "Unknown error";
-    return `Error executing "${command}": ${errorMessage}`;
+    return {
+      output: `Error executing "${command}": ${errorMessage}`,
+      isError: true,
+    };
   }
 
-  return result.stdout;
+  return {
+    output: result.stdout,
+    isError: false,
+  };
 }

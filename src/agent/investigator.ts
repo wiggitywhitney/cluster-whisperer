@@ -26,9 +26,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import * as fs from "fs";
 import * as path from "path";
-import { kubectlGetTool } from "../tools/kubectl-get";
-import { kubectlDescribeTool } from "../tools/kubectl-describe";
-import { kubectlLogsTool } from "../tools/kubectl-logs";
+import { kubectlTools } from "../tools/langchain";
 
 /**
  * Path to the system prompt file.
@@ -132,7 +130,7 @@ export function getInvestigatorAgent() {
 
     cachedAgent = createReactAgent({
       llm: model,
-      tools: [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool],
+      tools: kubectlTools,
       stateModifier: getSystemPrompt(),
     });
   }
