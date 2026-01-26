@@ -91,7 +91,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Technical Approach
 
-*Determined during M1 research phase. See `docs/mcp-research.md` for full analysis.*
+Determined during M1 research phase. See `docs/mcp-research.md` for full analysis.
 
 ### MCP SDK
 **Package**: `@modelcontextprotocol/sdk` v1.x with `zod` peer dependency
@@ -102,7 +102,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 ### Code Sharing Strategy
 Extract core tool logic into shared modules, with separate wrappers for LangChain (CLI) and MCP:
 
-```
+```text
 src/
 ├── tools/
 │   ├── core/              # Shared logic
@@ -167,7 +167,7 @@ Test against real cluster using spider-rainbows Kind setup.
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+Decisions are logged in the Progress Log below as they're made during implementation.
 
 ---
 

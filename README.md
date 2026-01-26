@@ -88,6 +88,8 @@ Add to your `.mcp.json` (in project root or `~/.claude/`):
 }
 ```
 
+**Note**: Use an absolute path in `args`. MCP clients spawn the server as a subprocess, and relative paths resolve from the client's working directory (which varies). An absolute path ensures the server is found regardless of where you invoke the client.
+
 Restart your MCP client. The kubectl tools will be available alongside your other tools.
 
 See `docs/mcp-server.md` for details on how MCP works.

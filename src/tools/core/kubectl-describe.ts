@@ -11,7 +11,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl describe.
@@ -66,9 +66,9 @@ Use kubectl_get first to find resource names, then kubectl_describe for details.
  * Execute kubectl describe with the given parameters.
  *
  * @param input - Validated input matching kubectlDescribeSchema
- * @returns kubectl output as a string (detailed resource information)
+ * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlDescribe(input: KubectlDescribeInput): Promise<string> {
+export async function kubectlDescribe(input: KubectlDescribeInput): Promise<KubectlResult> {
   const { resource, name, namespace } = input;
 
   // Build kubectl arguments: kubectl describe <resource> <name> [-n namespace]

@@ -22,10 +22,12 @@
  *
  * Error Handling:
  * MCP tool responses can include an `isError: true` flag to signal errors to clients.
- * Our kubectl utility returns error strings prefixed with "Error", so we detect this
- * and set the flag accordingly. This lets MCP clients distinguish between:
- * - Successful but empty results (e.g., no pods found)
- * - Actual errors (e.g., namespace not found, permission denied)
+ * Our kubectl utility returns a structured result `{ output, isError }` where isError
+ * is determined by kubectl's exit code, not by inspecting the output content. This
+ * avoids false positives when legitimate output (like application logs) contains
+ * error messages. MCP clients can distinguish between:
+ * - Successful results (even if output contains "Error" in application logs)
+ * - Actual kubectl failures (e.g., namespace not found, permission denied)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -60,10 +62,9 @@ export function registerKubectlTools(server: McpServer): void {
       inputSchema: kubectlGetSchema.shape,
     },
     async (input) => {
-      const result = await kubectlGet(input);
-      const isError = result.startsWith("Error");
+      const { output, isError } = await kubectlGet(input);
       return {
-        content: [{ type: "text", text: result }],
+        content: [{ type: "text", text: output }],
         isError,
       };
     }
@@ -77,10 +78,9 @@ export function registerKubectlTools(server: McpServer): void {
       inputSchema: kubectlDescribeSchema.shape,
     },
     async (input) => {
-      const result = await kubectlDescribe(input);
-      const isError = result.startsWith("Error");
+      const { output, isError } = await kubectlDescribe(input);
       return {
-        content: [{ type: "text", text: result }],
+        content: [{ type: "text", text: output }],
         isError,
       };
     }
@@ -94,10 +94,9 @@ export function registerKubectlTools(server: McpServer): void {
       inputSchema: kubectlLogsSchema.shape,
     },
     async (input) => {
-      const result = await kubectlLogs(input);
-      const isError = result.startsWith("Error");
+      const { output, isError } = await kubectlLogs(input);
       return {
-        content: [{ type: "text", text: result }],
+        content: [{ type: "text", text: output }],
         isError,
       };
     }

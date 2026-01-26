@@ -18,7 +18,7 @@ cluster-whisperer has two interfaces that expose the same kubectl tools:
 
 ### CLI Agent (`npm start`)
 
-```
+```text
 User Question → [Our Agent] → kubectl tools → Answer
                     ↑
               Reasoning happens here
@@ -35,7 +35,7 @@ The reasoning is built into the agent.
 
 ### MCP Server (`npm run mcp`)
 
-```
+```text
 User Question → [Claude Code's Brain] → MCP → kubectl tools → Answer
                         ↑
                   Reasoning happens here
@@ -100,7 +100,7 @@ In Claude Code, the kubectl tools should appear in the available tools. Try aski
 
 ## Architecture
 
-```
+```text
 src/
 ├── tools/
 │   ├── core/           # Shared logic (schemas, execution)

@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl logs.
@@ -76,9 +76,9 @@ Other useful flags:
  * Execute kubectl logs with the given parameters.
  *
  * @param input - Validated input matching kubectlLogsSchema
- * @returns kubectl output as a string (container logs)
+ * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlLogs(input: KubectlLogsInput): Promise<string> {
+export async function kubectlLogs(input: KubectlLogsInput): Promise<KubectlResult> {
   const { pod, namespace, args: extraArgs } = input;
 
   // Build kubectl arguments: kubectl logs <pod> -n <namespace> [...extraArgs]
@@ -88,7 +88,10 @@ export async function kubectlLogs(input: KubectlLogsInput): Promise<string> {
   if (extraArgs && extraArgs.length > 0) {
     for (const arg of extraArgs) {
       if (arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=")) {
-        return "Error: Do not pass -n/--namespace in args; use the namespace parameter instead.";
+        return {
+          output: "Error: Do not pass -n/--namespace in args; use the namespace parameter instead.",
+          isError: true,
+        };
       }
     }
     args.push(...extraArgs);

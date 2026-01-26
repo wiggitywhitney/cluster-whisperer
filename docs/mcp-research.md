@@ -107,7 +107,8 @@ MCP clients accept any text content. The format is up to the server.
    - Tool output flows to LLM context only, not to storage
    - No need for JSON structure for downstream processing
 
-**Decision**: Use plain text (tables) for token efficiency.
+#### Decision
+Use plain text (tables) for token efficiency.
 
 ### 4. How should errors be returned in MCP context?
 
@@ -133,11 +134,11 @@ This lets the LLM understand the failure and potentially retry or adjust its app
 
 ### 5. What are the official examples for MCP servers with similar tools?
 
-**Official Reference Servers** (github.com/modelcontextprotocol/servers):
+#### Official Reference Servers (github.com/modelcontextprotocol/servers)
 - **filesystem**: File operations - closest pattern to our command execution
 - **git**: Repository operations via tool calls
 
-**Key Pattern from filesystem server**:
+#### Key Pattern from filesystem server
 - Uses tool annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`)
 - Separates read-only tools from write operations
 - Returns structured errors with context
@@ -167,7 +168,7 @@ More tokens for data = less room for reasoning.
 Same data (3 pods) in different formats:
 
 **Table Format (current kubectl default)**
-```
+```text
 NAME                      READY   STATUS    RESTARTS   AGE
 nginx-deployment-abc123   1/1     Running   0          3d
 redis-master-xyz789       1/1     Running   2          5d
@@ -262,7 +263,7 @@ Our current tools (`kubectl-get.ts`, etc.) use LangChain's `tool()` wrapper. For
 2. Keep LangChain wrappers for CLI agent
 3. Create MCP wrappers that call the same core logic
 
-```
+```text
 src/
 ├── tools/
 │   ├── core/              # Shared logic

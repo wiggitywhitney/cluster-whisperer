@@ -31,9 +31,16 @@ import {
 /**
  * kubectl_get tool for LangChain agents.
  * Lists Kubernetes resources in table format.
+ *
+ * Note: Core functions return { output, isError }. LangChain tools expect
+ * a string, so we extract just the output. The isError flag is only used
+ * by MCP clients; LangChain agents interpret the error message content.
  */
 export const kubectlGetTool = tool(
-  async (input) => kubectlGet(input),
+  async (input) => {
+    const { output } = await kubectlGet(input);
+    return output;
+  },
   {
     name: "kubectl_get",
     description: kubectlGetDescription,
@@ -46,7 +53,10 @@ export const kubectlGetTool = tool(
  * Gets detailed information about a specific resource.
  */
 export const kubectlDescribeTool = tool(
-  async (input) => kubectlDescribe(input),
+  async (input) => {
+    const { output } = await kubectlDescribe(input);
+    return output;
+  },
   {
     name: "kubectl_describe",
     description: kubectlDescribeDescription,
@@ -59,7 +69,10 @@ export const kubectlDescribeTool = tool(
  * Gets container logs from a pod.
  */
 export const kubectlLogsTool = tool(
-  async (input) => kubectlLogs(input),
+  async (input) => {
+    const { output } = await kubectlLogs(input);
+    return output;
+  },
   {
     name: "kubectl_logs",
     description: kubectlLogsDescription,

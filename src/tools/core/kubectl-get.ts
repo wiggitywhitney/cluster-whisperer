@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl get.
@@ -78,9 +78,9 @@ Common resources: pods, deployments, services, nodes, configmaps, namespaces.`;
  * Framework wrappers (LangChain, MCP) call this function.
  *
  * @param input - Validated input matching kubectlGetSchema
- * @returns kubectl output as a string (table format)
+ * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlGet(input: KubectlGetInput): Promise<string> {
+export async function kubectlGet(input: KubectlGetInput): Promise<KubectlResult> {
   const { resource, namespace, name } = input;
 
   // Build kubectl arguments: kubectl get <resource> [name] [-n namespace | -A]
