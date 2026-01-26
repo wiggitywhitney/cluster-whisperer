@@ -154,6 +154,7 @@ docs/
 ├── agentic-loop.md                 # How the ReAct agent works
 ├── mcp-server.md                   # MCP server architecture
 ├── mcp-research.md                 # MCP research findings
+├── output-format-research.md       # Why we use plain text over JSON
 ├── extended-thinking-research.md   # Extended thinking implementation notes
 └── langgraph-vs-langchain.md       # LangChain vs LangGraph explained
 ```

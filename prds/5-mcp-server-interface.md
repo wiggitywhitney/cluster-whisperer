@@ -1,6 +1,6 @@
 # PRD #5: MCP Server Interface
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-01-24
 **GitHub Issue**: [#5](https://github.com/wiggitywhitney/cluster-whisperer/issues/5)
 
@@ -56,10 +56,10 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
 
 ## Success Criteria
 
-- [ ] MCP server exposes kubectl_get, kubectl_describe, kubectl_logs tools
-- [ ] Tools work correctly when called from Claude Code or another MCP client
-- [ ] CLI continues to work unchanged
-- [ ] Documentation explains MCP concepts and our implementation
+- [x] MCP server exposes kubectl_get, kubectl_describe, kubectl_logs tools
+- [x] Tools work correctly when called from Claude Code or another MCP client
+- [x] CLI continues to work unchanged
+- [x] Documentation explains MCP concepts and our implementation
 
 ## Milestones
 
@@ -83,7 +83,7 @@ The MCP server exposes the raw tools. The MCP client's LLM (Claude, etc.) does t
   - Schema validation for MCP inputs
   - Manual test: tools work when called from MCP client
 
-- [ ] **M4**: Integration and Polish
+- [x] **M4**: Integration and Polish
   - Test with Claude Code as MCP client
   - Error handling for MCP context
   - Update README with MCP usage instructions
@@ -204,4 +204,12 @@ Test against real cluster using spider-rainbows Kind setup.
   - stdio transport explanation
   - Error handling patterns
 - Server tested via Claude Code integration (verified during M3)
-- Remaining: M4 error handling polish and CLI verification
+
+### 2026-01-26: M4 Integration and Polish Complete - PRD COMPLETE
+- Added `isError` flag to all MCP tool responses for proper error signaling
+- Updated README to include `output-format-research.md` in project structure
+- CLI verification passed:
+  - Simple query: namespace listing worked correctly
+  - Multi-tool investigation: agent diagnosed pending pod with taint issue using get + describe
+  - All tool calls, thinking output, and final answers formatted correctly
+- All milestones complete, all success criteria met
