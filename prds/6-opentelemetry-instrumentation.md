@@ -1,6 +1,6 @@
 # PRD #6: OpenTelemetry Instrumentation
 
-**Status**: Not Started
+**Status**: In Progress
 **Created**: 2026-01-24
 **GitHub Issue**: [#6](https://github.com/wiggitywhitney/cluster-whisperer/issues/6)
 
@@ -82,7 +82,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 
 ## Milestones
 
-- [ ] **M1**: Research Phase
+- [x] **M1**: Research Phase
   - Study OpenTelemetry JS SDK documentation and official examples
   - Research OpenTelemetry semantic conventions (general + GenAI if available)
   - Evaluate OpenTelemetry Weaver for convention compliance
@@ -118,13 +118,40 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 
 ## Technical Approach
 
-*To be determined during M1 research phase. Key decisions:*
+### OTel SDK Packages (SDK 2.0)
 
-- OTel SDK packages and versions
-- Tracer initialization pattern
-- Span attribute schema
-- Context propagation approach
-- Exporter configuration strategy
+```bash
+npm install @opentelemetry/sdk-node \
+  @opentelemetry/api \
+  @opentelemetry/sdk-trace-node \
+  @opentelemetry/exporter-trace-otlp-proto \
+  @opentelemetry/resources \
+  @opentelemetry/semantic-conventions
+```
+
+### Tracer Initialization
+
+- Use `NodeSDK` with manual instrumentation only (`instrumentations: []`)
+- Opt-in via `OTEL_TRACING_ENABLED` environment variable
+- Get tracer at point of use, not exported globally
+
+### Span Structure
+
+| Operation | Span Name | Span Kind |
+|-----------|-----------|-----------|
+| MCP Tool Call | `execute_tool {tool_name}` | INTERNAL |
+| kubectl Execution | `kubectl {operation} {resource}` | CLIENT |
+
+### Attribute Strategy
+
+**Both Viktor's AND semconv attributes** for head-to-head comparison capability.
+
+See `docs/opentelemetry-research.md` Section 6 for full attribute mapping.
+
+### Exporter Configuration
+
+- **Development**: Console exporter
+- **Production**: OTLP to Datadog Agent (port 4318)
 
 ## Reference Sources
 
@@ -158,10 +185,27 @@ Manual verification:
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+### 2026-01-27: M1 Research Decisions
+
+**OpenTelemetry Weaver**: Not applicable. The `@opentelemetry/semantic-conventions` npm package already provides TypeScript constants. Weaver solves org-scale governance problems we don't have.
+
+**Attribute naming**: Use both Viktor's attributes AND OTel semantic conventions on each span. This enables head-to-head comparison queries (Viktor's) while maintaining standards compliance (semconv). Cost is a few extra bytes per span.
+
+**Manual instrumentation**: All manual, no auto-instrumentation. Our spans are at business logic boundaries (MCP tool calls, kubectl subprocess) which auto-instrumentation doesn't help with.
+
+**Datadog integration**: Use Datadog Agent with OTLP ingestion (port 4318), not direct OTLP to Datadog endpoint. Direct OTLP for traces is only GA for LLM Observability, not general APM. Updated PRD #8 with this finding.
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-01-27: M1 Research Complete
+
+- Created `docs/opentelemetry-research.md` with comprehensive findings
+- Researched OTel JS SDK 2.0 packages and setup patterns
+- Analyzed OTel semantic conventions (GenAI for tools, Process for kubectl)
+- Evaluated OpenTelemetry Weaver (not applicable)
+- Analyzed Viktor's dot-ai implementation (spans, attributes, hierarchy)
+- Researched Datadog OTLP ingestion options
+- Made key decisions: dual attributes (Viktor + semconv), manual instrumentation, Datadog Agent approach
+- Updated PRD #8 with Datadog OTLP finding

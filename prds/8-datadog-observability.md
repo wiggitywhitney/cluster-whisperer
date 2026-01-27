@@ -140,7 +140,31 @@ Verification:
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+### 2026-01-27: OTLP Ingestion Approach (from PRD #6 research)
+
+**Finding:** Datadog's direct OTLP intake has different maturity levels:
+- Logs: GA
+- Metrics: GA
+- Traces: **LLM Observability only** (Preview for general APM)
+
+**Decision:** Use **Datadog Agent with OTLP ingestion** instead of direct OTLP to Datadog endpoint.
+
+**Rationale:**
+- Datadog Agent v6.32.0+/v7.32.0+ supports OTLP ingestion on ports 4317 (gRPC) and 4318 (HTTP)
+- This is Datadog's recommended approach for APM traces
+- Simpler than running a separate OpenTelemetry Collector
+- Agent handles buffering, retry, and Datadog-specific transformations
+
+**Configuration approach:**
+```bash
+# Datadog Agent config
+DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=0.0.0.0:4318
+
+# Application config
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+**Alternative:** If we specifically want Datadog's LLM Observability features, direct OTLP may work. Research in M1 should evaluate whether LLM Observability provides value for our demo.
 
 ---
 
