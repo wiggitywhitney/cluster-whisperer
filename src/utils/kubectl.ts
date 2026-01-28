@@ -187,6 +187,10 @@ export function executeKubectl(args: string[]): KubectlResult {
         }
 
         // Success case
+        span.setAttribute(
+          "k8s.output_size_bytes",
+          Buffer.byteLength(result.stdout, "utf-8")
+        );
         span.setStatus({ code: SpanStatusCode.OK });
 
         return {
