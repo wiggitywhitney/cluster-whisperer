@@ -98,6 +98,7 @@ All repositories are in `~/Documents/Repositories/`:
 **Current state**: Has a kind cluster running with V3 scenario (taint/toleration mismatch)
 
 **Scripts**:
+
 | Script | Purpose |
 |--------|---------|
 | `./setup-platform.sh` | Create kind cluster and deploy platform |
@@ -252,7 +253,7 @@ Viktor has working implementations that can serve as reference or backup:
 - **Agent**: Vercel-based (vs Whitney's LangChain)
 - **Vector DB**: Quadrant (vs Whitney's Chroma)
 - **Observability**: Jaeger (vs Whitney's Datadog)
-- **Guide**: https://devopstoolkit.ai/docs/mcp/guides/observability-guide
+- **Guide**: [Viktor's observability guide](https://devopstoolkit.ai/docs/mcp/guides/observability-guide)
 
 His dot-ai repo has the OTel implementation patterns that informed our research in M1.
 

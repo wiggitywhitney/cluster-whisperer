@@ -174,10 +174,10 @@ See `docs/opentelemetry-research.md` Section 6 for full attribute mapping.
 
 ## Reference Sources
 
-- **OpenTelemetry JS SDK**: https://opentelemetry.io/docs/languages/js/ (primary)
-- **OpenTelemetry Semantic Conventions**: https://opentelemetry.io/docs/specs/semconv/ (primary)
-- **OpenTelemetry Weaver**: https://github.com/open-telemetry/weaver (evaluate applicability)
-- **Viktor's observability guide**: https://devopstoolkit.ai/docs/mcp/guides/observability-guide
+- **OpenTelemetry JS SDK**: [OTel JS docs](https://opentelemetry.io/docs/languages/js/) (primary)
+- **OpenTelemetry Semantic Conventions**: [OTel semconv](https://opentelemetry.io/docs/specs/semconv/) (primary)
+- **OpenTelemetry Weaver**: [Weaver repo](https://github.com/open-telemetry/weaver) (evaluate applicability)
+- **Viktor's observability guide**: [Guide](https://devopstoolkit.ai/docs/mcp/guides/observability-guide)
 - **Viktor's dot-ai**: Reference for integration architecture, compare naming conventions
 
 ## Out of Scope
