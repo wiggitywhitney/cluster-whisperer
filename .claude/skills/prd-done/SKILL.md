@@ -264,85 +264,27 @@ Please review and respond:
 - [ ] **Request reviews**: Assign appropriate team members for code review if specified
 
 #### 3.8. Fallback for Projects Without Templates
-If no PR template is found, use this comprehensive template (based on Viktor's dot-ai):
+If no PR template is found, use this minimal fallback structure:
 
 ```markdown
 ## Description
-
-**What does this PR do?**
-
-**Why is this change needed?**
+[What this PR does and why]
 
 ## Related Issues
+Closes #[issue-id]
 
-- Closes #[issue-id]
+## Changes Made
+- [List key changes]
 
-## Type of Change
+## Testing
+- [Testing approach and results]
 
-- [ ] 🐛 Bug fix (non-breaking change that fixes an issue)
-- [ ] ✨ New feature (non-breaking change that adds functionality)
-- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] 📚 Documentation update
-- [ ] ♻️ Refactoring (no functional changes)
-- [ ] ✅ Test updates (adding or updating tests)
-- [ ] 🔧 Configuration changes
-- [ ] 🚀 Performance improvements
-- [ ] 🎨 Style changes (formatting, naming, etc.)
-- [ ] 📦 Dependency updates
-- [ ] 🔨 CI/CD changes
-
-## Conventional Commit Format
-
-**PR title should follow:** `<type>(<scope>): <description>`
-
-Examples:
-- `feat(auth): add OAuth2 authentication support`
-- `fix(api): resolve null pointer exception in user service`
-- `docs(readme): update installation instructions`
-
-## Testing Checklist
-
-- [ ] Tests added or updated
-- [ ] All existing tests pass locally
-- [ ] Manual testing performed
-
-**Test commands run:**
-```
-[Commands run locally to verify changes]
+## Documentation
+- [Documentation updates made]
 ```
 
-## Documentation Checklist
-
-- [ ] README.md updated (if user-facing changes)
-- [ ] Documentation updated (if applicable)
-- [ ] Code comments added for complex logic
-
-## Security Checklist
-
-- [ ] No secrets or credentials committed
-- [ ] Input validation implemented where needed
-- [ ] Security implications considered
-
-## Breaking Changes
-
-- [ ] Yes
-- [ ] No
-
-**If yes, describe the breaking changes and migration path:**
-
-## Checklist
-
-- [ ] My code follows the project's code style guidelines
-- [ ] I have performed a self-review of my code
-- [ ] My changes generate no new warnings or errors
-- [ ] New and existing tests pass locally with my changes
-
-## Additional Context
-
-**Reviewer Notes:**
-
-**Follow-up Work:**
-```
+> **Note**: For comprehensive PR templates, add `.github/PULL_REQUEST_TEMPLATE.md` to the repo.
+> The skill will automatically detect and use it (step 3.1).
 
 ### 4. Review and Merge Process
 - [ ] **Check ongoing processes**: Use `gh pr checks [pr-number]` to check for any ongoing CI/CD, security analysis, or automated reviews (CodeRabbit, CodeQL, etc.)
