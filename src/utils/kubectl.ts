@@ -78,8 +78,11 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
   // For logs, this is the pod name; for get/describe, it's the resource type
   const resource = args[1] || "unknown";
 
-  // Find namespace from -n flag
-  const namespaceIndex = args.indexOf("-n");
+  // Find namespace from -n or --namespace flag
+  let namespaceIndex = args.indexOf("-n");
+  if (namespaceIndex === -1) {
+    namespaceIndex = args.indexOf("--namespace");
+  }
   const namespace =
     namespaceIndex !== -1 && args[namespaceIndex + 1]
       ? args[namespaceIndex + 1]
