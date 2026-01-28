@@ -282,6 +282,10 @@ SERVER (HTTP entry point)
 
 ### Viktor's Dependencies
 
+> **Note**: These are Viktor's package versions from dot-ai, shown here for reference.
+> Our installation uses different versions and `exporter-trace-otlp-proto` instead of
+> `exporter-trace-otlp-http`. See `package.json` for our actual dependencies.
+
 ```json
 {
   "@opentelemetry/api": "^1.9.0",
