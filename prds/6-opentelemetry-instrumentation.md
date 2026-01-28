@@ -1,6 +1,6 @@
 # PRD #6: OpenTelemetry Instrumentation
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-01-24
 **GitHub Issue**: [#6](https://github.com/wiggitywhitney/cluster-whisperer/issues/6)
 
@@ -77,7 +77,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 - [x] MCP tool invocations create spans
 - [x] kubectl executions create child spans
 - [x] Traces visible in console output (for development)
-- [ ] Traces exportable via OTLP (for backends like Datadog)
+- [x] Traces exportable via OTLP (for backends like Datadog)
 - [x] Documentation explains OTel concepts and our implementation
 
 ## Milestones
@@ -112,12 +112,28 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
   - Capture errors and exit codes
   - Manual test: kubectl calls show as child spans
 
-- [ ] **M5**: OTLP Export
+- [x] **M5**: OTLP Export
   - **Before implementing**: Review `docs/opentelemetry-research.md` Section 5 for Datadog OTLP details
-  - Configure OTLP exporter for external backends
-  - Environment variable configuration for collector endpoint
-  - Verify traces reach external collector
-  - Update documentation with export configuration
+  - **Test environment**: Spider Rainbows kind cluster (`~/Documents/Repositories/spider-rainbows`)
+    - Setup: `./setup-platform.sh`
+    - Teardown: `./destroy.sh`
+  - **Secrets**: Add to `.vals.yaml`:
+    ```yaml
+    DD_API_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-dev
+    DD_APP_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-app
+    ```
+  - Install Datadog Agent in cluster with OTLP receiver enabled (port 4318):
+    ```bash
+    helm install datadog datadog/datadog \
+      --set datadog.apiKey=$DD_API_KEY \
+      --set datadog.site=datadoghq.com \
+      --set datadog.otlp.receiver.protocols.http.enabled=true
+    ```
+  - Configure OTLP exporter alongside console exporter
+  - Environment variable `OTEL_EXPORTER_OTLP_ENDPOINT` for collector endpoint
+  - Backend-agnostic design: same code works with Jaeger or Datadog
+  - Verify traces reach Datadog APM (US1 site: datadoghq.com)
+  - Update documentation with export configuration for both backends
 
 ## Technical Approach
 
@@ -175,14 +191,19 @@ See `docs/opentelemetry-research.md` Section 6 for full attribute mapping.
 
 - MCP server (from PRD #5) - for MCP tool spans
 - Existing kubectl tools (from PRD #1) - for kubectl spans
+- Spider Rainbows kind cluster - test environment for M5
+- Datadog Agent with OTLP receiver - for M5 verification
+- vals + Google Secrets Manager - for DD_API_KEY injection (see commit-story for secret paths)
 
 ## Testing
 
 Manual verification:
-1. Console output shows span hierarchy
-2. Spans include expected attributes
-3. Errors are properly captured
-4. OTLP export reaches test collector
+1. Console output shows span hierarchy (M2-M4)
+2. Spans include expected attributes (M3-M4)
+3. Errors are properly captured (M3-M4)
+4. OTLP export reaches Datadog Agent (M5)
+5. Traces visible in Datadog APM UI (M5)
+6. Same code works with Jaeger endpoint (M5 - verify backend-agnostic design)
 
 ---
 
@@ -197,6 +218,18 @@ Manual verification:
 **Manual instrumentation**: All manual, no auto-instrumentation. Our spans are at business logic boundaries (MCP tool calls, kubectl subprocess) which auto-instrumentation doesn't help with.
 
 **Datadog integration**: Use Datadog Agent with OTLP ingestion (port 4318), not direct OTLP to Datadog endpoint. Direct OTLP for traces is only GA for LLM Observability, not general APM. Updated PRD #8 with this finding.
+
+### 2026-01-28: M5 Pre-Implementation Decisions
+
+**Test environment**: Use Spider Rainbows kind cluster (already running) as the test environment. Install Datadog Agent into this cluster rather than creating new infrastructure.
+
+**Secrets management**: Use vals to inject Datadog credentials (DD_API_KEY) from Google Secrets Manager. The commit-story repo has the paths to these secrets in Google Secrets Manager.
+
+**Backend flexibility**: The OTLP exporter must be backend-agnostic. The KubeCon demo gives the audience a choice between Jaeger and Datadog for observability (Scenario 3). The same cluster-whisperer code should work with either backend - only the `OTEL_EXPORTER_OTLP_ENDPOINT` changes.
+
+**Datadog is mandatory**: Whitney works at Datadog, so Datadog support is required (not optional). Jaeger support is also needed for KubeCon demo completeness, but Datadog is the priority for M5 verification.
+
+**KubeCon demo context**: This PRD is part of a larger demo with 3 scenarios and 8 possible technology combinations (see `docs/project-state.md`). The observability backend is one of three audience choice points.
 
 ---
 
@@ -247,3 +280,16 @@ Manual verification:
 - Error handling: spawn errors recorded with `recordException()`, non-zero exit codes set `error.type: KubectlError`
 - Updated `docs/opentelemetry.md` with M4 section including attributes table and example output
 - Manual test passed: kubectl spans appear as children of MCP tool spans with correct `parentSpanContext`
+
+### 2026-01-28: M5 OTLP Export Complete
+
+- Added OTLP exporter support to `src/tracing/index.ts`
+- New environment variables: `OTEL_EXPORTER_TYPE` (console|otlp), `OTEL_EXPORTER_OTLP_ENDPOINT`
+- Installed Datadog Agent in Spider Rainbows cluster with OTLP receiver (port 4318)
+- Added Datadog secrets to `.vals.yaml` (DD_API_KEY, DD_APP_KEY)
+- Fixed span hierarchy context propagation in `src/tracing/tool-tracing.ts` using `context.with()`
+- Verified traces in Datadog APM with correct parent-child hierarchy (MCP tool → kubectl)
+- Backend-agnostic design: same code works with Datadog or Jaeger (only endpoint changes)
+- Updated `docs/opentelemetry.md` with OTLP export instructions for Datadog and Jaeger
+- Updated `docs/project-state.md` with M5 status and architectural notes
+- Note: Current deployment (local agent + in-cluster Datadog) requires port-forward; better approaches documented for KubeCon demo

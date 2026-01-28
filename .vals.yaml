@@ -10,3 +10,8 @@
 
 ANTHROPIC_API_KEY: ref+gcpsecrets://demoo-ooclock/anthropic-api-key
 GITHUB_TOKEN: ref+gcpsecrets://demoo-ooclock/github-token
+
+# Datadog credentials for OTLP export (M5)
+# Used by Datadog Agent helm install and for direct API access
+DD_API_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-dev
+DD_APP_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-app

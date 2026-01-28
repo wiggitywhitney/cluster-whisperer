@@ -13,13 +13,19 @@
  * Opt-in by default:
  * Tracing is disabled unless OTEL_TRACING_ENABLED=true. When disabled, the OTel API
  * returns a "no-op" tracer that does nothing - zero performance overhead.
+ *
+ * Exporter options:
+ * - console (default): Prints spans to stdout, useful for development
+ * - otlp: Sends spans via OTLP protocol to a collector (Datadog Agent, Jaeger, etc.)
  */
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
   ConsoleSpanExporter,
   SimpleSpanProcessor,
+  SpanExporter,
 } from "@opentelemetry/sdk-trace-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   ATTR_SERVICE_NAME,
@@ -47,6 +53,47 @@ const SERVICE_VERSION = "0.1.0";
 const isTracingEnabled = process.env.OTEL_TRACING_ENABLED === "true";
 
 /**
+ * Exporter type: "console" for development, "otlp" for production backends.
+ *
+ * When using "otlp", you must also set OTEL_EXPORTER_OTLP_ENDPOINT to the
+ * collector URL (e.g., http://localhost:4318 for Datadog Agent or Jaeger).
+ *
+ * This design is backend-agnostic: the same code works with any OTLP-compatible
+ * backend. For KubeCon demo, changing the endpoint switches between Datadog and Jaeger.
+ */
+const exporterType = process.env.OTEL_EXPORTER_TYPE || "console";
+
+/**
+ * Create the appropriate span exporter based on configuration.
+ *
+ * Console exporter: Prints spans to stdout in a readable format.
+ * Great for development and debugging.
+ *
+ * OTLP exporter: Sends spans over HTTP/protobuf to an OTLP collector.
+ * Works with Datadog Agent (port 4318), Jaeger, or any OTLP-compatible backend.
+ */
+function createSpanExporter(): SpanExporter {
+  if (exporterType === "otlp") {
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    if (!endpoint) {
+      throw new Error(
+        "OTEL_EXPORTER_OTLP_ENDPOINT is required when OTEL_EXPORTER_TYPE=otlp. " +
+          "Set it to your collector URL (e.g., http://localhost:4318 for Datadog Agent)."
+      );
+    }
+    // OTLP endpoint should not include /v1/traces - the exporter appends it
+    const url = endpoint.endsWith("/v1/traces")
+      ? endpoint
+      : `${endpoint}/v1/traces`;
+    console.log(`[OTel] Using OTLP exporter → ${endpoint}`);
+    return new OTLPTraceExporter({ url });
+  }
+
+  console.log("[OTel] Using console exporter");
+  return new ConsoleSpanExporter();
+}
+
+/**
  * The SDK instance, stored so we can shut it down gracefully.
  * Undefined if tracing is disabled.
  */
@@ -65,6 +112,8 @@ let sdk: NodeSDK | undefined;
 if (isTracingEnabled) {
   console.log("[OTel] Initializing OpenTelemetry tracing...");
 
+  const exporter = createSpanExporter();
+
   sdk = new NodeSDK({
     // Resource: metadata about this service that appears on every span
     resource: resourceFromAttributes({
@@ -72,12 +121,11 @@ if (isTracingEnabled) {
       [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
     }),
 
-    // Use SimpleSpanProcessor for immediate span export during development
+    // Use SimpleSpanProcessor for immediate span export
     // BatchSpanProcessor (default with traceExporter) batches spans for efficiency,
     // but delays output by up to 5 seconds. SimpleSpanProcessor exports immediately,
-    // which is better for development debugging.
-    // M5 will add OTLP exporter option for production backends like Datadog
-    spanProcessor: new SimpleSpanProcessor(new ConsoleSpanExporter()),
+    // which is better for development and ensures spans are sent before process exits.
+    spanProcessor: new SimpleSpanProcessor(exporter),
 
     // No auto-instrumentation - we instrument manually at business logic boundaries
     // Auto-instrumentation handles HTTP/DB libraries, but our spans are for

@@ -16,7 +16,7 @@
  * - Standards compliance using semconv (for tooling compatibility)
  */
 
-import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { SpanKind, SpanStatusCode, context, trace } from "@opentelemetry/api";
 import { getTracer } from "./index";
 
 /**
@@ -61,61 +61,65 @@ export function withToolTracing<TInput, TResult extends ResultWithError>(
     const tracer = getTracer();
     const startTime = Date.now();
 
-    // Span name follows semconv pattern: "execute_tool {tool_name}"
-    // SpanKind.INTERNAL = business logic operation (not an outbound call)
-    return tracer.startActiveSpan(
-      `execute_tool ${toolName}`,
-      { kind: SpanKind.INTERNAL },
-      async (span) => {
-        try {
-          // Set input attributes before execution
-          // Both Viktor's naming and semconv for comparison capability
-          const inputJson = JSON.stringify(input, null, 2);
-          span.setAttribute("gen_ai.tool.name", toolName);
-          span.setAttribute("gen_ai.tool.input", inputJson); // Viktor
-          span.setAttribute("gen_ai.tool.call.arguments", inputJson); // Semconv
+    // Create span manually so we can use context.with() for proper async propagation
+    // startActiveSpan with async callbacks doesn't reliably propagate context
+    const span = tracer.startSpan(`execute_tool ${toolName}`, {
+      kind: SpanKind.INTERNAL,
+    });
 
-          // Execute the actual tool handler
-          const result = await handler(input);
+    // Set input attributes before execution
+    // Both Viktor's naming and semconv for comparison capability
+    const inputJson = JSON.stringify(input, null, 2);
+    span.setAttribute("gen_ai.tool.name", toolName);
+    span.setAttribute("gen_ai.tool.input", inputJson); // Viktor
+    span.setAttribute("gen_ai.tool.call.arguments", inputJson); // Semconv
 
-          // Calculate duration and set post-execution attributes
-          const durationMs = Date.now() - startTime;
-          span.setAttribute("gen_ai.tool.duration_ms", durationMs);
+    // Use context.with() to ensure the span is active for all nested operations
+    // This is the key fix - it properly propagates context across await boundaries
+    const activeContext = trace.setSpan(context.active(), span);
 
-          // Tool success is based on isError flag (from kubectl exit code)
-          // If isError is true, the tool worked but kubectl failed
-          const success = !result.isError;
-          span.setAttribute("gen_ai.tool.success", success);
+    return context.with(activeContext, async () => {
+      try {
+        // Execute the actual tool handler (kubectl calls will inherit this context)
+        const result = await handler(input);
 
-          // Span status stays OK even if kubectl failed - the tool executed correctly
-          span.setStatus({ code: SpanStatusCode.OK });
+        // Calculate duration and set post-execution attributes
+        const durationMs = Date.now() - startTime;
+        span.setAttribute("gen_ai.tool.duration_ms", durationMs);
 
-          return result;
-        } catch (error) {
-          // Actual exception - the tool itself failed to execute
-          const durationMs = Date.now() - startTime;
-          span.setAttribute("gen_ai.tool.duration_ms", durationMs);
-          span.setAttribute("gen_ai.tool.success", false);
+        // Tool success is based on isError flag (from kubectl exit code)
+        // If isError is true, the tool worked but kubectl failed
+        const success = !result.isError;
+        span.setAttribute("gen_ai.tool.success", success);
 
-          // Record the exception for debugging
-          if (error instanceof Error) {
-            span.recordException(error);
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: error.message,
-            });
-          } else {
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: String(error),
-            });
-          }
+        // Span status stays OK even if kubectl failed - the tool executed correctly
+        span.setStatus({ code: SpanStatusCode.OK });
 
-          throw error;
-        } finally {
-          span.end();
+        return result;
+      } catch (error) {
+        // Actual exception - the tool itself failed to execute
+        const durationMs = Date.now() - startTime;
+        span.setAttribute("gen_ai.tool.duration_ms", durationMs);
+        span.setAttribute("gen_ai.tool.success", false);
+
+        // Record the exception for debugging
+        if (error instanceof Error) {
+          span.recordException(error);
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error.message,
+          });
+        } else {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: String(error),
+          });
         }
+
+        throw error;
+      } finally {
+        span.end();
       }
-    );
+    });
   };
 }

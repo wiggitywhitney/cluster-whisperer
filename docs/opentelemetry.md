@@ -217,14 +217,129 @@ When `OTEL_TRACING_ENABLED` is not `true`, the OTel API returns a "no-op" tracer
 
 This design lets us leave instrumentation code in place without conditional checks everywhere.
 
-## Future: OTLP Export
+## OTLP Export (M5)
 
-M5 will add OTLP export for sending traces to backends like Datadog. The exporter configuration will be:
+Traces can be sent to any OTLP-compatible backend (Datadog, Jaeger, etc.) by configuring the exporter.
 
-| Environment Variable | Description |
-|---------------------|-------------|
-| `OTEL_EXPORTER_TYPE` | `console` (default) or `otlp` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint |
+### Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
+| `OTEL_EXPORTER_TYPE` | `console` | `console` for stdout, `otlp` for OTLP export |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (required when type=otlp) |
+
+### Using Console Exporter (Development)
+
+```bash
+OTEL_TRACING_ENABLED=true \
+vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
+```
+
+### Using OTLP Exporter (Production)
+
+```bash
+OTEL_TRACING_ENABLED=true \
+OTEL_EXPORTER_TYPE=otlp \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
+```
+
+### Datadog Setup
+
+Datadog Agent can receive OTLP traces on port 4318. Install with OTLP receiver enabled:
+
+```bash
+# Add Datadog helm repo
+helm repo add datadog https://helm.datadoghq.com
+helm repo update
+
+# Create values file with OTLP enabled
+cat > /tmp/datadog-values.yaml << 'EOF'
+datadog:
+  site: datadoghq.com
+  otlp:
+    receiver:
+      protocols:
+        http:
+          enabled: true
+  kubelet:
+    host:
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+  env:
+    - name: DD_HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+EOF
+
+# Install (replace $DD_API_KEY with your key)
+helm install datadog datadog/datadog \
+  --set datadog.apiKey=$DD_API_KEY \
+  -f /tmp/datadog-values.yaml
+```
+
+If running cluster-whisperer locally, port-forward to access the agent:
+
+```bash
+kubectl port-forward svc/datadog 4318:4318
+```
+
+View traces at: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
+
+### Jaeger Setup
+
+Jaeger also accepts OTLP on port 4318. The same endpoint configuration works:
+
+```bash
+# Deploy Jaeger (example using all-in-one for development)
+kubectl apply -f https://raw.githubusercontent.com/jaegertracing/jaeger-operator/main/examples/simplest.yaml
+
+# Port-forward to access
+kubectl port-forward svc/jaeger-collector 4318:4318
+
+# Run with OTLP export
+OTEL_TRACING_ENABLED=true \
+OTEL_EXPORTER_TYPE=otlp \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
+```
+
+### Backend-Agnostic Design
+
+The same code works with any OTLP-compatible backend. Only the endpoint changes:
+
+| Backend | Endpoint Example |
+|---------|------------------|
+| Datadog Agent (in-cluster) | `http://datadog:4318` |
+| Datadog Agent (local) | `http://localhost:4318` |
+| Jaeger | `http://jaeger-collector:4318` |
+
+For KubeCon demo, audience vote determines which backend to use - just change `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+## Async Context Propagation
+
+For proper parent-child span relationships across async boundaries, we use `context.with()` in `tool-tracing.ts`:
+
+```typescript
+const span = tracer.startSpan(`execute_tool ${toolName}`, { kind: SpanKind.INTERNAL });
+const activeContext = trace.setSpan(context.active(), span);
+
+return context.with(activeContext, async () => {
+  // Nested spans (like kubectl) automatically become children
+  const result = await handler(input);
+  // ...
+});
+```
+
+This ensures kubectl spans are correctly parented under MCP tool spans, creating the expected hierarchy:
+
+```
+execute_tool kubectl_get (INTERNAL, 294ms)
+└── kubectl get pods (CLIENT, 293ms)
+```
 
 ## Further Reading
 
