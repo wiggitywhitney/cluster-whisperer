@@ -75,7 +75,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 ## Success Criteria
 
 - [x] MCP tool invocations create spans
-- [ ] kubectl executions create child spans
+- [x] kubectl executions create child spans
 - [x] Traces visible in console output (for development)
 - [ ] Traces exportable via OTLP (for backends like Datadog)
 - [x] Documentation explains OTel concepts and our implementation
@@ -105,7 +105,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
   - Handle errors and set span status
   - Manual test: MCP tool calls create proper spans
 
-- [ ] **M4**: Instrument kubectl Execution
+- [x] **M4**: Instrument kubectl Execution
   - **Before implementing**: Review `docs/opentelemetry-research.md` Section 6 for kubectl attributes
   - Create child spans for kubectl subprocess calls
   - Add attributes (command, namespace, duration)
@@ -234,3 +234,16 @@ Manual verification:
 - Updated `docs/opentelemetry.md` with M3 implementation details and attribute documentation
 - Added "Before implementing" reminders to M3/M4/M5 milestones to reference research doc
 - Manual test passed: spans appear immediately with all expected attributes
+
+### 2026-01-28: M4 Instrument kubectl Execution Complete
+
+- Added OpenTelemetry instrumentation to `src/utils/kubectl.ts`
+- Created `extractKubectlMetadata()` helper to parse operation/resource/namespace from args
+- Wrapped `spawnSync` in `startActiveSpan` with span name `kubectl {operation} {resource}`
+- Span kind: CLIENT (outbound subprocess call), auto-parented under MCP tool spans
+- Dual attribute strategy implemented:
+  - Viktor's: `k8s.client`, `k8s.operation`, `k8s.resource`, `k8s.namespace`, `k8s.args`, `k8s.duration_ms`
+  - Semconv: `process.executable.name`, `process.command_args`, `process.exit.code`, `error.type`
+- Error handling: spawn errors recorded with `recordException()`, non-zero exit codes set `error.type: KubectlError`
+- Updated `docs/opentelemetry.md` with M4 section including attributes table and example output
+- Manual test passed: kubectl spans appear as children of MCP tool spans with correct `parentSpanContext`

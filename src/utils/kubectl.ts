@@ -22,9 +22,16 @@
  *
  * Rule of thumb: Always use spawnSync with an args array when the arguments
  * come from any external source (user input, API calls, AI agents).
+ *
+ * OpenTelemetry instrumentation:
+ * Each kubectl execution creates a span with both Viktor's attributes (for
+ * KubeCon demo comparison) and OTel semconv attributes (for standards compliance).
+ * See docs/opentelemetry-research.md Section 6 for attribute mapping details.
  */
 
 import { spawnSync } from "child_process";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { getTracer } from "../tracing";
 
 /**
  * Result from executing a kubectl command.
@@ -42,7 +49,55 @@ export interface KubectlResult {
 }
 
 /**
+ * Metadata extracted from kubectl args for tracing attributes.
+ * We parse this from the args array to create meaningful span names
+ * and attributes without changing the executeKubectl API.
+ */
+interface KubectlMetadata {
+  operation: string; // get, describe, logs
+  resource: string; // pods, deployments, etc.
+  namespace: string | undefined; // from -n flag
+}
+
+/**
+ * Extracts operation metadata from kubectl args for tracing.
+ *
+ * Kubectl commands follow predictable patterns:
+ * - kubectl get pods -n default     → operation=get, resource=pods
+ * - kubectl describe pod nginx      → operation=describe, resource=pod
+ * - kubectl logs nginx -n default   → operation=logs, resource=nginx (pod name)
+ *
+ * @param args - kubectl arguments (without "kubectl" itself)
+ * @returns Metadata for span naming and attributes
+ */
+function extractKubectlMetadata(args: string[]): KubectlMetadata {
+  // Operation is always the first argument
+  const operation = args[0] || "unknown";
+
+  // Resource is typically the second argument
+  // For logs, this is the pod name; for get/describe, it's the resource type
+  const resource = args[1] || "unknown";
+
+  // Find namespace from -n flag
+  const namespaceIndex = args.indexOf("-n");
+  const namespace =
+    namespaceIndex !== -1 && args[namespaceIndex + 1]
+      ? args[namespaceIndex + 1]
+      : undefined;
+
+  return { operation, resource, namespace };
+}
+
+/**
  * Executes a kubectl command and returns a structured result.
+ *
+ * Creates an OpenTelemetry span for the kubectl subprocess execution with:
+ * - Span name: "kubectl {operation} {resource}" (e.g., "kubectl get pods")
+ * - Span kind: CLIENT (outbound subprocess call)
+ * - Attributes: Both Viktor's k8s.* and OTel semconv process.* attributes
+ *
+ * The span is automatically parented under the active MCP tool span (if any),
+ * creating the hierarchy: execute_tool kubectl_get → kubectl get pods
  *
  * @param args - Array of arguments to pass to kubectl (e.g., ["get", "pods"])
  * @returns Object with output string and isError flag based on exit code
@@ -55,35 +110,116 @@ export interface KubectlResult {
  *   // Returns: { output: "Error executing...", isError: true }
  */
 export function executeKubectl(args: string[]): KubectlResult {
+  const tracer = getTracer();
+  const metadata = extractKubectlMetadata(args);
+  const startTime = Date.now();
+
   // Build the full command for display purposes (logging only, not execution)
   const command = `kubectl ${args.join(" ")}`;
 
-  // spawnSync bypasses the shell - each array element is a separate argument.
-  // This prevents shell injection even if args contain malicious characters.
-  const result = spawnSync("kubectl", args, {
-    encoding: "utf-8", // Return strings instead of Buffers
-    timeout: 30000, // 30 second timeout to avoid hanging
-  });
+  // Span name follows Viktor's pattern: "kubectl {operation} {resource}"
+  // SpanKind.CLIENT = outbound call (we're calling kubectl subprocess)
+  return tracer.startActiveSpan(
+    `kubectl ${metadata.operation} ${metadata.resource}`,
+    { kind: SpanKind.CLIENT },
+    (span) => {
+      // Set pre-execution attributes
+      // Viktor's k8s.* attributes for KubeCon comparison
+      span.setAttribute("k8s.client", "kubectl");
+      span.setAttribute("k8s.operation", metadata.operation);
+      span.setAttribute("k8s.resource", metadata.resource);
+      span.setAttribute("k8s.args", args.join(" "));
+      if (metadata.namespace) {
+        span.setAttribute("k8s.namespace", metadata.namespace);
+      }
 
-  // Handle spawn errors (e.g., kubectl not found)
-  if (result.error) {
-    return {
-      output: `Error executing "${command}": ${result.error.message}`,
-      isError: true,
-    };
-  }
+      // OTel semconv process.* attributes for standards compliance
+      span.setAttribute("process.executable.name", "kubectl");
+      span.setAttribute("process.command_args", ["kubectl", ...args]);
 
-  // Handle non-zero exit codes (e.g., resource not found, permission denied)
-  if (result.status !== 0) {
-    const errorMessage = result.stderr || "Unknown error";
-    return {
-      output: `Error executing "${command}": ${errorMessage}`,
-      isError: true,
-    };
-  }
+      try {
+        // spawnSync bypasses the shell - each array element is a separate argument.
+        // This prevents shell injection even if args contain malicious characters.
+        const result = spawnSync("kubectl", args, {
+          encoding: "utf-8", // Return strings instead of Buffers
+          timeout: 30000, // 30 second timeout to avoid hanging
+        });
 
-  return {
-    output: result.stdout,
-    isError: false,
-  };
+        // Calculate duration for Viktor's attribute
+        const durationMs = Date.now() - startTime;
+        span.setAttribute("k8s.duration_ms", durationMs);
+
+        // Handle spawn errors (e.g., kubectl not found)
+        if (result.error) {
+          span.setAttribute("process.exit.code", -1);
+          span.setAttribute("error.type", result.error.name);
+          span.recordException(result.error);
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: result.error.message,
+          });
+          span.end();
+
+          return {
+            output: `Error executing "${command}": ${result.error.message}`,
+            isError: true,
+          };
+        }
+
+        // Set exit code (semconv attribute)
+        span.setAttribute("process.exit.code", result.status ?? -1);
+
+        // Handle non-zero exit codes (e.g., resource not found, permission denied)
+        if (result.status !== 0) {
+          const errorMessage = result.stderr || "Unknown error";
+          span.setAttribute("error.type", "KubectlError");
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: errorMessage,
+          });
+          span.end();
+
+          return {
+            output: `Error executing "${command}": ${errorMessage}`,
+            isError: true,
+          };
+        }
+
+        // Success case
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.end();
+
+        return {
+          output: result.stdout,
+          isError: false,
+        };
+      } catch (error) {
+        // Unexpected error during execution
+        const durationMs = Date.now() - startTime;
+        span.setAttribute("k8s.duration_ms", durationMs);
+        span.setAttribute("process.exit.code", -1);
+
+        if (error instanceof Error) {
+          span.setAttribute("error.type", error.name);
+          span.recordException(error);
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error.message,
+          });
+        } else {
+          span.setAttribute("error.type", "UnknownError");
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: String(error),
+          });
+        }
+        span.end();
+
+        return {
+          output: `Error executing "${command}": ${error instanceof Error ? error.message : String(error)}`,
+          isError: true,
+        };
+      }
+    }
+  );
 }
