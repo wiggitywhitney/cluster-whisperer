@@ -41,7 +41,11 @@ import {
   kubectlLogs,
   kubectlLogsSchema,
   kubectlLogsDescription,
+  type KubectlGetInput,
+  type KubectlDescribeInput,
+  type KubectlLogsInput,
 } from "../core";
+import { withToolTracing } from "../../tracing/tool-tracing";
 
 /**
  * Registers all kubectl tools with an MCP server.
@@ -55,50 +59,53 @@ import {
  */
 export function registerKubectlTools(server: McpServer): void {
   // kubectl_get - List resources in table format
+  // Wrapped with tracing to create spans for observability
   server.registerTool(
     "kubectl_get",
     {
       description: kubectlGetDescription,
       inputSchema: kubectlGetSchema.shape,
     },
-    async (input) => {
+    withToolTracing("kubectl_get", async (input: KubectlGetInput) => {
       const { output, isError } = await kubectlGet(input);
       return {
         content: [{ type: "text", text: output }],
         isError,
       };
-    }
+    })
   );
 
   // kubectl_describe - Get detailed resource information
+  // Wrapped with tracing to create spans for observability
   server.registerTool(
     "kubectl_describe",
     {
       description: kubectlDescribeDescription,
       inputSchema: kubectlDescribeSchema.shape,
     },
-    async (input) => {
+    withToolTracing("kubectl_describe", async (input: KubectlDescribeInput) => {
       const { output, isError } = await kubectlDescribe(input);
       return {
         content: [{ type: "text", text: output }],
         isError,
       };
-    }
+    })
   );
 
   // kubectl_logs - Get container logs
+  // Wrapped with tracing to create spans for observability
   server.registerTool(
     "kubectl_logs",
     {
       description: kubectlLogsDescription,
       inputSchema: kubectlLogsSchema.shape,
     },
-    async (input) => {
+    withToolTracing("kubectl_logs", async (input: KubectlLogsInput) => {
       const { output, isError } = await kubectlLogs(input);
       return {
         content: [{ type: "text", text: output }],
         isError,
       };
-    }
+    })
   );
 }

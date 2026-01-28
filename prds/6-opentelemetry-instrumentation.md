@@ -74,9 +74,9 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 
 ## Success Criteria
 
-- [ ] MCP tool invocations create spans
+- [x] MCP tool invocations create spans
 - [ ] kubectl executions create child spans
-- [ ] Traces visible in console output (for development)
+- [x] Traces visible in console output (for development)
 - [ ] Traces exportable via OTLP (for backends like Datadog)
 - [x] Documentation explains OTel concepts and our implementation
 
@@ -98,19 +98,22 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
   - Create `docs/opentelemetry.md` explaining OTel concepts and our setup
   - Manual test: traces appear in console
 
-- [ ] **M3**: Instrument MCP Tools
+- [x] **M3**: Instrument MCP Tools
+  - **Before implementing**: Review `docs/opentelemetry-research.md` Section 6 for attribute decisions
   - Create spans for MCP tool invocations
   - Add relevant attributes (tool name, inputs, outputs)
   - Handle errors and set span status
   - Manual test: MCP tool calls create proper spans
 
 - [ ] **M4**: Instrument kubectl Execution
+  - **Before implementing**: Review `docs/opentelemetry-research.md` Section 6 for kubectl attributes
   - Create child spans for kubectl subprocess calls
   - Add attributes (command, namespace, duration)
   - Capture errors and exit codes
   - Manual test: kubectl calls show as child spans
 
 - [ ] **M5**: OTLP Export
+  - **Before implementing**: Review `docs/opentelemetry-research.md` Section 5 for Datadog OTLP details
   - Configure OTLP exporter for external backends
   - Environment variable configuration for collector endpoint
   - Verify traces reach external collector
@@ -219,3 +222,15 @@ Manual verification:
 - Created `docs/opentelemetry.md` explaining OTel concepts and our setup
 - Exported `getTracer()` function for M3/M4 instrumentation work
 - Manual test passed: tracing initialization messages appear when enabled
+
+### 2026-01-28: M3 Instrument MCP Tools Complete
+
+- Created `src/tracing/tool-tracing.ts` with `withToolTracing()` wrapper function
+- Wrapped all 3 MCP tools (kubectl_get, kubectl_describe, kubectl_logs) in `src/tools/mcp/index.ts`
+- Implemented dual attribute strategy: Viktor's attributes + OTel semconv for comparison capability
+- Attributes captured: `gen_ai.tool.name`, `gen_ai.tool.input`, `gen_ai.tool.call.arguments`, `gen_ai.tool.duration_ms`, `gen_ai.tool.success`
+- Error handling: exceptions recorded with `recordException()`, tool failures (isError) set `gen_ai.tool.success: false`
+- Updated `src/tracing/index.ts` to use SimpleSpanProcessor for immediate span output during development
+- Updated `docs/opentelemetry.md` with M3 implementation details and attribute documentation
+- Added "Before implementing" reminders to M3/M4/M5 milestones to reference research doc
+- Manual test passed: spans appear immediately with all expected attributes

@@ -16,7 +16,10 @@
  */
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-node";
+import {
+  ConsoleSpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-node";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   ATTR_SERVICE_NAME,
@@ -69,9 +72,12 @@ if (isTracingEnabled) {
       [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
     }),
 
-    // Console exporter: prints spans to stdout for development
-    // M5 will add OTLP exporter for production backends like Datadog
-    traceExporter: new ConsoleSpanExporter(),
+    // Use SimpleSpanProcessor for immediate span export during development
+    // BatchSpanProcessor (default with traceExporter) batches spans for efficiency,
+    // but delays output by up to 5 seconds. SimpleSpanProcessor exports immediately,
+    // which is better for development debugging.
+    // M5 will add OTLP exporter option for production backends like Datadog
+    spanProcessor: new SimpleSpanProcessor(new ConsoleSpanExporter()),
 
     // No auto-instrumentation - we instrument manually at business logic boundaries
     // Auto-instrumentation handles HTTP/DB libraries, but our spans are for

@@ -73,9 +73,10 @@ Example attributes on a kubectl span:
 ### Architecture
 
 ```
-src/tracing/index.ts    → OTel initialization
-src/index.ts            → CLI entry point (imports tracing first)
-src/mcp-server.ts       → MCP entry point (imports tracing first)
+src/tracing/index.ts        → OTel SDK initialization
+src/tracing/tool-tracing.ts → MCP tool instrumentation wrapper
+src/index.ts                → CLI entry point (imports tracing first)
+src/mcp-server.ts           → MCP entry point (imports tracing first)
 ```
 
 Tracing is imported before anything else to ensure the tracer provider is registered before any instrumented code runs.
@@ -108,22 +109,47 @@ With tracing enabled, you'll see spans printed to the console:
 [OTel] Tracing enabled for cluster-whisperer v0.1.0
 
 {
-  traceId: 'abc123...',
+  traceId: '72f337f6c9f9631835e0731d77e22d17',
   name: 'execute_tool kubectl_get',
-  kind: 'INTERNAL',
-  duration: [150, 'ms'],
-  attributes: { ... }
+  kind: 0,
+  duration: 80259.75,
+  attributes: {
+    'gen_ai.tool.name': 'kubectl_get',
+    'gen_ai.tool.input': '{\n  "resource": "pods"\n}',
+    'gen_ai.tool.call.arguments': '{\n  "resource": "pods"\n}',
+    'gen_ai.tool.duration_ms': 80,
+    'gen_ai.tool.success': true
+  },
+  status: { code: 1 }
 }
 ```
 
+Note: `kind: 0` is INTERNAL, `status.code: 1` is OK.
+
 ## What Gets Traced
 
-| Operation | Span Name | Implementation |
-|-----------|-----------|----------------|
-| MCP tool invocation | `execute_tool {tool_name}` | M3 (future) |
-| kubectl subprocess | `kubectl {operation} {resource}` | M4 (future) |
+| Operation | Span Name | Status |
+|-----------|-----------|--------|
+| MCP tool invocation | `execute_tool {tool_name}` | ✅ Implemented (M3) |
+| kubectl subprocess | `kubectl {operation} {resource}` | Planned (M4) |
 
-Currently (M2), the tracing infrastructure is in place but no spans are created yet. M3 and M4 will add instrumentation for MCP tools and kubectl calls.
+### MCP Tool Spans (M3)
+
+When an MCP tool is called, a span is created with these attributes:
+
+| Attribute | Source | Description |
+|-----------|--------|-------------|
+| `gen_ai.tool.name` | Both | Tool name (e.g., `kubectl_get`) |
+| `gen_ai.tool.input` | Viktor | JSON stringified input arguments |
+| `gen_ai.tool.call.arguments` | Semconv | JSON stringified input arguments |
+| `gen_ai.tool.duration_ms` | Viktor | Execution time in milliseconds |
+| `gen_ai.tool.success` | Viktor | `true` if tool succeeded |
+
+**Why duplicate attributes?** We include both Viktor's attribute names and OTel semantic conventions. This enables head-to-head comparison queries for the KubeCon demo while maintaining standards compliance.
+
+**Error handling:**
+- If kubectl fails (non-zero exit): `gen_ai.tool.success: false`, span status stays OK (the tool worked, kubectl failed)
+- If an exception is thrown: span records the exception and sets status to ERROR
 
 ## When Tracing is Disabled
 
