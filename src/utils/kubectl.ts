@@ -161,7 +161,6 @@ export function executeKubectl(args: string[]): KubectlResult {
             code: SpanStatusCode.ERROR,
             message: result.error.message,
           });
-          span.end();
 
           return {
             output: `Error executing "${command}": ${result.error.message}`,
@@ -180,7 +179,6 @@ export function executeKubectl(args: string[]): KubectlResult {
             code: SpanStatusCode.ERROR,
             message: errorMessage,
           });
-          span.end();
 
           return {
             output: `Error executing "${command}": ${errorMessage}`,
@@ -190,7 +188,6 @@ export function executeKubectl(args: string[]): KubectlResult {
 
         // Success case
         span.setStatus({ code: SpanStatusCode.OK });
-        span.end();
 
         return {
           output: result.stdout,
@@ -211,17 +208,19 @@ export function executeKubectl(args: string[]): KubectlResult {
           });
         } else {
           span.setAttribute("error.type", "UnknownError");
+          span.recordException(new Error(String(error)));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: String(error),
           });
         }
-        span.end();
 
         return {
           output: `Error executing "${command}": ${error instanceof Error ? error.message : String(error)}`,
           isError: true,
         };
+      } finally {
+        span.end();
       }
     }
   );
