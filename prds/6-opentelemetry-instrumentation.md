@@ -78,7 +78,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
 - [ ] kubectl executions create child spans
 - [ ] Traces visible in console output (for development)
 - [ ] Traces exportable via OTLP (for backends like Datadog)
-- [ ] Documentation explains OTel concepts and our implementation
+- [x] Documentation explains OTel concepts and our implementation
 
 ## Milestones
 
@@ -91,7 +91,7 @@ Study Viktor's dot-ai OTel implementation to understand his approach:
   - Document findings in `docs/opentelemetry-research.md`
   - Update this PRD with specific implementation decisions
 
-- [ ] **M2**: Basic OTel Setup
+- [x] **M2**: Basic OTel Setup
   - Install OTel SDK packages
   - Configure tracer provider
   - Add console exporter for development visibility
@@ -209,3 +209,13 @@ Manual verification:
 - Researched Datadog OTLP ingestion options
 - Made key decisions: dual attributes (Viktor + semconv), manual instrumentation, Datadog Agent approach
 - Updated PRD #8 with Datadog OTLP finding
+
+### 2026-01-27: M2 Basic OTel Setup Complete
+
+- Installed OTel SDK packages (@opentelemetry/sdk-node, api, sdk-trace-node, exporter-trace-otlp-proto, resources, semantic-conventions)
+- Created `src/tracing/index.ts` with NodeSDK initialization and ConsoleSpanExporter
+- Configured opt-in tracing via `OTEL_TRACING_ENABLED` environment variable
+- Added tracing import to both entry points (`src/index.ts`, `src/mcp-server.ts`)
+- Created `docs/opentelemetry.md` explaining OTel concepts and our setup
+- Exported `getTracer()` function for M3/M4 instrumentation work
+- Manual test passed: tracing initialization messages appear when enabled
