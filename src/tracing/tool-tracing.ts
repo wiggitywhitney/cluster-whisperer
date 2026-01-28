@@ -110,6 +110,7 @@ export function withToolTracing<TInput, TResult extends ResultWithError>(
             message: error.message,
           });
         } else {
+          span.recordException(new Error(String(error)));
           span.setStatus({
             code: SpanStatusCode.ERROR,
             message: String(error),
