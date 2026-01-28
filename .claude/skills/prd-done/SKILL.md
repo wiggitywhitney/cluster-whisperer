@@ -264,7 +264,7 @@ Please review and respond:
 - [ ] **Request reviews**: Assign appropriate team members for code review if specified
 
 #### 3.8. Fallback for Projects Without Templates
-If no PR template is found, create a sensible default structure:
+If no PR template is found, use this minimal fallback structure:
 
 ```markdown
 ## Description
@@ -282,6 +282,9 @@ Closes #[issue-id]
 ## Documentation
 - [Documentation updates made]
 ```
+
+> **Note**: For comprehensive PR templates, add `.github/PULL_REQUEST_TEMPLATE.md` to the repo.
+> The skill will automatically detect and use it (step 3.1).
 
 ### 4. Review and Merge Process
 - [ ] **Check ongoing processes**: Use `gh pr checks [pr-number]` to check for any ongoing CI/CD, security analysis, or automated reviews (CodeRabbit, CodeQL, etc.)

@@ -12,6 +12,10 @@
  * It's what makes `cluster-whisperer "question"` work after npm link.
  */
 
+// Initialize OpenTelemetry tracing before any other imports
+// This ensures the tracer provider is registered before any instrumented code runs
+import "./tracing";
+
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";

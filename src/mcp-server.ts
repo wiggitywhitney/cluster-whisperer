@@ -22,6 +22,10 @@
  * Same underlying tools, different orchestration model.
  */
 
+// Initialize OpenTelemetry tracing before any other imports
+// This ensures the tracer provider is registered before any instrumented code runs
+import "./tracing";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerKubectlTools } from "./tools/mcp";
