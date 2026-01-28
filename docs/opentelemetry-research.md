@@ -108,7 +108,7 @@ function myOperation() {
 1. **Always end spans** - Use `finally` blocks
 2. **Prefer `startActiveSpan`** - Automatically manages context for child spans
 3. **Record exceptions properly** - Use `span.recordException(error)` then set status
-4. **Get tracer at point of use** - Don't export globally (avoids initialization timing issues)
+4. **Get tracer at point of use** - Use a factory function like `getTracer()` rather than exporting a cached tracer instance (avoids initialization timing issues)
 
 ---
 
