@@ -81,12 +81,17 @@ function createSpanExporter(): SpanExporter {
           "Set it to your collector URL (e.g., http://localhost:4318 for Datadog Agent)."
       );
     }
-    // OTLP endpoint should not include /v1/traces - the exporter appends it
-    const url = endpoint.endsWith("/v1/traces")
-      ? endpoint
-      : `${endpoint}/v1/traces`;
-    console.log(`[OTel] Using OTLP exporter → ${endpoint}`);
+    // Normalize: strip trailing slashes to avoid double-slash in URL
+    const base = endpoint.replace(/\/+$/, "");
+    const url = base.endsWith("/v1/traces") ? base : `${base}/v1/traces`;
+    console.log(`[OTel] Using OTLP exporter → ${base}`);
     return new OTLPTraceExporter({ url });
+  }
+
+  if (exporterType !== "console") {
+    throw new Error(
+      `Unsupported OTEL_EXPORTER_TYPE: "${exporterType}". Valid options: "console", "otlp".`
+    );
   }
 
   console.log("[OTel] Using console exporter");
