@@ -170,16 +170,14 @@ execute_tool kubectl_get (INTERNAL)
 
 | Attribute | Source | Description |
 |-----------|--------|-------------|
-| `k8s.client` | Viktor | Always `kubectl` |
-| `k8s.operation` | Viktor | `get`, `describe`, `logs` |
-| `k8s.resource` | Viktor | Resource type or pod name |
-| `k8s.namespace` | Viktor | Namespace (if specified via `-n`) |
-| `k8s.args` | Viktor | Full args joined: `get pods -n default` |
-| `k8s.duration_ms` | Viktor | Execution time in milliseconds |
 | `process.executable.name` | Semconv | Always `kubectl` |
 | `process.command_args` | Semconv | Full command array: `["kubectl", "get", "pods"]` |
 | `process.exit.code` | Semconv | Exit code (`0` = success) |
 | `error.type` | Semconv | Set on non-zero exit (e.g., `KubectlError`) |
+| `k8s.namespace` | Custom | Namespace if specified via `-n` (useful for filtering) |
+| `k8s.output_size_bytes` | Custom | Output size in bytes (useful for debugging large responses) |
+
+Note: We keep `k8s.namespace` and `k8s.output_size_bytes` as pragmatic custom attributes because they have no semconv equivalent and provide genuine value for Kubernetes-specific queries and debugging.
 
 **Error handling:**
 - Non-zero exit code: `error.type` set, span status is ERROR with stderr message
@@ -192,17 +190,14 @@ execute_tool kubectl_get (INTERNAL)
 {
   traceId: 'aee9aa49429300043da06fa36b467828',
   parentSpanContext: { spanId: '64656e98ee0b505c' },  // Parent MCP tool span
-  name: 'kubectl get namespaces',
+  name: 'kubectl get pods',
   kind: 2,  // CLIENT
   attributes: {
-    'k8s.client': 'kubectl',
-    'k8s.operation': 'get',
-    'k8s.resource': 'namespaces',
-    'k8s.args': 'get namespaces',
-    'k8s.duration_ms': 312,
     'process.executable.name': 'kubectl',
-    'process.command_args': ['kubectl', 'get', 'namespaces'],
-    'process.exit.code': 0
+    'process.command_args': ['kubectl', 'get', 'pods', '-n', 'default'],
+    'process.exit.code': 0,
+    'k8s.namespace': 'default',
+    'k8s.output_size_bytes': 1024
   },
   status: { code: 1 }  // OK
 }

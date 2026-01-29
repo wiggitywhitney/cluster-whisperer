@@ -51,7 +51,7 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - Remove `gen_ai.tool.success` (span status handles this)
   - Update `docs/opentelemetry.md` with new attribute list
 
-- [ ] **M2**: Semconv Compliance for kubectl Spans
+- [x] **M2**: Semconv Compliance for kubectl Spans
   - Review `docs/opentelemetry-research.md` Section 10 (Semconv Gap Analysis)
   - Remove `k8s.client` (redundant with `process.executable.name`)
   - Remove `k8s.operation` (captured in span name)
@@ -221,3 +221,19 @@ LLM chat (from OpenLLMetry)
 - Removed Viktor's attributes (`gen_ai.tool.input`, `gen_ai.tool.duration_ms`, `gen_ai.tool.success`)
 - Updated `docs/opentelemetry.md` with new attribute list
 - Verified traces appear in Datadog APM with proper hierarchy
+
+### 2026-01-29: M2 Complete - kubectl Spans Semconv Compliance
+
+- Removed Viktor's redundant attributes from `src/utils/kubectl.ts`:
+  - `k8s.client` (redundant with `process.executable.name`)
+  - `k8s.operation` (captured in span name)
+  - `k8s.resource` (captured in span name)
+  - `k8s.args` (redundant with `process.command_args`)
+  - `k8s.duration_ms` (span timing handles this)
+- Kept pragmatic custom attributes: `k8s.namespace`, `k8s.output_size_bytes`
+- Updated `docs/opentelemetry.md` with new kubectl attribute list
+- **Bug fix**: Added `withToolTracing()` to LangChain tools (`src/tools/langchain/index.ts`)
+  - LangChain tools were missing tracing wrapper, causing orphaned kubectl spans
+  - Now both MCP and LangChain tools create proper `execute_tool` parent spans
+- Made `withToolTracing()` generic to support any return type (not just MCP responses)
+- Verified parent-child span hierarchy in Datadog APM

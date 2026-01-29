@@ -1,8 +1,8 @@
 /**
- * tool-tracing.ts - OpenTelemetry instrumentation for MCP tool calls
+ * tool-tracing.ts - OpenTelemetry instrumentation for tool calls
  *
  * What this file does:
- * Provides a wrapper function that adds tracing to any MCP tool handler.
+ * Provides a wrapper function that adds tracing to any tool handler (MCP or LangChain).
  * When a tool is called, it creates a span with timing, inputs, and success/failure info.
  *
  * Why a wrapper pattern?
@@ -20,15 +20,9 @@ import { SpanKind, SpanStatusCode, context, trace } from "@opentelemetry/api";
 import { getTracer } from "./index";
 
 /**
- * MCP tool result with isError flag - used to check tool success.
- * We only need the isError property for tracing; the rest passes through.
- */
-interface ResultWithError {
-  isError?: boolean;
-}
-
-/**
- * Wraps an MCP tool handler with OpenTelemetry tracing.
+ * Wraps a tool handler with OpenTelemetry tracing.
+ *
+ * Works with any tool framework (MCP, LangChain, etc.) - just wrap the handler.
  *
  * Creates a span for each tool invocation with:
  * - Span name: "execute_tool {toolName}" (following semconv pattern)
@@ -46,13 +40,13 @@ interface ResultWithError {
  *
  * Error handling:
  * - Exceptions (thrown errors): recorded with span.recordException(), status ERROR
- * - Tool failures (isError: true): span status stays OK (the tool worked, kubectl failed)
+ * - Successful execution: span status is OK (even if the tool returns an error result)
  *
  * @param toolName - The name of the tool (e.g., "kubectl_get")
  * @param handler - The async function that executes the tool logic
  * @returns A wrapped handler that traces the execution
  */
-export function withToolTracing<TInput, TResult extends ResultWithError>(
+export function withToolTracing<TInput, TResult>(
   toolName: string,
   handler: (input: TInput) => Promise<TResult>
 ): (input: TInput) => Promise<TResult> {
