@@ -2,7 +2,8 @@
 
 **PRD**: #6 - OpenTelemetry Instrumentation
 **Date**: 2026-01-27
-**Status**: M1 Research Complete
+**Updated**: 2026-01-28 (Sections 7-10 added for PRD #11)
+**Status**: Active Research Document
 
 ---
 
@@ -13,7 +14,11 @@
 3. [OpenTelemetry Weaver](#3-opentelemetry-weaver)
 4. [Viktor's Implementation](#4-viktors-implementation)
 5. [Datadog OTLP Ingestion](#5-datadog-otlp-ingestion)
-6. [Implementation Decisions](#6-implementation-decisions)
+6. [Implementation Decisions (PRD #6)](#6-implementation-decisions)
+7. [OpenLLMetry](#7-openllmetry)
+8. [Claude Code Built-in Telemetry](#8-claude-code-built-in-telemetry)
+9. [Datadog GenAI Semantic Conventions](#9-datadog-genai-semantic-conventions)
+10. [Semconv Gap Analysis](#10-semconv-gap-analysis)
 
 ---
 
@@ -463,3 +468,222 @@ const traceExporter = new OTLPTraceExporter({
 **Decision: All manual instrumentation** (no auto-instrumentation).
 
 Following Viktor's pattern with `instrumentations: []` in SDK config. Auto-instrumentation handles HTTP clients and database drivers, but our spans are at business logic boundaries (MCP tool calls, kubectl subprocess) which require manual wrappers.
+
+---
+
+## 7. OpenLLMetry
+
+**Date Added**: 2026-01-28
+
+OpenLLMetry is Traceloop's open-source project that extends OpenTelemetry for LLM observability.
+
+### What It Is
+
+OpenLLMetry provides auto-instrumentation for LLM frameworks and providers:
+- Wraps LLM API calls (OpenAI, Anthropic, Cohere, etc.)
+- Captures prompts, completions, token usage, latency
+- Emits spans following OTel GenAI semantic conventions
+- Works with any OTel-compatible backend
+
+### JavaScript/TypeScript Package
+
+```bash
+npm install @traceloop/node-server-sdk
+```
+
+**Initialization:**
+```typescript
+import * as traceloop from "@traceloop/node-server-sdk";
+
+traceloop.initialize({
+  disableBatch: true, // For development
+  appName: "cluster-whisperer",
+});
+```
+
+### Supported Frameworks (JS/TS)
+
+| Framework | Auto-instrumented |
+|-----------|-------------------|
+| OpenAI SDK | Yes |
+| Anthropic SDK | Yes |
+| LangChain | Yes |
+| Azure OpenAI | Yes |
+| Cohere | Yes |
+| Bedrock | Yes |
+
+### Why It Matters for Us
+
+Cluster-whisperer uses LangChain which calls Anthropic's API. OpenLLMetry can automatically instrument these LLM calls, capturing:
+- `gen_ai.request.model` (e.g., `claude-3-5-sonnet`)
+- `gen_ai.provider.name` (e.g., `anthropic`)
+- `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens`
+- `gen_ai.operation.name` (e.g., `chat`)
+- Prompt and completion content (configurable)
+
+This creates a complete trace: user question → LLM reasoning → tool calls → kubectl execution.
+
+### LangChain Native OTel
+
+LangChain has built-in OTel support, but **only for Python**. The JavaScript/TypeScript SDK does not have native OTel instrumentation. OpenLLMetry is the path for TypeScript projects using LangChain.
+
+### Sources
+
+- OpenLLMetry GitHub: <https://github.com/traceloop/openllmetry>
+- Traceloop docs: <https://www.traceloop.com/docs>
+- npm package: <https://www.npmjs.com/package/@traceloop/node-server-sdk>
+
+---
+
+## 8. Claude Code Built-in Telemetry
+
+**Date Added**: 2026-01-28
+
+Claude Code (Anthropic's CLI tool) has built-in OpenTelemetry instrumentation.
+
+### Enabling Telemetry
+
+```bash
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+```
+
+### What It Captures
+
+When enabled, Claude Code exports:
+- Session metrics (duration, tool calls, token usage)
+- Events for significant actions
+- Performance data
+
+### Relevance
+
+This is interesting for understanding how Anthropic instruments their own AI tooling, but **not directly applicable** to cluster-whisperer. We control our own instrumentation.
+
+However, if cluster-whisperer is invoked BY Claude Code (as an MCP server), Claude Code's telemetry would capture the outer context while our instrumentation captures the inner details.
+
+---
+
+## 9. Datadog GenAI Semantic Conventions
+
+**Date Added**: 2026-01-28
+
+Datadog natively supports OpenTelemetry GenAI Semantic Conventions (v1.37+).
+
+### Supported Attributes
+
+Datadog automatically maps these `gen_ai.*` attributes to LLM Observability features:
+
+| Attribute | Datadog Feature |
+|-----------|-----------------|
+| `gen_ai.request.model` | Model identification |
+| `gen_ai.provider.name` | Provider grouping |
+| `gen_ai.operation.name` | Operation type tracking |
+| `gen_ai.usage.input_tokens` | Token usage metrics |
+| `gen_ai.usage.output_tokens` | Token usage metrics |
+| `gen_ai.usage.total_tokens` | Cost analysis |
+
+### Automatic Conversion
+
+OpenTelemetry traces with `gen_ai.*` attributes are automatically converted to LLM Observability traces in Datadog. No code changes required once spans follow semconv.
+
+### Configuration for Pre-1.37 Frameworks
+
+If using a framework that emits older semconv versions:
+
+```bash
+export OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental
+```
+
+### Ingestion Options
+
+1. **Datadog Agent** with OTLP receiver (recommended for APM + LLM)
+2. **Direct OTLP** to Datadog intake (LLM Observability only)
+3. **OTel Collector** with Datadog exporter
+
+### Why This Matters
+
+**Full semconv compliance unlocks Datadog LLM Observability features:**
+- Token usage dashboards
+- Cost tracking per model/provider
+- Latency analysis by operation type
+- Cross-service correlation
+
+Viktor's custom attributes (`gen_ai.tool.input`, `gen_ai.tool.duration_ms`, `gen_ai.tool.success`, `k8s.*`) are **not recognized** by Datadog's LLM Observability. They appear as generic span attributes but don't power any features.
+
+### Sources
+
+- Datadog blog: <https://www.datadoghq.com/blog/llm-otel-semantic-convention/>
+- Datadog docs: <https://docs.datadoghq.com/llm_observability/instrumentation/otel_instrumentation/>
+
+---
+
+## 10. Semconv Gap Analysis
+
+**Date Added**: 2026-01-28
+
+Comparison of our current implementation (PRD #6) against official OTel GenAI semantic conventions.
+
+### Current State: Hybrid Approach
+
+PRD #6 implemented both Viktor's custom attributes AND some semconv attributes. This was a "safe" choice for KubeCon demo comparison, but has downsides:
+- Viktor's attributes don't power Datadog features
+- Extra bytes per span for duplicate data
+- Confusing for anyone reading the code
+
+### MCP Tool Spans: Gap Analysis
+
+| Semconv Attribute | Required? | Our Status |
+|-------------------|-----------|------------|
+| `gen_ai.operation.name` | **Yes** | ❌ Missing |
+| `gen_ai.tool.name` | Yes | ✅ Present |
+| `gen_ai.tool.type` | Recommended | ❌ Missing |
+| `gen_ai.tool.call.id` | Recommended | ❌ Missing |
+| `gen_ai.tool.call.arguments` | Yes | ✅ Present |
+| `gen_ai.tool.call.result` | Recommended | ❌ Missing |
+
+**Viktor's custom attributes (not in semconv):**
+- `gen_ai.tool.input` - Duplicate of `gen_ai.tool.call.arguments`
+- `gen_ai.tool.duration_ms` - Not in semconv (duration is span timing)
+- `gen_ai.tool.success` - Not in semconv (use span status)
+
+### kubectl Spans: Gap Analysis
+
+| Semconv Attribute | Required? | Our Status |
+|-------------------|-----------|------------|
+| `process.executable.name` | Yes | ✅ Present |
+| `process.command_args` | Yes | ✅ Present |
+| `process.exit.code` | Yes | ✅ Present |
+| `error.type` | When error | ✅ Present |
+
+**Viktor's custom attributes (not in semconv):**
+- `k8s.client` - Custom (redundant with `process.executable.name`)
+- `k8s.operation` - Custom (could use span name)
+- `k8s.resource` - Custom (could use span name)
+- `k8s.namespace` - Custom (not in process semconv)
+- `k8s.args` - Custom (redundant with `process.command_args`)
+- `k8s.duration_ms` - Custom (duration is span timing)
+- `k8s.output_size_bytes` - Custom
+
+### Recommendation: Full Semconv Embrace
+
+**Remove Viktor's custom attributes. Add missing semconv attributes.**
+
+Rationale:
+1. **Datadog integration**: semconv attributes power LLM Observability features
+2. **Standards compliance**: Any OTel-compatible tool will understand our spans
+3. **Simplicity**: One set of attributes, one source of truth
+4. **Future-proof**: GenAI semconv is evolving; staying aligned reduces tech debt
+
+### What We Lose
+
+- `k8s.namespace` has no semconv equivalent (keep this one?)
+- `k8s.output_size_bytes` is useful for debugging large responses
+
+**Pragmatic approach**: Keep `k8s.namespace` and `k8s.output_size_bytes` as our only custom attributes since they add value without semconv alternatives.
+
+### What We Gain
+
+- `gen_ai.operation.name: "execute_tool"` - Required attribute we're missing
+- `gen_ai.tool.type: "function"` - Describes our tools correctly
+- `gen_ai.tool.call.id` - Unique identifier for correlation
+- Full Datadog LLM Observability integration
+- Cleaner, more maintainable code
