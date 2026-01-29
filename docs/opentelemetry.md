@@ -115,11 +115,11 @@ With tracing enabled, you'll see spans printed to the console:
   kind: 0,
   duration: 80259.75,
   attributes: {
+    'gen_ai.operation.name': 'execute_tool',
     'gen_ai.tool.name': 'kubectl_get',
-    'gen_ai.tool.input': '{\n  "resource": "pods"\n}',
-    'gen_ai.tool.call.arguments': '{\n  "resource": "pods"\n}',
-    'gen_ai.tool.duration_ms': 80,
-    'gen_ai.tool.success': true
+    'gen_ai.tool.type': 'function',
+    'gen_ai.tool.call.id': 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    'gen_ai.tool.call.arguments': '{\n  "resource": "pods"\n}'
   },
   status: { code: 1 }
 }
@@ -138,18 +138,18 @@ Note: `kind: 0` is INTERNAL, `status.code: 1` is OK.
 
 When an MCP tool is called, a span is created with these attributes:
 
-| Attribute | Source | Description |
-|-----------|--------|-------------|
-| `gen_ai.tool.name` | Both | Tool name (e.g., `kubectl_get`) |
-| `gen_ai.tool.input` | Viktor | JSON stringified input arguments |
-| `gen_ai.tool.call.arguments` | Semconv | JSON stringified input arguments |
-| `gen_ai.tool.duration_ms` | Viktor | Execution time in milliseconds |
-| `gen_ai.tool.success` | Viktor | `true` if tool succeeded |
+| Attribute | Required? | Description |
+|-----------|-----------|-------------|
+| `gen_ai.operation.name` | Required | Always `"execute_tool"` |
+| `gen_ai.tool.name` | Required | Tool name (e.g., `kubectl_get`) |
+| `gen_ai.tool.type` | Recommended | Always `"function"` |
+| `gen_ai.tool.call.id` | Recommended | Unique UUID per invocation |
+| `gen_ai.tool.call.arguments` | Required | JSON stringified input arguments |
 
-**Why duplicate attributes?** We include both Viktor's attribute names and OTel semantic conventions. This enables head-to-head comparison queries for the KubeCon demo while maintaining standards compliance.
+These attributes follow [OTel GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for compatibility with Datadog LLM Observability and other OTel-compatible tools.
 
 **Error handling:**
-- If kubectl fails (non-zero exit): `gen_ai.tool.success: false`, span status stays OK (the tool worked, kubectl failed)
+- If kubectl fails (non-zero exit): span status stays OK (the tool worked, kubectl failed)
 - If an exception is thrown: span records the exception and sets status to ERROR
 
 ### kubectl Subprocess Spans (M4)

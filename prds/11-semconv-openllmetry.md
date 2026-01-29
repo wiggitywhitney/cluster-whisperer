@@ -29,15 +29,20 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
 
 ## Success Criteria
 
-- [x] All MCP tool spans have required semconv attributes
-- [x] Viktor's custom attributes removed (except pragmatic exceptions noted below)
+- [ ] All MCP tool spans have required semconv attributes
+- [ ] Viktor's custom attributes removed (except pragmatic exceptions noted below)
 - [ ] LLM calls create spans with token usage and model info
-- [ ] Traces visible in Datadog LLM Observability with full feature support
+- [ ] Traces visible in **Datadog APM** with complete trace hierarchy
+- [ ] Traces visible in **Datadog LLM Observability** with full feature support:
+  - Token usage dashboards populated
+  - Model/provider grouping functional
+  - Cost analysis features available
 - [ ] Documentation updated
 
 ## Milestones
 
-- [ ] **M1**: Semconv Compliance for MCP Tool Spans
+- [x] **M1**: Semconv Compliance for MCP Tool Spans
+  - Review `docs/opentelemetry-research.md` Section 10 (Semconv Gap Analysis)
   - Add `gen_ai.operation.name: "execute_tool"` (required)
   - Add `gen_ai.tool.type: "function"` (recommended)
   - Add `gen_ai.tool.call.id` with unique identifier (recommended)
@@ -47,6 +52,7 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - Update `docs/opentelemetry.md` with new attribute list
 
 - [ ] **M2**: Semconv Compliance for kubectl Spans
+  - Review `docs/opentelemetry-research.md` Section 10 (Semconv Gap Analysis)
   - Remove `k8s.client` (redundant with `process.executable.name`)
   - Remove `k8s.operation` (captured in span name)
   - Remove `k8s.resource` (captured in span name)
@@ -57,16 +63,21 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - Update `docs/opentelemetry.md` with new attribute list
 
 - [ ] **M3**: OpenLLMetry Integration
+  - Review `docs/opentelemetry-research.md` Section 7 (OpenLLMetry)
   - Install `@traceloop/node-server-sdk`
   - Initialize OpenLLMetry in tracing setup
   - Verify LangChain → Anthropic calls create spans
   - Verify token usage attributes captured
   - Test complete trace hierarchy: user → LLM → tool → kubectl
 
-- [ ] **M4**: Datadog Verification
+- [ ] **M4**: Datadog Verification (APM + LLM Observability)
+  - Review `docs/opentelemetry-research.md` Section 9 (Datadog GenAI Semantic Conventions)
   - Deploy to Spider Rainbows cluster with Datadog Agent
-  - Verify traces appear in Datadog APM
-  - Verify LLM Observability features work (token dashboards, cost tracking)
+  - Verify traces appear in **Datadog APM** with complete trace hierarchy
+  - Verify traces appear in **Datadog LLM Observability**:
+    - Token usage dashboards show input/output tokens
+    - Model/provider grouping works correctly
+    - Cost analysis features are available
   - Document any Datadog-specific configuration needed
 
 ---
@@ -161,6 +172,17 @@ LLM chat (from OpenLLMetry)
 - Already follows OTel GenAI semantic conventions
 - Active project with community support
 
+### 2026-01-28: Omit gen_ai.tool.call.result
+
+**Decision**: Do not add `gen_ai.tool.call.result` attribute to MCP tool spans.
+
+**Rationale**:
+- kubectl output can be very large (pod listings, describe output, logs)
+- No Datadog LLM Observability feature depends on this attribute
+- The child kubectl span already has `k8s.output_size_bytes` for debugging large responses
+- Semconv marks it "recommended" not "required"
+- Cost (bloated spans, potential sensitive data) outweighs benefit (debugging context available elsewhere)
+
 ---
 
 ## Reference Sources
@@ -192,3 +214,10 @@ LLM chat (from OpenLLMetry)
 - Added sections 7-10 to `docs/opentelemetry-research.md`
 - Documented semconv gap analysis
 - Defined milestones for implementation
+
+### 2026-01-28: M1 Complete - MCP Tool Spans Semconv Compliance
+
+- Added `gen_ai.operation.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` to `tool-tracing.ts`
+- Removed Viktor's attributes (`gen_ai.tool.input`, `gen_ai.tool.duration_ms`, `gen_ai.tool.success`)
+- Updated `docs/opentelemetry.md` with new attribute list
+- Verified traces appear in Datadog APM with proper hierarchy

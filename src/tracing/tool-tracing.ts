@@ -10,12 +10,12 @@
  * tool handler, we wrap handlers with this function. This keeps tracing logic DRY and
  * separates the observability concern from the tool logic.
  *
- * Attribute strategy (from docs/opentelemetry-research.md Section 6):
- * We include BOTH Viktor's attributes AND OTel semantic conventions. This enables:
- * - Head-to-head comparison queries using Viktor's naming (for KubeCon demo)
- * - Standards compliance using semconv (for tooling compatibility)
+ * Attribute strategy (from docs/opentelemetry-research.md Section 10):
+ * We use OTel GenAI semantic conventions for full Datadog LLM Observability support.
+ * See PRD #11 for the semconv compliance work.
  */
 
+import { randomUUID } from "crypto";
 import { SpanKind, SpanStatusCode, context, trace } from "@opentelemetry/api";
 import { getTracer } from "./index";
 
@@ -33,21 +33,20 @@ interface ResultWithError {
  * Creates a span for each tool invocation with:
  * - Span name: "execute_tool {toolName}" (following semconv pattern)
  * - Span kind: INTERNAL (business logic, not an outbound call)
- * - Attributes: Both Viktor's and semconv naming (see below)
+ * - Attributes: OTel GenAI semantic conventions (see below)
  *
- * Attributes captured:
- * | Attribute                    | Source  | Description                    |
- * |------------------------------|---------|--------------------------------|
- * | gen_ai.tool.name             | Both    | Tool name (e.g., kubectl_get)  |
- * | gen_ai.tool.input            | Viktor  | JSON stringified input args    |
- * | gen_ai.tool.call.arguments   | Semconv | JSON stringified input args    |
- * | gen_ai.tool.duration_ms      | Viktor  | Execution time in milliseconds |
- * | gen_ai.tool.success          | Viktor  | true if tool succeeded         |
+ * Attributes captured (OTel GenAI semconv):
+ * | Attribute                    | Required?   | Description                    |
+ * |------------------------------|-------------|--------------------------------|
+ * | gen_ai.operation.name        | Required    | Always "execute_tool"          |
+ * | gen_ai.tool.name             | Required    | Tool name (e.g., kubectl_get)  |
+ * | gen_ai.tool.type             | Recommended | Always "function"              |
+ * | gen_ai.tool.call.id          | Recommended | Unique UUID per invocation     |
+ * | gen_ai.tool.call.arguments   | Required    | JSON stringified input args    |
  *
  * Error handling:
  * - Exceptions (thrown errors): recorded with span.recordException(), status ERROR
- * - Tool failures (isError: true): gen_ai.tool.success = false, span status stays OK
- *   (The tool worked correctly - it's kubectl that failed)
+ * - Tool failures (isError: true): span status stays OK (the tool worked, kubectl failed)
  *
  * @param toolName - The name of the tool (e.g., "kubectl_get")
  * @param handler - The async function that executes the tool logic
@@ -59,7 +58,6 @@ export function withToolTracing<TInput, TResult extends ResultWithError>(
 ): (input: TInput) => Promise<TResult> {
   return async (input: TInput): Promise<TResult> => {
     const tracer = getTracer();
-    const startTime = Date.now();
 
     // Create span manually so we can use context.with() for proper async propagation
     // startActiveSpan with async callbacks doesn't reliably propagate context
@@ -67,12 +65,13 @@ export function withToolTracing<TInput, TResult extends ResultWithError>(
       kind: SpanKind.INTERNAL,
     });
 
-    // Set input attributes before execution
-    // Both Viktor's naming and semconv for comparison capability
+    // Set attributes before execution (OTel GenAI semconv)
     const inputJson = JSON.stringify(input, null, 2);
-    span.setAttribute("gen_ai.tool.name", toolName);
-    span.setAttribute("gen_ai.tool.input", inputJson); // Viktor
-    span.setAttribute("gen_ai.tool.call.arguments", inputJson); // Semconv
+    span.setAttribute("gen_ai.operation.name", "execute_tool"); // Required
+    span.setAttribute("gen_ai.tool.name", toolName); // Required
+    span.setAttribute("gen_ai.tool.type", "function"); // Recommended
+    span.setAttribute("gen_ai.tool.call.id", randomUUID()); // Recommended
+    span.setAttribute("gen_ai.tool.call.arguments", inputJson); // Required
 
     // Use context.with() to ensure the span is active for all nested operations
     // This is the key fix - it properly propagates context across await boundaries
@@ -83,26 +82,14 @@ export function withToolTracing<TInput, TResult extends ResultWithError>(
         // Execute the actual tool handler (kubectl calls will inherit this context)
         const result = await handler(input);
 
-        // Calculate duration and set post-execution attributes
-        const durationMs = Date.now() - startTime;
-        span.setAttribute("gen_ai.tool.duration_ms", durationMs);
-
-        // Tool success is based on isError flag (from kubectl exit code)
-        // If isError is true, the tool worked but kubectl failed
-        const success = !result.isError;
-        span.setAttribute("gen_ai.tool.success", success);
-
         // Span status stays OK even if kubectl failed - the tool executed correctly
+        // (Duration is captured by span timing; success/failure by span status)
         span.setStatus({ code: SpanStatusCode.OK });
 
         return result;
       } catch (error) {
         // Actual exception - the tool itself failed to execute
-        const durationMs = Date.now() - startTime;
-        span.setAttribute("gen_ai.tool.duration_ms", durationMs);
-        span.setAttribute("gen_ai.tool.success", false);
-
-        // Record the exception for debugging
+        // (Duration is captured by span timing; success/failure by span status)
         if (error instanceof Error) {
           span.recordException(error);
           span.setStatus({
