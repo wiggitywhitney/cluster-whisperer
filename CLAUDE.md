@@ -99,7 +99,7 @@ For complex tracing scenarios that trigger multiple LLM calls and tool invocatio
 OTEL_TRACING_ENABLED=true \
 vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
 
-# OTLP export to Datadog (via port-forwarded agent)
+# OTLP export to Datadog (via local agent)
 OTEL_TRACING_ENABLED=true \
 OTEL_EXPORTER_TYPE=otlp \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
@@ -107,5 +107,7 @@ vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell m
 ```
 
 This triggers a full investigation: LLM reasoning → kubectl_get (find pods) → kubectl_describe (check events) → kubectl_logs (read output) → multiple iterations until root cause found.
+
+The local Datadog Agent receives traces on `localhost:4318` and forwards them to Datadog. No port-forwarding required.
 
 View traces in Datadog: <https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer>

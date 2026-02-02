@@ -373,7 +373,30 @@ vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
 
 ### Datadog Setup
 
-Datadog Agent can receive OTLP traces on port 4318. Install with OTLP receiver enabled:
+#### Local Datadog Agent (Recommended)
+
+If you have the Datadog Agent running locally on your machine, it can receive OTLP traces directly on `localhost:4318`. This is the simplest setup - no port-forwarding required.
+
+```bash
+# Verify the local agent is listening
+curl -s http://localhost:4318/v1/traces -X POST -H "Content-Type: application/json" -d '{}'
+# Any response (200, 400, 415) means the agent is reachable
+# "Connection refused" means the agent isn't running or OTLP isn't enabled
+```
+
+The local agent configuration at `/opt/datadog-agent/etc/datadog.yaml` should have:
+
+```yaml
+otlp_config:
+  receiver:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+```
+
+#### In-Cluster Datadog Agent (Alternative)
+
+If you need to run the Datadog Agent in a Kubernetes cluster instead, install with OTLP receiver enabled:
 
 ```bash
 # Add Datadog helm repo
@@ -407,7 +430,7 @@ helm install datadog datadog/datadog \
   -f /tmp/datadog-values.yaml
 ```
 
-If running cluster-whisperer locally, port-forward to access the agent:
+To send traces from a local cluster-whisperer to an in-cluster agent, port-forward:
 
 ```bash
 kubectl port-forward svc/datadog 4318:4318
@@ -468,11 +491,12 @@ The same code works with any OTLP-compatible backend. Only the endpoint changes:
 
 | Backend | Endpoint Example |
 |---------|------------------|
-| Datadog Agent (in-cluster) | `http://datadog:4318` |
 | Datadog Agent (local) | `http://localhost:4318` |
-| Jaeger | `http://jaeger-collector:4318` |
+| Datadog Agent (in-cluster via port-forward) | `http://localhost:4318` |
+| Jaeger (local) | `http://localhost:4318` |
+| Jaeger (in-cluster via port-forward) | `http://localhost:4318` |
 
-For KubeCon demo, audience vote determines which backend to use - just change `OTEL_EXPORTER_OTLP_ENDPOINT`.
+For KubeCon demo, audience vote determines which backend to use - just change which agent is running locally or which port-forward is active.
 
 ## Async Context Propagation
 
