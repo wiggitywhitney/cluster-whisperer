@@ -13,6 +13,10 @@
  * LangChain's tool() function takes an async function and options (name,
  * description, schema) and returns a Tool object. The agent reads the
  * description to decide when to use it, and LangChain handles validation.
+ *
+ * OpenTelemetry tracing:
+ * Each tool is wrapped with withToolTracing() to create parent spans for
+ * observability. This creates the hierarchy: execute_tool kubectl_get → kubectl get pods
  */
 
 import { tool } from "@langchain/core/tools";
@@ -26,7 +30,11 @@ import {
   kubectlLogs,
   kubectlLogsSchema,
   kubectlLogsDescription,
+  type KubectlGetInput,
+  type KubectlDescribeInput,
+  type KubectlLogsInput,
 } from "../core";
+import { withToolTracing } from "../../tracing/tool-tracing";
 
 /**
  * kubectl_get tool for LangChain agents.
@@ -35,12 +43,14 @@ import {
  * Note: Core functions return { output, isError }. LangChain tools expect
  * a string, so we extract just the output. The isError flag is only used
  * by MCP clients; LangChain agents interpret the error message content.
+ *
+ * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlGetTool = tool(
-  async (input) => {
+  withToolTracing("kubectl_get", async (input: KubectlGetInput) => {
     const { output } = await kubectlGet(input);
     return output;
-  },
+  }),
   {
     name: "kubectl_get",
     description: kubectlGetDescription,
@@ -51,12 +61,14 @@ export const kubectlGetTool = tool(
 /**
  * kubectl_describe tool for LangChain agents.
  * Gets detailed information about a specific resource.
+ *
+ * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlDescribeTool = tool(
-  async (input) => {
+  withToolTracing("kubectl_describe", async (input: KubectlDescribeInput) => {
     const { output } = await kubectlDescribe(input);
     return output;
-  },
+  }),
   {
     name: "kubectl_describe",
     description: kubectlDescribeDescription,
@@ -67,12 +79,14 @@ export const kubectlDescribeTool = tool(
 /**
  * kubectl_logs tool for LangChain agents.
  * Gets container logs from a pod.
+ *
+ * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlLogsTool = tool(
-  async (input) => {
+  withToolTracing("kubectl_logs", async (input: KubectlLogsInput) => {
     const { output } = await kubectlLogs(input);
     return output;
-  },
+  }),
   {
     name: "kubectl_logs",
     description: kubectlLogsDescription,

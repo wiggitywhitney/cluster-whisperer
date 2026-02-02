@@ -24,14 +24,66 @@
  * come from any external source (user input, API calls, AI agents).
  *
  * OpenTelemetry instrumentation:
- * Each kubectl execution creates a span with both Viktor's attributes (for
- * KubeCon demo comparison) and OTel semconv attributes (for standards compliance).
- * See docs/opentelemetry-research.md Section 6 for attribute mapping details.
+ * Each kubectl execution creates a span following OTel semantic conventions.
+ * We use process.* semconv attributes plus two pragmatic custom attributes
+ * (k8s.namespace and k8s.output_size_bytes) that have no semconv equivalent.
+ * See docs/opentelemetry-research.md Section 10 for the semconv gap analysis.
  */
 
 import { spawnSync } from "child_process";
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { getTracer } from "../tracing";
+
+/**
+ * Flags that may contain sensitive values (tokens, passwords, keys).
+ * These are redacted from span attributes to prevent leaking secrets to telemetry.
+ */
+const SENSITIVE_FLAGS = new Set([
+  "--token",
+  "--password",
+  "--client-key",
+  "--client-certificate",
+  "--kubeconfig",
+]);
+
+/**
+ * Redact sensitive kubectl arguments before adding to span attributes.
+ *
+ * Some kubectl flags can contain secrets (--token, --password, etc.) that
+ * should not be exported to telemetry backends. This function replaces
+ * the values of known sensitive flags with "[REDACTED]".
+ *
+ * @param args - kubectl arguments array
+ * @returns New array with sensitive values redacted
+ */
+function redactSensitiveArgs(args: string[]): string[] {
+  const redacted: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    // Check for --flag=value format
+    for (const flag of SENSITIVE_FLAGS) {
+      if (arg.startsWith(`${flag}=`)) {
+        redacted.push(`${flag}=[REDACTED]`);
+        continue;
+      }
+    }
+
+    // Check for --flag value format (two separate args)
+    if (SENSITIVE_FLAGS.has(arg) && i + 1 < args.length) {
+      redacted.push(arg);
+      redacted.push("[REDACTED]");
+      i++; // Skip the next arg (the value)
+      continue;
+    }
+
+    // Not sensitive, keep as-is
+    redacted.push(arg);
+  }
+
+  return redacted;
+}
 
 /**
  * Result from executing a kubectl command.
@@ -97,7 +149,7 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  * Creates an OpenTelemetry span for the kubectl subprocess execution with:
  * - Span name: "kubectl {operation} {resource}" (e.g., "kubectl get pods")
  * - Span kind: CLIENT (outbound subprocess call)
- * - Attributes: Both Viktor's k8s.* and OTel semconv process.* attributes
+ * - Attributes: OTel semconv process.* attributes plus k8s.namespace and k8s.output_size_bytes
  *
  * The span is automatically parented under the active MCP tool span (if any),
  * creating the hierarchy: execute_tool kubectl_get → kubectl get pods
@@ -115,7 +167,6 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
 export function executeKubectl(args: string[]): KubectlResult {
   const tracer = getTracer();
   const metadata = extractKubectlMetadata(args);
-  const startTime = Date.now();
 
   // Build the full command for display purposes (logging only, not execution)
   const command = `kubectl ${args.join(" ")}`;
@@ -127,18 +178,19 @@ export function executeKubectl(args: string[]): KubectlResult {
     { kind: SpanKind.CLIENT },
     (span) => {
       // Set pre-execution attributes
-      // Viktor's k8s.* attributes for KubeCon comparison
-      span.setAttribute("k8s.client", "kubectl");
-      span.setAttribute("k8s.operation", metadata.operation);
-      span.setAttribute("k8s.resource", metadata.resource);
-      span.setAttribute("k8s.args", args.join(" "));
+      // OTel semconv process.* attributes
+      // Redact sensitive flags (--token, --password, etc.) before adding to span
+      span.setAttribute("process.executable.name", "kubectl");
+      span.setAttribute("process.command_args", [
+        "kubectl",
+        ...redactSensitiveArgs(args),
+      ]);
+
+      // Pragmatic custom attributes (no semconv equivalent)
+      // k8s.namespace is useful for filtering queries by namespace
       if (metadata.namespace) {
         span.setAttribute("k8s.namespace", metadata.namespace);
       }
-
-      // OTel semconv process.* attributes for standards compliance
-      span.setAttribute("process.executable.name", "kubectl");
-      span.setAttribute("process.command_args", ["kubectl", ...args]);
 
       try {
         // spawnSync bypasses the shell - each array element is a separate argument.
@@ -147,10 +199,6 @@ export function executeKubectl(args: string[]): KubectlResult {
           encoding: "utf-8", // Return strings instead of Buffers
           timeout: 30000, // 30 second timeout to avoid hanging
         });
-
-        // Calculate duration for Viktor's attribute
-        const durationMs = Date.now() - startTime;
-        span.setAttribute("k8s.duration_ms", durationMs);
 
         // Handle spawn errors (e.g., kubectl not found)
         if (result.error) {
@@ -187,6 +235,8 @@ export function executeKubectl(args: string[]): KubectlResult {
         }
 
         // Success case
+        // k8s.output_size_bytes is a pragmatic custom attribute (no semconv equivalent)
+        // Useful for debugging when kubectl returns unexpectedly large output
         span.setAttribute(
           "k8s.output_size_bytes",
           Buffer.byteLength(result.stdout, "utf-8")
@@ -199,8 +249,6 @@ export function executeKubectl(args: string[]): KubectlResult {
         };
       } catch (error) {
         // Unexpected error during execution
-        const durationMs = Date.now() - startTime;
-        span.setAttribute("k8s.duration_ms", durationMs);
         span.setAttribute("process.exit.code", -1);
 
         if (error instanceof Error) {

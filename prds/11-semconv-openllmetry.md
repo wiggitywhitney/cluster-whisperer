@@ -1,6 +1,6 @@
 # PRD #11: Semconv Compliance + OpenLLMetry Integration
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-01-28
 **GitHub Issue**: [#11](https://github.com/wiggitywhitney/cluster-whisperer/issues/11)
 
@@ -31,13 +31,18 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
 
 - [x] All MCP tool spans have required semconv attributes
 - [x] Viktor's custom attributes removed (except pragmatic exceptions noted below)
-- [ ] LLM calls create spans with token usage and model info
-- [ ] Traces visible in Datadog LLM Observability with full feature support
-- [ ] Documentation updated
+- [x] LLM calls create spans with token usage and model info
+- [x] Traces visible in **Datadog APM** with complete trace hierarchy
+- [x] Traces visible in **Datadog LLM Observability** with full feature support:
+  - Token usage dashboards populated
+  - Model/provider grouping functional
+  - Cost analysis features available
+- [x] Documentation updated
 
 ## Milestones
 
-- [ ] **M1**: Semconv Compliance for MCP Tool Spans
+- [x] **M1**: Semconv Compliance for MCP Tool Spans
+  - Review `docs/opentelemetry-research.md` Section 10 (Semconv Gap Analysis)
   - Add `gen_ai.operation.name: "execute_tool"` (required)
   - Add `gen_ai.tool.type: "function"` (recommended)
   - Add `gen_ai.tool.call.id` with unique identifier (recommended)
@@ -46,7 +51,8 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - Remove `gen_ai.tool.success` (span status handles this)
   - Update `docs/opentelemetry.md` with new attribute list
 
-- [ ] **M2**: Semconv Compliance for kubectl Spans
+- [x] **M2**: Semconv Compliance for kubectl Spans
+  - Review `docs/opentelemetry-research.md` Section 10 (Semconv Gap Analysis)
   - Remove `k8s.client` (redundant with `process.executable.name`)
   - Remove `k8s.operation` (captured in span name)
   - Remove `k8s.resource` (captured in span name)
@@ -56,17 +62,22 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - **Keep** `k8s.output_size_bytes` (useful for debugging large responses)
   - Update `docs/opentelemetry.md` with new attribute list
 
-- [ ] **M3**: OpenLLMetry Integration
+- [x] **M3**: OpenLLMetry Integration
+  - Review `docs/opentelemetry-research.md` Section 7 (OpenLLMetry)
   - Install `@traceloop/node-server-sdk`
   - Initialize OpenLLMetry in tracing setup
   - Verify LangChain → Anthropic calls create spans
   - Verify token usage attributes captured
   - Test complete trace hierarchy: user → LLM → tool → kubectl
 
-- [ ] **M4**: Datadog Verification
+- [x] **M4**: Datadog Verification (APM + LLM Observability)
+  - Review `docs/opentelemetry-research.md` Section 9 (Datadog GenAI Semantic Conventions)
   - Deploy to Spider Rainbows cluster with Datadog Agent
-  - Verify traces appear in Datadog APM
-  - Verify LLM Observability features work (token dashboards, cost tracking)
+  - Verify traces appear in **Datadog APM** with complete trace hierarchy
+  - Verify traces appear in **Datadog LLM Observability**:
+    - Token usage dashboards show input/output tokens
+    - Model/provider grouping works correctly
+    - Cost analysis features are available
   - Document any Datadog-specific configuration needed
 
 ---
@@ -161,6 +172,17 @@ LLM chat (from OpenLLMetry)
 - Already follows OTel GenAI semantic conventions
 - Active project with community support
 
+### 2026-01-28: Omit gen_ai.tool.call.result
+
+**Decision**: Do not add `gen_ai.tool.call.result` attribute to MCP tool spans.
+
+**Rationale**:
+- kubectl output can be large (pod listings, describe output, logs)
+- No Datadog LLM Observability feature depends on this attribute
+- The child kubectl span already has `k8s.output_size_bytes` for debugging large responses
+- Semconv marks it "recommended" not "required"
+- Cost (bloated spans, potential sensitive data) outweighs benefit (debugging context available elsewhere)
+
 ---
 
 ## Reference Sources
@@ -192,3 +214,53 @@ LLM chat (from OpenLLMetry)
 - Added sections 7-10 to `docs/opentelemetry-research.md`
 - Documented semconv gap analysis
 - Defined milestones for implementation
+
+### 2026-01-28: M1 Complete - MCP Tool Spans Semconv Compliance
+
+- Added `gen_ai.operation.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` to `tool-tracing.ts`
+- Removed Viktor's attributes (`gen_ai.tool.input`, `gen_ai.tool.duration_ms`, `gen_ai.tool.success`)
+- Updated `docs/opentelemetry.md` with new attribute list
+- Verified traces appear in Datadog APM with proper hierarchy
+
+### 2026-01-29: M2 Complete - kubectl Spans Semconv Compliance
+
+- Removed Viktor's redundant attributes from `src/utils/kubectl.ts`:
+  - `k8s.client` (redundant with `process.executable.name`)
+  - `k8s.operation` (captured in span name)
+  - `k8s.resource` (captured in span name)
+  - `k8s.args` (redundant with `process.command_args`)
+  - `k8s.duration_ms` (span timing handles this)
+- Kept pragmatic custom attributes: `k8s.namespace`, `k8s.output_size_bytes`
+- Updated `docs/opentelemetry.md` with new kubectl attribute list
+- **Bug fix**: Added `withToolTracing()` to LangChain tools (`src/tools/langchain/index.ts`)
+  - LangChain tools were missing tracing wrapper, causing orphaned kubectl spans
+  - Now both MCP and LangChain tools create proper `execute_tool` parent spans
+- Made `withToolTracing()` generic to support any return type (not just MCP responses)
+- Verified parent-child span hierarchy in Datadog APM
+
+### 2026-02-01: M3 Complete - OpenLLMetry Integration
+
+- Installed `@traceloop/node-server-sdk` v0.22.6
+- Initialized OpenLLMetry in `src/tracing/index.ts` after OTel provider registration
+- Created `src/tracing/context-bridge.ts` to fix LangGraph context propagation:
+  - LangGraph breaks Node.js async context, causing tool spans to be orphaned
+  - AsyncLocalStorage bridges the context gap (workaround until OpenLLMetry-JS fixes #476)
+- Verified LangChain → Anthropic calls create spans with:
+  - Token usage (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`)
+  - Model info (`gen_ai.request.model`, `gen_ai.provider.name`)
+- Verified complete trace hierarchy: `cluster-whisperer.investigate` → LLM spans → tool spans → kubectl spans
+
+### 2026-02-02: M4 Complete - Datadog Verification
+
+- Verified traces appear in **Datadog APM** with complete trace hierarchy
+- Verified traces appear in **Datadog LLM Observability**:
+  - Token usage dashboards populated ✓
+  - Model/provider grouping functional ✓
+  - Cost analysis features available ✓ (Estimated Cost shown in trace details)
+- **Known limitation**: CONTENT column in LLM Observability shows "No content"
+  - Root cause: Datadog requires semconv v1.37+ attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with `parts` array format
+  - OpenLLMetry JS v0.22.6 emits old format (`gen_ai.prompt`, `traceloop.entity.input`)
+  - Env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` not yet implemented in OpenLLMetry JS
+  - Tracking upstream: [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515)
+  - Workaround documented in `docs/opentelemetry.md` for KubeCon demo if needed
+- Added Datadog Slack channel `#ml-obs-otel` for OTel/LLM Observability questions
