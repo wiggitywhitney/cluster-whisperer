@@ -1,6 +1,6 @@
 # PRD #8: Datadog Observability
 
-**Status**: Not Started
+**Status**: Complete
 **Created**: 2026-01-24
 **GitHub Issue**: [#8](https://github.com/wiggitywhitney/cluster-whisperer/issues/8)
 
@@ -63,35 +63,35 @@ Study Viktor's observability setup for integration patterns:
 
 ## Success Criteria
 
-- [ ] Traces from PRD #6 appear in Datadog APM
-- [ ] Trace hierarchy visible (MCP tool → kubectl execution)
-- [ ] Relevant attributes visible (tool names, durations, errors)
-- [ ] Documentation explains Datadog setup and LLM observability concepts
+- [x] Traces from PRD #6 appear in Datadog APM
+- [x] Trace hierarchy visible (MCP tool → kubectl execution)
+- [x] Relevant attributes visible (tool names, durations, errors)
+- [x] Documentation explains Datadog setup and LLM observability concepts
 
 ## Milestones
 
-- [ ] **M1**: Research Phase
+- [x] **M1**: Research Phase
   - Study Datadog OTLP ingestion documentation
   - Research Datadog LLM Observability features and requirements
   - Research Datadog service naming and tagging conventions
   - Reference Viktor's OTLP patterns (he uses Jaeger, principles may transfer)
-  - Document findings in `docs/datadog-research.md`
+  - ~~Document findings in `docs/datadog-research.md`~~ → consolidated in `docs/opentelemetry.md`
   - Update this PRD with specific configuration decisions
 
-- [ ] **M2**: Datadog Setup
-  - Configure Datadog API key (via Teller)
+- [x] **M2**: Datadog Setup
+  - Configure Datadog API key (via vals)
   - Set up OTLP exporter to Datadog endpoint
   - Configure service name and environment tags
-  - Create `docs/datadog-observability.md` explaining Datadog integration
-  - Manual test: traces appear in Datadog APM
+  - ~~Create `docs/datadog-observability.md`~~ → consolidated in `docs/opentelemetry.md`
+  - Manual test: traces appear in Datadog APM ✓
 
-- [ ] **M3**: Trace Enrichment
-  - Add Datadog-specific attributes if beneficial
-  - Configure trace sampling if needed
-  - Optimize trace data for Datadog visualization
-  - Manual test: traces show useful information in Datadog UI
+- [x] **M3**: Trace Enrichment
+  - Add Datadog-specific attributes if beneficial → using OTel GenAI semconv, works well
+  - Configure trace sampling if needed → not needed for POC
+  - Optimize trace data for Datadog visualization → hierarchy and attributes display correctly
+  - Manual test: traces show useful information in Datadog UI ✓
 
-- [ ] **M4**: Demo Polish
+- [~] **M4**: Demo Polish (deferred - KubeCon is 6 weeks away)
   - Create demo-friendly trace scenarios
   - Verify trace visualization is clear and educational
   - Document demo walkthrough
@@ -142,12 +142,12 @@ Verification:
 
 ### 2026-01-27: OTLP Ingestion Approach (from PRD #6 research)
 
-**Finding:** Datadog's direct OTLP intake has different maturity levels:
-- Logs: GA
-- Metrics: GA
-- Traces: **LLM Observability only** (Preview for general APM)
+**Finding:** Datadog requires an intermediary for OTLP trace ingestion:
+- Direct OTLP to Datadog backend: **Not supported** (no public endpoint exists)
+- Via Datadog Agent: **GA** (v6.32.0+/v7.32.0+) - recommended approach
+- Via OpenTelemetry Collector with Datadog exporter: Supported alternative
 
-**Decision:** Use **Datadog Agent with OTLP ingestion** instead of direct OTLP to Datadog endpoint.
+**Decision:** Use **Datadog Agent with OTLP ingestion**.
 
 **Rationale:**
 - Datadog Agent v6.32.0+/v7.32.0+ supports OTLP ingestion on ports 4317 (gRPC) and 4318 (HTTP)
@@ -164,10 +164,41 @@ DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=0.0.0.0:4318
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-**Alternative:** If we specifically want Datadog's LLM Observability features, direct OTLP may work. Research in M1 should evaluate whether LLM Observability provides value for our demo.
+**Note:** Datadog's LLM Observability features work with traces ingested via the Agent - no special configuration needed beyond standard OTLP setup.
+
+### 2026-02-02: Documentation Consolidation
+
+**Decision:** Consolidate Datadog documentation into `docs/opentelemetry.md` instead of creating separate `docs/datadog-research.md` and `docs/datadog-observability.md`.
+
+**Rationale:**
+- PRD #6 (OpenTelemetry) was completed first and naturally included Datadog setup as the backend
+- Datadog is just one OTLP backend option (alongside Jaeger) - the setup is backend-agnostic
+- Creating separate docs would duplicate content and require readers to cross-reference
+- The existing `docs/opentelemetry.md` already covers: local Datadog Agent setup, in-cluster setup, LLM Observability features, known limitations, and troubleshooting
+
+**Documentation location:** All Datadog-related documentation is in `docs/opentelemetry.md` under the "OTLP Export" and "Datadog Setup" sections.
+
+### 2026-02-02: Local Datadog Agent Architecture
+
+**Decision:** Use local Datadog Agent running on developer machine instead of in-cluster agent.
+
+**Rationale:**
+- Simpler setup - no port-forwarding required
+- Agent already running locally for other Datadog integrations
+- Works across different Kubernetes clusters without reconfiguration
+- OTLP endpoint at `localhost:4318` is always available
+
+**Previous approach:** In-cluster Datadog Agent required `kubectl port-forward` which added complexity and was cluster-specific.
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-02-02: M1-M3 Complete, M4 Deferred
+
+- Verified traces flow correctly through local Datadog Agent to Datadog APM
+- Confirmed span hierarchy: MCP tool spans → kubectl subprocess spans (parent-child)
+- Confirmed attributes visible: `process.command_args`, `process.exit.code`, `k8s.namespace`, `k8s.output_size_bytes`, `traceloop.entity.name`
+- Tested with complex investigation query ("Find the broken pod and tell me why it's failing") - multiple tool calls traced correctly
+- Documentation consolidated in `docs/opentelemetry.md` per design decision
+- M4 (Demo Polish) deferred - KubeCon is 6 weeks away, basic functionality complete
