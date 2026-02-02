@@ -378,9 +378,10 @@ vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
 If you have the Datadog Agent running locally on your machine, it can receive OTLP traces directly on `localhost:4318`. This is the simplest setup - no port-forwarding required.
 
 ```bash
-# Verify the local agent is receiving OTLP
+# Verify the local agent is listening
 curl -s http://localhost:4318/v1/traces -X POST -H "Content-Type: application/json" -d '{}'
-# Should return 200 (or similar, not connection refused)
+# Any response (200, 400, 415) means the agent is reachable
+# "Connection refused" means the agent isn't running or OTLP isn't enabled
 ```
 
 The local agent configuration at `/opt/datadog-agent/etc/datadog.yaml` should have:
