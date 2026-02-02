@@ -26,12 +26,14 @@ A **span** represents a single unit of work within a trace. Spans can be nested 
 Example trace structure:
 ```
 [Trace: "Why is my pod crashing?"]
-├── [Span: execute_tool kubectl_get]
-│   └── [Span: kubectl get pods]
-├── [Span: execute_tool kubectl_describe]
-│   └── [Span: kubectl describe pod my-app-xyz]
-└── [Span: execute_tool kubectl_logs]
-    └── [Span: kubectl logs my-app-xyz --previous]
+├── [Span: anthropic.chat]                          ← LLM call (from OpenLLMetry)
+│   ├── [Span: execute_tool kubectl_get]            ← Tool execution
+│   │   └── [Span: kubectl get pods]                ← kubectl subprocess
+│   └── [Span: execute_tool kubectl_describe]
+│       └── [Span: kubectl describe pod my-app-xyz]
+└── [Span: anthropic.chat]                          ← Second LLM call (with tool results)
+    └── [Span: execute_tool kubectl_logs]
+        └── [Span: kubectl logs my-app-xyz --previous]
 ```
 
 Each span has:
@@ -73,14 +75,102 @@ Example attributes on a kubectl span:
 ### Architecture
 
 ```
-src/tracing/index.ts        → OTel SDK initialization
-src/tracing/tool-tracing.ts → MCP tool instrumentation wrapper
+src/tracing/index.ts        → OpenLLMetry initialization (owns TracerProvider)
+src/tracing/tool-tracing.ts → Tool instrumentation using OpenLLMetry's withTool
 src/utils/kubectl.ts        → kubectl subprocess instrumentation
 src/index.ts                → CLI entry point (imports tracing first)
 src/mcp-server.ts           → MCP entry point (imports tracing first)
 ```
 
-Tracing is imported before anything else to ensure the tracer provider is registered before any instrumented code runs.
+Tracing is imported before anything else to ensure:
+1. OpenLLMetry registers the global TracerProvider
+2. LangChain/Anthropic are instrumented before they're imported
+
+### Why OpenLLMetry Owns the TracerProvider
+
+OpenTelemetry has a single global TracerProvider. If multiple libraries try to create their own, spans don't correlate properly - they end up in separate traces or get lost entirely.
+
+**The problem we avoided:**
+```typescript
+// ❌ BAD: Creates TWO TracerProviders - spans won't correlate
+const sdk = new NodeSDK({ ... });  // Creates TracerProvider #1
+sdk.start();
+traceloop.initialize({ ... });      // Creates TracerProvider #2 internally
+```
+
+**Our solution:**
+```typescript
+// ✅ GOOD: Single TracerProvider owned by OpenLLMetry
+traceloop.initialize({
+  exporter: ourCustomExporter,  // OpenLLMetry uses our exporter
+  // ... other options
+});
+// OpenLLMetry creates the only TracerProvider
+```
+
+This is the [officially recommended pattern](https://opentelemetry.io/docs/languages/js/instrumentation/) - let one library own the TracerProvider and pass configuration to it.
+
+### Integrating Custom Spans with OpenLLMetry
+
+OpenLLMetry provides official wrappers for creating spans that properly integrate with auto-instrumented LLM spans:
+
+**For tool calls:**
+```typescript
+import * as traceloop from "@traceloop/node-server-sdk";
+
+// Creates a span that's properly parented under the LLM span
+const result = await traceloop.withTool(
+  { name: "kubectl_get" },
+  async () => {
+    // Tool logic here - nested spans become children
+    return executeKubectl(["get", "pods"]);
+  }
+);
+```
+
+**For workflows:**
+```typescript
+await traceloop.withWorkflow(
+  { name: "investigate-pod-failure" },
+  async () => {
+    // Workflow logic
+  }
+);
+```
+
+**Getting the tracer for lower-level spans:**
+```typescript
+// For kubectl subprocess spans, we use OpenLLMetry's tracer
+const tracer = traceloop.getTraceloopTracer();
+
+tracer.startActiveSpan("kubectl get pods", { kind: SpanKind.CLIENT }, (span) => {
+  // This span is properly parented under the active withTool span
+});
+```
+
+### Why Use OpenLLMetry's Wrappers?
+
+1. **Proper parent-child relationships**: Spans created with `withTool` are automatically parented under the active LLM span from OpenLLMetry's auto-instrumentation
+
+2. **Consistent trace context**: Using `getTraceloopTracer()` ensures our custom spans use the same TracerProvider as auto-instrumented spans
+
+3. **Future compatibility**: As OpenLLMetry evolves, using their official APIs means we get improvements automatically
+
+### The Complete Span Hierarchy
+
+With this architecture, a full investigation produces this trace:
+
+```
+CompiledStateGraph.workflow (OpenLLMetry - LangGraph auto)
+└── anthropic.chat (OpenLLMetry - LLM auto)
+    └── kubectl_get (our withTool wrapper)
+        └── kubectl get pods (our subprocess span)
+└── anthropic.chat (OpenLLMetry - LLM auto)
+    └── kubectl_describe (our withTool wrapper)
+        └── kubectl describe pod broken-pod (our subprocess span)
+```
+
+All spans share the same trace ID and have proper parent-child relationships because they all use the same TracerProvider.
 
 ### Configuration
 
@@ -89,6 +179,7 @@ Tracing is **opt-in** - disabled by default for quiet development.
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
+| `TRACELOOP_TRACE_CONTENT` | `true` | Set to `false` to disable prompt/completion capture |
 
 ### Enabling Tracing
 
@@ -107,7 +198,9 @@ With tracing enabled, you'll see spans printed to the console:
 
 ```
 [OTel] Initializing OpenTelemetry tracing...
+[OTel] Using console exporter
 [OTel] Tracing enabled for cluster-whisperer v0.1.0
+[OTel] OpenLLMetry initialized for LLM instrumentation
 
 {
   traceId: '72f337f6c9f9631835e0731d77e22d17',
@@ -131,8 +224,43 @@ Note: `kind: 0` is INTERNAL, `status.code: 1` is OK.
 
 | Operation | Span Name | Status |
 |-----------|-----------|--------|
-| MCP tool invocation | `execute_tool {tool_name}` | ✅ Implemented (M3) |
-| kubectl subprocess | `kubectl {operation} {resource}` | ✅ Implemented (M4) |
+| LLM calls | `anthropic.chat` | ✅ Auto-instrumented by OpenLLMetry |
+| MCP tool invocation | `execute_tool {tool_name}` | ✅ Implemented |
+| kubectl subprocess | `kubectl {operation} {resource}` | ✅ Implemented |
+
+### LLM Call Spans (OpenLLMetry)
+
+[OpenLLMetry](https://github.com/traceloop/openllmetry-js) (`@traceloop/node-server-sdk` v0.22.6+) automatically instruments LangChain and Anthropic SDK calls. When the agent reasons and makes decisions, spans are created with:
+
+| Attribute | Description |
+|-----------|-------------|
+| `gen_ai.system` | Provider name (`Anthropic`) |
+| `gen_ai.request.model` | Model requested (`claude-sonnet-4-20250514`) |
+| `gen_ai.response.model` | Model used in response |
+| `gen_ai.usage.prompt_tokens` | Input token count |
+| `gen_ai.usage.completion_tokens` | Output token count |
+| `llm.usage.total_tokens` | Total tokens used |
+
+**Privacy note:** By default, OpenLLMetry captures prompt and completion content in span attributes. The SDK provides `traceContent: false` and `TRACELOOP_TRACE_CONTENT=false` options to disable this, but behavior may vary by version. For production use with sensitive data, verify content is not being captured in your specific setup.
+
+```bash
+# Environment variable
+export TRACELOOP_TRACE_CONTENT=false
+```
+
+**Example LLM span:**
+```
+{
+  name: 'anthropic.chat',
+  attributes: {
+    'gen_ai.system': 'Anthropic',
+    'gen_ai.request.model': 'claude-sonnet-4-20250514',
+    'gen_ai.usage.prompt_tokens': 1669,
+    'gen_ai.usage.completion_tokens': 137,
+    'llm.usage.total_tokens': 1806
+  }
+}
+```
 
 ### MCP Tool Spans (M3)
 
@@ -212,7 +340,7 @@ When `OTEL_TRACING_ENABLED` is not `true`, the OTel API returns a "no-op" tracer
 
 This design lets us leave instrumentation code in place without conditional checks everywhere.
 
-## OTLP Export (M5)
+## OTLP Export
 
 Traces can be sent to any OTLP-compatible backend (Datadog, Jaeger, etc.) by configuring the exporter.
 
@@ -223,6 +351,7 @@ Traces can be sent to any OTLP-compatible backend (Datadog, Jaeger, etc.) by con
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` for stdout, `otlp` for OTLP export |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (required when type=otlp) |
+| `TRACELOOP_TRACE_CONTENT` | `true` | Set to `false` to disable LLM prompt/completion capture |
 
 ### Using Console Exporter (Development)
 
@@ -284,6 +413,35 @@ kubectl port-forward svc/datadog 4318:4318
 
 View traces at: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
 
+### Datadog LLM Observability
+
+Traces also appear in Datadog LLM Observability with full feature support:
+- Token usage tracking
+- Cost estimation (calculated from token counts + model pricing)
+- LLM call counts
+- Model/provider grouping
+
+View LLM traces at: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Acluster-whisperer
+
+#### Known Limitation: CONTENT Column
+
+**Issue**: The trace list view in LLM Observability shows "No content" in the CONTENT column for INPUT/OUTPUT, even though the data exists on the spans.
+
+**Details**:
+- We set `traceloop.entity.input` and `traceloop.entity.output` attributes on the root span
+- This data IS captured and visible when drilling into span details or querying via API
+- The trace list summary column doesn't render these OpenLLMetry attributes
+
+**Root cause**: Datadog LLM Observability requires v1.37+ semconv attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with a specific `parts` array format. OpenLLMetry JS v0.22.6 still emits old format (`gen_ai.prompt`, `traceloop.entity.input`). The env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` should enable new format, but OpenLLMetry JS hasn't implemented support yet.
+
+**Status**: Waiting for OpenLLMetry fix. Track upstream: https://github.com/traceloop/openllmetry/issues/3515
+
+**Datadog support**: For OTel + LLM Observability questions, use internal Slack channel `#ml-obs-otel`.
+
+**Workaround (if needed for KubeCon demo)**: Add `gen_ai.input.messages` and `gen_ai.output.messages` attributes manually in `src/tracing/context-bridge.ts`. Format must include `parts` array: `[{"role":"user","parts":[{"type":"text","content":"..."}]}]`
+
+**Current behavior**: Click into individual traces to see full INPUT/OUTPUT content, or query via Datadog API/MCP.
+
 ### Jaeger Setup
 
 Jaeger also accepts OTLP on port 4318. The same endpoint configuration works:
@@ -336,9 +494,52 @@ execute_tool kubectl_get (INTERNAL, 294ms)
 └── kubectl get pods (CLIENT, 293ms)
 ```
 
+## LangGraph Context Bridge (Workaround)
+
+**Problem:** LangGraph breaks Node.js async context propagation. When OpenLLMetry creates spans for LLM calls and we create tool spans inside LangGraph's execution, the tool spans end up orphaned in separate traces instead of nesting under the workflow span.
+
+**Root cause:** LangGraph's internal async execution model loses the OpenTelemetry context that's normally propagated through Node.js's `AsyncLocalStorage`. The same issue occurred in the Python SDK and was fixed in [PR #3206](https://github.com/traceloop/openllmetry/pull/3206).
+
+**Upstream issue:** https://github.com/traceloop/openllmetry-js/issues/476
+
+**Our workaround:** `src/tracing/context-bridge.ts` uses explicit `AsyncLocalStorage` to bridge the context gap:
+
+```typescript
+// context-bridge.ts creates its own AsyncLocalStorage to preserve context
+const contextStorage = new AsyncLocalStorage<Context>();
+
+// withAgentTracing() stores the context before LangGraph runs
+export async function withAgentTracing<T>(question: string, fn: () => Promise<T>): Promise<T> {
+  return tracer.startActiveSpan("cluster-whisperer.investigate", async (span) => {
+    const currentContext = trace.setSpan(context.active(), span);
+    // Store context in our AsyncLocalStorage before LangGraph loses it
+    return contextStorage.run(currentContext, fn);
+  });
+}
+
+// withStoredContext() retrieves it when creating tool spans
+export function withStoredContext<T>(fn: () => T): T {
+  const storedCtx = contextStorage.getStore() ?? context.active();
+  return context.with(storedCtx, fn);
+}
+```
+
+**How it's used:**
+
+1. `src/index.ts` wraps the agent invocation with `withAgentTracing(question, ...)`
+2. `src/tracing/tool-tracing.ts` uses `withStoredContext()` when creating tool spans
+3. Tool spans now correctly nest under the workflow span
+
+**When to remove:** Check [issue #476](https://github.com/traceloop/openllmetry-js/issues/476) periodically. When OpenLLMetry-JS adds native LangGraph support, this workaround can be removed:
+1. Delete `src/tracing/context-bridge.ts`
+2. Update `src/index.ts` to remove `withAgentTracing` wrapper
+3. Update `src/tracing/tool-tracing.ts` to remove `withStoredContext` usage
+
 ## Further Reading
 
 - [OpenTelemetry Concepts](https://opentelemetry.io/docs/concepts/)
 - [OTel JavaScript Documentation](https://opentelemetry.io/docs/languages/js/)
 - [Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)
+- [OpenLLMetry Documentation](https://www.traceloop.com/docs/openllmetry/introduction) - LLM observability
+- [OpenLLMetry Privacy Settings](https://www.traceloop.com/docs/openllmetry/privacy/traces) - Disabling content tracing
 - [`docs/opentelemetry-research.md`](./opentelemetry-research.md) - Detailed research findings

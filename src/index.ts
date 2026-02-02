@@ -20,6 +20,7 @@ import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
 import { getInvestigatorAgent, truncate } from "./agent/investigator";
+import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 
 /**
  * Validates that the environment is properly configured before running the agent.
@@ -75,113 +76,127 @@ async function main() {
       console.log(`\nQuestion: ${question}\n`);
 
       /**
-       * Stream events from the agent as it works.
+       * Wrap the entire agent invocation with tracing.
        *
-       * streamEvents() is a LangChain method that comes built into
-       * the agent (see src/agent/investigator.ts for details).
+       * withAgentTracing creates a root span and stores its context in
+       * AsyncLocalStorage. This bridges the context gap that LangGraph creates,
+       * ensuring tool spans properly nest under this root span.
        *
-       * Why streamEvents instead of invoke?
-       * invoke() waits until the agent is completely done, then returns the
-       * final result. streamEvents() gives us a live feed of what's happening:
-       * - When the agent decides to call a tool
-       * - What arguments it passes
-       * - What result it gets back
-       *
-       * This visibility is valuable for learning (see how the agent thinks)
-       * and debugging (understand why it made certain choices).
-       *
-       * The version: "v2" parameter specifies the event format. v2 is the
-       * current recommended format for LangGraph agents.
+       * See src/tracing/context-bridge.ts for details on the workaround.
        */
-      const eventStream = getInvestigatorAgent().streamEvents(
-        { messages: [new HumanMessage(question)] },
-        { version: "v2" }
-      );
+      await withAgentTracing(question, async () => {
+        /**
+         * Stream events from the agent as it works.
+         *
+         * streamEvents() is a LangChain method that comes built into
+         * the agent (see src/agent/investigator.ts for details).
+         *
+         * Why streamEvents instead of invoke?
+         * invoke() waits until the agent is completely done, then returns the
+         * final result. streamEvents() gives us a live feed of what's happening:
+         * - When the agent decides to call a tool
+         * - What arguments it passes
+         * - What result it gets back
+         *
+         * This visibility is valuable for learning (see how the agent thinks)
+         * and debugging (understand why it made certain choices).
+         *
+         * The version: "v2" parameter specifies the event format. v2 is the
+         * current recommended format for LangGraph agents.
+         */
+        const eventStream = getInvestigatorAgent().streamEvents(
+          { messages: [new HumanMessage(question)] },
+          { version: "v2" }
+        );
 
-      /**
-       * Track the final answer so we can display it at the end.
-       * The agent might produce multiple messages, but we want the last
-       * AI message which contains the summary answer.
-       */
-      let finalAnswer = "";
+        /**
+         * Track the final answer so we can display it at the end.
+         * The agent might produce multiple messages, but we want the last
+         * AI message which contains the summary answer.
+         */
+        let finalAnswer = "";
 
-      /**
-       * Process events as they stream in.
-       *
-       * Event types we care about:
-       * - on_tool_start: Agent decided to call a tool, shows name and args
-       * - on_tool_end: Tool finished, shows the result
-       * - on_chat_model_end: Model finished generating, capture final answer
-       *
-       * There are many other event types (on_chain_start, on_llm_stream, etc.)
-       * but these three give us the visibility we need without noise.
-       */
-      for await (const event of eventStream) {
-        if (event.event === "on_tool_start") {
-          // Agent is calling a tool - show which one and with what arguments
-          // event.data.input contains the tool arguments
-          const toolName = event.name;
-          const toolInput = event.data.input;
+        /**
+         * Process events as they stream in.
+         *
+         * Event types we care about:
+         * - on_tool_start: Agent decided to call a tool, shows name and args
+         * - on_tool_end: Tool finished, shows the result
+         * - on_chat_model_end: Model finished generating, capture final answer
+         *
+         * There are many other event types (on_chain_start, on_llm_stream, etc.)
+         * but these three give us the visibility we need without noise.
+         */
+        for await (const event of eventStream) {
+          if (event.event === "on_tool_start") {
+            // Agent is calling a tool - show which one and with what arguments
+            // event.data.input contains the tool arguments
+            const toolName = event.name;
+            const toolInput = event.data.input;
 
-          // The input might be nested in an 'input' property if it was serialized
-          let args = toolInput;
-          try {
-            if (typeof toolInput === "object" && toolInput?.input) {
-              args = JSON.parse(toolInput.input);
+            // The input might be nested in an 'input' property if it was serialized
+            let args = toolInput;
+            try {
+              if (typeof toolInput === "object" && toolInput?.input) {
+                args = JSON.parse(toolInput.input);
+              }
+            } catch {
+              // If parsing fails, use the raw input - better than crashing
             }
-          } catch {
-            // If parsing fails, use the raw input - better than crashing
+
+            console.log(`🔧 Tool: ${toolName}`);
+            console.log(`   Args: ${JSON.stringify(args)}`);
           }
 
-          console.log(`🔧 Tool: ${toolName}`);
-          console.log(`   Args: ${JSON.stringify(args)}`);
-        }
+          if (event.event === "on_tool_end") {
+            // Tool finished - show the result (truncated to avoid flooding terminal)
+            // event.data.output is a ToolMessage object with a .content property
+            const output = event.data.output;
+            const content = output?.content ?? output;
+            console.log(`   Result:\n${truncate(String(content), 1100)}`);
+            console.log(); // blank line between tool calls
+          }
 
-        if (event.event === "on_tool_end") {
-          // Tool finished - show the result (truncated to avoid flooding terminal)
-          // event.data.output is a ToolMessage object with a .content property
-          const output = event.data.output;
-          const content = output?.content ?? output;
-          console.log(`   Result:\n${truncate(String(content), 1100)}`);
-          console.log(); // blank line between tool calls
-        }
-
-        if (event.event === "on_chat_model_end") {
-          // Model finished generating - capture the response for final display
-          // The output contains the message(s) the model produced
-          // Content might be a string or an array of content blocks
-          //
-          // With extended thinking enabled, content includes both:
-          // - type: "thinking" blocks - Claude's reasoning process
-          // - type: "text" blocks - the actual response text
-          const output = event.data.output;
-          if (output?.content) {
-            const content = output.content;
-            if (typeof content === "string") {
-              finalAnswer = content;
-            } else if (Array.isArray(content)) {
-              for (const block of content) {
-                if (block.type === "thinking") {
-                  // Display thinking content so users can see the reasoning
-                  // \x1b[3m starts italic, \x1b[0m resets formatting
-                  console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
-                } else if (block.type === "text") {
-                  // Capture text for final answer display
-                  finalAnswer += block.text;
+          if (event.event === "on_chat_model_end") {
+            // Model finished generating - capture the response for final display
+            // The output contains the message(s) the model produced
+            // Content might be a string or an array of content blocks
+            //
+            // With extended thinking enabled, content includes both:
+            // - type: "thinking" blocks - Claude's reasoning process
+            // - type: "text" blocks - the actual response text
+            const output = event.data.output;
+            if (output?.content) {
+              const content = output.content;
+              if (typeof content === "string") {
+                finalAnswer = content;
+              } else if (Array.isArray(content)) {
+                for (const block of content) {
+                  if (block.type === "thinking") {
+                    // Display thinking content so users can see the reasoning
+                    // \x1b[3m starts italic, \x1b[0m resets formatting
+                    console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
+                  } else if (block.type === "text") {
+                    // Capture text for final answer display
+                    finalAnswer += block.text;
+                  }
                 }
               }
             }
           }
         }
-      }
 
-      // Display the final answer with a separator for visibility
-      if (finalAnswer) {
-        console.log("─".repeat(60));
-        console.log("Answer:");
-        console.log(finalAnswer);
-        console.log();
-      }
+        // Display the final answer with a separator for visibility
+        if (finalAnswer) {
+          // Record output on the trace for LLM Observability visibility
+          setTraceOutput(finalAnswer);
+
+          console.log("─".repeat(60));
+          console.log("Answer:");
+          console.log(finalAnswer);
+          console.log();
+        }
+      });
     });
 
   await program.parseAsync(process.argv);

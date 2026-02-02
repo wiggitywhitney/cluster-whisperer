@@ -1,6 +1,6 @@
 # PRD #11: Semconv Compliance + OpenLLMetry Integration
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-01-28
 **GitHub Issue**: [#11](https://github.com/wiggitywhitney/cluster-whisperer/issues/11)
 
@@ -29,15 +29,15 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
 
 ## Success Criteria
 
-- [ ] All MCP tool spans have required semconv attributes
-- [ ] Viktor's custom attributes removed (except pragmatic exceptions noted below)
-- [ ] LLM calls create spans with token usage and model info
-- [ ] Traces visible in **Datadog APM** with complete trace hierarchy
-- [ ] Traces visible in **Datadog LLM Observability** with full feature support:
+- [x] All MCP tool spans have required semconv attributes
+- [x] Viktor's custom attributes removed (except pragmatic exceptions noted below)
+- [x] LLM calls create spans with token usage and model info
+- [x] Traces visible in **Datadog APM** with complete trace hierarchy
+- [x] Traces visible in **Datadog LLM Observability** with full feature support:
   - Token usage dashboards populated
   - Model/provider grouping functional
   - Cost analysis features available
-- [ ] Documentation updated
+- [x] Documentation updated
 
 ## Milestones
 
@@ -62,7 +62,7 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - **Keep** `k8s.output_size_bytes` (useful for debugging large responses)
   - Update `docs/opentelemetry.md` with new attribute list
 
-- [ ] **M3**: OpenLLMetry Integration
+- [x] **M3**: OpenLLMetry Integration
   - Review `docs/opentelemetry-research.md` Section 7 (OpenLLMetry)
   - Install `@traceloop/node-server-sdk`
   - Initialize OpenLLMetry in tracing setup
@@ -70,7 +70,7 @@ Add `@traceloop/node-server-sdk` to auto-instrument LangChain → Anthropic LLM 
   - Verify token usage attributes captured
   - Test complete trace hierarchy: user → LLM → tool → kubectl
 
-- [ ] **M4**: Datadog Verification (APM + LLM Observability)
+- [x] **M4**: Datadog Verification (APM + LLM Observability)
   - Review `docs/opentelemetry-research.md` Section 9 (Datadog GenAI Semantic Conventions)
   - Deploy to Spider Rainbows cluster with Datadog Agent
   - Verify traces appear in **Datadog APM** with complete trace hierarchy
@@ -237,3 +237,30 @@ LLM chat (from OpenLLMetry)
   - Now both MCP and LangChain tools create proper `execute_tool` parent spans
 - Made `withToolTracing()` generic to support any return type (not just MCP responses)
 - Verified parent-child span hierarchy in Datadog APM
+
+### 2026-02-01: M3 Complete - OpenLLMetry Integration
+
+- Installed `@traceloop/node-server-sdk` v0.22.6
+- Initialized OpenLLMetry in `src/tracing/index.ts` after OTel provider registration
+- Created `src/tracing/context-bridge.ts` to fix LangGraph context propagation:
+  - LangGraph breaks Node.js async context, causing tool spans to be orphaned
+  - AsyncLocalStorage bridges the context gap (workaround until OpenLLMetry-JS fixes #476)
+- Verified LangChain → Anthropic calls create spans with:
+  - Token usage (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`)
+  - Model info (`gen_ai.request.model`, `gen_ai.provider.name`)
+- Verified complete trace hierarchy: `cluster-whisperer.investigate` → LLM spans → tool spans → kubectl spans
+
+### 2026-02-02: M4 Complete - Datadog Verification
+
+- Verified traces appear in **Datadog APM** with complete trace hierarchy
+- Verified traces appear in **Datadog LLM Observability**:
+  - Token usage dashboards populated ✓
+  - Model/provider grouping functional ✓
+  - Cost analysis features available ✓ (Estimated Cost shown in trace details)
+- **Known limitation**: CONTENT column in LLM Observability shows "No content"
+  - Root cause: Datadog requires semconv v1.37+ attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with `parts` array format
+  - OpenLLMetry JS v0.22.6 emits old format (`gen_ai.prompt`, `traceloop.entity.input`)
+  - Env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` not yet implemented in OpenLLMetry JS
+  - Tracking upstream: https://github.com/traceloop/openllmetry/issues/3515
+  - Workaround documented in `docs/opentelemetry.md` for KubeCon demo if needed
+- Documented Datadog Slack channel `#ml-obs-otel` for OTel/LLM Observability questions
