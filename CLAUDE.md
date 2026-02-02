@@ -1,5 +1,16 @@
 # Project Guidelines
 
+## Terminology Corrections
+
+**Correct the user if they confuse LangChain and LangGraph** - even if you understand from context. This is for a KubeCon presentation; precise terminology matters.
+
+- **LangGraph**: What we use for the agentic loop (cycles, state, tool-calling decisions)
+- **LangChain**: The broader framework that LangGraph builds on (LLM abstractions, integrations)
+
+If the user says "LangChain" when describing agentic/looping behavior, gently correct: "Just a note - that's LangGraph, not LangChain. LangGraph handles the agentic loop; LangChain is the underlying framework."
+
+---
+
 This is a learning-focused repository for a KubeCon presentation. All code and documentation should:
 
 - Include doc strings explaining what the code does and why
@@ -15,7 +26,7 @@ This is a learning-focused repository for a KubeCon presentation. All code and d
 
 ## Architecture
 
-This project uses LangChain to create an agentic loop with multiple kubectl tools:
+This project uses **LangGraph** (built on LangChain) to create an agentic loop with multiple kubectl tools:
 
 ```
 User Question → Agentic Loop → [kubectl tools] → Cluster → Answer
