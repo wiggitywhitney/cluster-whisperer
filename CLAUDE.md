@@ -34,19 +34,54 @@ Viktor's examples for patterns to follow:
 
 ## Secrets Management with vals
 
-This project requires `ANTHROPIC_API_KEY` for the LangChain agent. Secrets are injected using [vals](https://github.com/helmfile/vals).
+This project uses [vals](https://github.com/helmfile/vals) to inject secrets from Google Secrets Manager.
 
-**IMPORTANT**: Always use the `-i` flag with `vals exec`:
+### Running cluster-whisperer
 
 ```bash
-# -i inherits environment variables (including PATH)
+# -i inherits environment variables (including PATH for kubectl)
 vals exec -i -f .vals.yaml -- node dist/index.js "your question"
-
-# Verify secrets are configured
-vals eval -f .vals.yaml
 ```
 
-**Why `-i` is required**: By default, vals resets the environment to a minimal PATH (`/usr/local/bin:/bin:/usr/bin`). This means kubectl at `/opt/homebrew/bin/kubectl` won't be found when node spawns it as a subprocess. The `-i` flag tells vals to inherit the current shell's environment variables, preserving your full PATH.
+### Starting Claude Code
+
+```bash
+claude
+```
+
+## Datadog Remote MCP
+
+This project uses the official Datadog remote MCP for querying traces, logs, and metrics from within Claude Code.
+
+### Setup (one-time)
+
+```bash
+claude mcp add --transport http datadog-mcp https://mcp.datadoghq.com/api/unstable/mcp-server/mcp
+```
+
+### Authentication
+
+On first use, Claude Code will prompt for OAuth authentication - complete the sign-in flow in your browser. Check `/mcp` to see connection status.
+
+### Available tools
+
+- `search_datadog_spans` - Query APM traces (e.g., `service:cluster-whisperer`)
+- `get_datadog_trace` - Fetch complete trace by trace ID
+- `search_datadog_logs` - Query logs
+- `search_datadog_metrics` - Query metrics
+
+### Example: Verify cluster-whisperer traces
+
+After running the agent with OTLP export enabled, use:
+```
+search_datadog_spans with query: "service:cluster-whisperer" from: "now-1h"
+```
+
+### Verify secrets are configured
+
+```bash
+vals eval -f .vals.yaml
+```
 
 ## Git Workflow
 
@@ -54,3 +89,23 @@ vals eval -f .vals.yaml
 - Don't squash git commits
 - Make a new branch for each feature/PRD
 - Ensure CodeRabbit review is examined before merging
+
+## Testing Tracing
+
+For complex tracing scenarios that trigger multiple LLM calls and tool invocations, use the "broken pod" investigation:
+
+```bash
+# Console output (development)
+OTEL_TRACING_ENABLED=true \
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
+
+# OTLP export to Datadog (via port-forwarded agent)
+OTEL_TRACING_ENABLED=true \
+OTEL_EXPORTER_TYPE=otlp \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
+```
+
+This triggers a full investigation: LLM reasoning → kubectl_get (find pods) → kubectl_describe (check events) → kubectl_logs (read output) → multiple iterations until root cause found.
+
+View traces in Datadog: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
