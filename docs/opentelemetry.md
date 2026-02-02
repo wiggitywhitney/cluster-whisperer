@@ -537,11 +537,76 @@ export function withStoredContext<T>(fn: () => T): T {
 2. Update `src/index.ts` to remove `withAgentTracing` wrapper
 3. Update `src/tracing/tool-tracing.ts` to remove `withStoredContext` usage
 
+## Why OpenLLMetry?
+
+### What is OpenLLMetry?
+
+[OpenLLMetry](https://github.com/traceloop/openllmetry) is a library that automatically instruments LLM calls using OpenTelemetry. It's built by [Traceloop](https://traceloop.com) and released under Apache 2.0.
+
+**OpenTelemetry** is the standard for observability - it defines *how* to describe events (spans, traces, attributes) but doesn't know anything specific about LLMs.
+
+**OpenLLMetry** fills the gap by:
+- Monkey-patching LangChain and Anthropic SDKs to capture LLM calls automatically
+- Creating spans with proper GenAI semantic conventions (`gen_ai.usage.input_tokens`, etc.)
+- Maintaining compatibility as those SDKs update
+
+### Why not just use the OTel SDK directly?
+
+OpenTelemetry is layered:
+
+| Layer | What it provides | Status |
+|-------|------------------|--------|
+| **Core SDK** | Span creation, context propagation, exporters | ✅ Exists |
+| **Semantic Conventions** | Attribute names like `gen_ai.usage.input_tokens` | ✅ Exists (GenAI semconv stable) |
+| **Instrumentation Libraries** | Code that hooks into LangChain/Anthropic/OpenAI | ⏳ In progress |
+
+The OTel project provides the SDK and conventions, but **instrumentation libraries are contributed separately**. There's an `opentelemetry-js-contrib` repo with instrumentations for Express, PostgreSQL, Redis, etc. - but official LLM instrumentations for JavaScript don't exist yet.
+
+### OpenTelemetry GenAI SIG
+
+The [OpenTelemetry GenAI Special Interest Group](https://opentelemetry.io/blog/2024/otel-generative-ai/) (started April 2024) is working to standardize LLM observability:
+
+- **Semantic conventions**: Now stable - attribute names, types, enum values for LLM calls
+- **Instrumentation libraries**: In development - Python first, JavaScript TBD
+
+OpenLLMetry's semantic conventions have been [incorporated into official OTel semconv](https://horovits.medium.com/opentelemetry-for-genai-and-the-openllmetry-project-81b9cea6a771). Traceloop is working to donate the instrumentation code to OpenTelemetry.
+
+### Roadmap and Timeline
+
+The [GenAI project milestones](https://github.com/open-telemetry/community/blob/main/projects/gen-ai.md):
+
+| Milestone | Goal | Status |
+|-----------|------|--------|
+| **M1** | Ship OpenAI instrumentation for Python and JS | Python: in progress, JS: TBD |
+| **M2** | Instrumentations for orchestrators/frameworks (LangChain, etc.) | Future |
+| **M3** | Propose instrumentations to upstream libraries | Future |
+
+**No specific dates are published.** Python is the priority; JavaScript timeline is undefined.
+
+### What this means for cluster-whisperer
+
+For now, OpenLLMetry (`@traceloop/node-server-sdk`) is our best option for automatic LLM instrumentation in Node.js. When official OTel instrumentation becomes available:
+
+1. Switch from `@traceloop/node-server-sdk` to official `@opentelemetry/instrumentation-*` packages
+2. The code would be maintained by the OTel community instead of one company
+3. Our upstream issues would be tracked in OTel repos
+
+### Known limitations
+
+We track two upstream issues:
+
+| Issue | Problem | Impact |
+|-------|---------|--------|
+| [traceloop/openllmetry-js#476](https://github.com/traceloop/openllmetry-js/issues/476) | LangGraph breaks async context propagation | We use `context-bridge.ts` as workaround |
+| [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) | Old semconv format for content attributes | Datadog CONTENT column shows "No content" |
+
 ## Further Reading
 
 - [OpenTelemetry Concepts](https://opentelemetry.io/docs/concepts/)
 - [OTel JavaScript Documentation](https://opentelemetry.io/docs/languages/js/)
 - [Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)
+- [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+- [OpenTelemetry GenAI SIG](https://github.com/open-telemetry/community/blob/main/projects/gen-ai.md)
 - [OpenLLMetry Documentation](https://www.traceloop.com/docs/openllmetry/introduction) - LLM observability
 - [OpenLLMetry Privacy Settings](https://www.traceloop.com/docs/openllmetry/privacy/traces) - Disabling content tracing
 - [`docs/opentelemetry-research.md`](./opentelemetry-research.md) - Detailed research findings
