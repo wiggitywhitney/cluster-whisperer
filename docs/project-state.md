@@ -228,17 +228,8 @@ Whitney uses **US1** site: `datadoghq.com`
 1. ✅ OTLP exporter added to `src/tracing/index.ts`
 2. ✅ Environment variable `OTEL_EXPORTER_TYPE` (console | otlp)
 3. ✅ Environment variable `OTEL_EXPORTER_OTLP_ENDPOINT` for collector URL
-4. ✅ Datadog Agent installed in Spider Rainbows cluster with OTLP receiver (port 4318)
+4. ✅ Local Datadog Agent configured with OTLP receiver (port 4318)
 5. ✅ Traces verified in Datadog APM
-
-### Current Deployment Issue
-
-**Problem**: cluster-whisperer runs locally but Datadog Agent is in the cluster. Requires port-forwarding (`kubectl port-forward svc/datadog 4318:4318`) which is not ideal.
-
-**Better approaches for KubeCon demo**:
-- Run cluster-whisperer in the cluster (same network as Datadog Agent)
-- Run Datadog Agent locally (same machine as cluster-whisperer)
-- Use Datadog's direct OTLP endpoint (only GA for LLM Observability, not general APM)
 
 ### Span Hierarchy (Fixed)
 
