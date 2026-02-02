@@ -56,6 +56,18 @@ const SERVICE_NAME = "cluster-whisperer";
 const isTracingEnabled = process.env.OTEL_TRACING_ENABLED === "true";
 
 /**
+ * Check if trace content capture is enabled.
+ *
+ * When enabled, prompts, completions, and embeddings are captured in span attributes.
+ * This can expose sensitive user data in telemetry pipelines.
+ *
+ * SECURITY: Default to false to prevent accidental data exposure.
+ * Only enable for development/debugging with non-sensitive data.
+ */
+const isTraceContentEnabled =
+  process.env.OTEL_TRACE_CONTENT_ENABLED === "true";
+
+/**
  * Exporter type: "console" for development, "otlp" for production backends.
  *
  * When using "otlp", you must also set OTEL_EXPORTER_OTLP_ENDPOINT to the
@@ -138,8 +150,8 @@ if (isTracingEnabled) {
     exporter: exporter,
     // Disable batching for immediate export - better for development and short-lived CLI
     disableBatch: true,
-    // Capture prompt/completion content for LLM Observability visibility
-    traceContent: true,
+    // Capture prompt/completion content only when explicitly enabled (security: default false)
+    traceContent: isTraceContentEnabled,
     // Silence the default "Traceloop exporting traces to..." message
     silenceInitializationMessage: true,
   });
@@ -148,11 +160,14 @@ if (isTracingEnabled) {
   console.log("[OTel] OpenLLMetry initialized for LLM instrumentation");
 
   /**
-   * Graceful shutdown: flush any pending spans before process exits.
+   * Graceful shutdown: flush pending spans before process exits.
    *
    * Why this matters:
    * Even with disableBatch: true, there may be spans in flight when the process
    * exits. forceFlush ensures they're exported before shutdown.
+   *
+   * Note: The @traceloop/node-server-sdk v0.22.x only exports forceFlush(),
+   * not a shutdown() method. forceFlush() is sufficient for our CLI use case.
    */
   const shutdown = async () => {
     try {
@@ -171,12 +186,13 @@ if (isTracingEnabled) {
 /**
  * Get a tracer for creating spans.
  *
- * This returns OpenLLMetry's tracer, which uses the TracerProvider that
- * OpenLLMetry created. This ensures our custom spans (kubectl subprocess calls)
- * are properly correlated with auto-instrumented LLM spans.
+ * Uses the standard OpenTelemetry API to get a tracer from the global
+ * TracerProvider (which OpenLLMetry registered during initialization).
+ * This is the stable, documented approach that ensures our custom spans
+ * correlate with auto-instrumented LLM spans.
  *
- * When tracing is disabled, OpenLLMetry isn't initialized, so we fall back to
- * the global OTel API which returns a no-op tracer (safe to call, does nothing).
+ * When tracing is disabled, the global TracerProvider returns a no-op tracer
+ * (safe to call, does nothing).
  *
  * Usage in other modules:
  * ```typescript
@@ -186,12 +202,9 @@ if (isTracingEnabled) {
  * ```
  */
 export function getTracer(): Tracer {
-  // Use OpenLLMetry's tracer when tracing is enabled
-  // This ensures our spans use the same TracerProvider as auto-instrumented spans
-  if (isTracingEnabled) {
-    return traceloop.getTraceloopTracer();
-  }
-  // When disabled, return the global tracer (which is a no-op)
+  // Use standard OTel API - this returns the tracer from whatever
+  // TracerProvider is registered globally (OpenLLMetry's when tracing is enabled,
+  // or a no-op when disabled)
   const { trace } = require("@opentelemetry/api");
   return trace.getTracer(SERVICE_NAME);
 }
@@ -204,3 +217,11 @@ export function getTracer(): Tracer {
  * auto-instrumented LLM spans.
  */
 export const withTool = traceloop.withTool;
+
+/**
+ * Export trace content flag for use in context-bridge.ts
+ *
+ * When false, sensitive content (user questions, agent outputs) should not
+ * be written to span attributes to prevent data exposure.
+ */
+export { isTraceContentEnabled };

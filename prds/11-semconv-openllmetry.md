@@ -177,7 +177,7 @@ LLM chat (from OpenLLMetry)
 **Decision**: Do not add `gen_ai.tool.call.result` attribute to MCP tool spans.
 
 **Rationale**:
-- kubectl output can be very large (pod listings, describe output, logs)
+- kubectl output can be large (pod listings, describe output, logs)
 - No Datadog LLM Observability feature depends on this attribute
 - The child kubectl span already has `k8s.output_size_bytes` for debugging large responses
 - Semconv marks it "recommended" not "required"
@@ -261,6 +261,6 @@ LLM chat (from OpenLLMetry)
   - Root cause: Datadog requires semconv v1.37+ attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with `parts` array format
   - OpenLLMetry JS v0.22.6 emits old format (`gen_ai.prompt`, `traceloop.entity.input`)
   - Env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` not yet implemented in OpenLLMetry JS
-  - Tracking upstream: https://github.com/traceloop/openllmetry/issues/3515
+  - Tracking upstream: [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515)
   - Workaround documented in `docs/opentelemetry.md` for KubeCon demo if needed
-- Documented Datadog Slack channel `#ml-obs-otel` for OTel/LLM Observability questions
+- Added Datadog Slack channel `#ml-obs-otel` for OTel/LLM Observability questions

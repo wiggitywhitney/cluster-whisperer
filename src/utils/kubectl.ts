@@ -35,6 +35,57 @@ import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { getTracer } from "../tracing";
 
 /**
+ * Flags that may contain sensitive values (tokens, passwords, keys).
+ * These are redacted from span attributes to prevent leaking secrets to telemetry.
+ */
+const SENSITIVE_FLAGS = new Set([
+  "--token",
+  "--password",
+  "--client-key",
+  "--client-certificate",
+  "--kubeconfig",
+]);
+
+/**
+ * Redact sensitive kubectl arguments before adding to span attributes.
+ *
+ * Some kubectl flags can contain secrets (--token, --password, etc.) that
+ * should not be exported to telemetry backends. This function replaces
+ * the values of known sensitive flags with "[REDACTED]".
+ *
+ * @param args - kubectl arguments array
+ * @returns New array with sensitive values redacted
+ */
+function redactSensitiveArgs(args: string[]): string[] {
+  const redacted: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    // Check for --flag=value format
+    for (const flag of SENSITIVE_FLAGS) {
+      if (arg.startsWith(`${flag}=`)) {
+        redacted.push(`${flag}=[REDACTED]`);
+        continue;
+      }
+    }
+
+    // Check for --flag value format (two separate args)
+    if (SENSITIVE_FLAGS.has(arg) && i + 1 < args.length) {
+      redacted.push(arg);
+      redacted.push("[REDACTED]");
+      i++; // Skip the next arg (the value)
+      continue;
+    }
+
+    // Not sensitive, keep as-is
+    redacted.push(arg);
+  }
+
+  return redacted;
+}
+
+/**
  * Result from executing a kubectl command.
  *
  * Why a structured result instead of just a string?
@@ -128,8 +179,12 @@ export function executeKubectl(args: string[]): KubectlResult {
     (span) => {
       // Set pre-execution attributes
       // OTel semconv process.* attributes
+      // Redact sensitive flags (--token, --password, etc.) before adding to span
       span.setAttribute("process.executable.name", "kubectl");
-      span.setAttribute("process.command_args", ["kubectl", ...args]);
+      span.setAttribute("process.command_args", [
+        "kubectl",
+        ...redactSensitiveArgs(args),
+      ]);
 
       // Pragmatic custom attributes (no semconv equivalent)
       // k8s.namespace is useful for filtering queries by namespace

@@ -160,7 +160,7 @@ tracer.startActiveSpan("kubectl get pods", { kind: SpanKind.CLIENT }, (span) => 
 
 With this architecture, a full investigation produces this trace:
 
-```
+```text
 CompiledStateGraph.workflow (OpenLLMetry - LangGraph auto)
 └── anthropic.chat (OpenLLMetry - LLM auto)
     └── kubectl_get (our withTool wrapper)
@@ -179,7 +179,7 @@ Tracing is **opt-in** - disabled by default for quiet development.
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
-| `TRACELOOP_TRACE_CONTENT` | `true` | Set to `false` to disable prompt/completion capture |
+| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
 
 ### Enabling Tracing
 
@@ -241,15 +241,17 @@ Note: `kind: 0` is INTERNAL, `status.code: 1` is OK.
 | `gen_ai.usage.completion_tokens` | Output token count |
 | `llm.usage.total_tokens` | Total tokens used |
 
-**Privacy note:** By default, OpenLLMetry captures prompt and completion content in span attributes. The SDK provides `traceContent: false` and `TRACELOOP_TRACE_CONTENT=false` options to disable this, but behavior may vary by version. For production use with sensitive data, verify content is not being captured in your specific setup.
+**Privacy note:** Content capture (prompts, completions, user questions) is **disabled by default** for security. To enable it for development/debugging with non-sensitive data:
 
 ```bash
-# Environment variable
-export TRACELOOP_TRACE_CONTENT=false
+# Enable content capture (default: disabled for security)
+export OTEL_TRACE_CONTENT_ENABLED=true
 ```
 
+This controls both OpenLLMetry's content capture and our custom span attributes (`user.question`, `traceloop.entity.input/output`).
+
 **Example LLM span:**
-```
+```text
 {
   name: 'anthropic.chat',
   attributes: {
@@ -351,7 +353,7 @@ Traces can be sent to any OTLP-compatible backend (Datadog, Jaeger, etc.) by con
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` for stdout, `otlp` for OTLP export |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (required when type=otlp) |
-| `TRACELOOP_TRACE_CONTENT` | `true` | Set to `false` to disable LLM prompt/completion capture |
+| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
 
 ### Using Console Exporter (Development)
 
@@ -411,7 +413,7 @@ If running cluster-whisperer locally, port-forward to access the agent:
 kubectl port-forward svc/datadog 4318:4318
 ```
 
-View traces at: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
+View traces at: <https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer>
 
 ### Datadog LLM Observability
 
@@ -421,7 +423,7 @@ Traces also appear in Datadog LLM Observability with full feature support:
 - LLM call counts
 - Model/provider grouping
 
-View LLM traces at: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Acluster-whisperer
+View LLM traces at: <https://app.datadoghq.com/llm/traces?query=%40ml_app%3Acluster-whisperer>
 
 #### Known Limitation: CONTENT Column
 
@@ -434,7 +436,7 @@ View LLM traces at: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Aclust
 
 **Root cause**: Datadog LLM Observability requires v1.37+ semconv attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with a specific `parts` array format. OpenLLMetry JS v0.22.6 still emits old format (`gen_ai.prompt`, `traceloop.entity.input`). The env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` should enable new format, but OpenLLMetry JS hasn't implemented support yet.
 
-**Status**: Waiting for OpenLLMetry fix. Track upstream: https://github.com/traceloop/openllmetry/issues/3515
+**Status**: Waiting for OpenLLMetry fix. Track upstream: [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515)
 
 **Datadog support**: For OTel + LLM Observability questions, use internal Slack channel `#ml-obs-otel`.
 
@@ -500,7 +502,7 @@ execute_tool kubectl_get (INTERNAL, 294ms)
 
 **Root cause:** LangGraph's internal async execution model loses the OpenTelemetry context that's normally propagated through Node.js's `AsyncLocalStorage`. The same issue occurred in the Python SDK and was fixed in [PR #3206](https://github.com/traceloop/openllmetry/pull/3206).
 
-**Upstream issue:** https://github.com/traceloop/openllmetry-js/issues/476
+**Upstream issue:** [traceloop/openllmetry-js#476](https://github.com/traceloop/openllmetry-js/issues/476)
 
 **Our workaround:** `src/tracing/context-bridge.ts` uses explicit `AsyncLocalStorage` to bridge the context gap:
 

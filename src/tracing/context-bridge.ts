@@ -41,7 +41,7 @@ import {
   SpanKind,
   SpanStatusCode,
 } from "@opentelemetry/api";
-import { getTracer } from "./index";
+import { getTracer, isTraceContentEnabled } from "./index";
 
 /**
  * AsyncLocalStorage instance for storing trace context.
@@ -61,11 +61,14 @@ const rootSpanStorage = new AsyncLocalStorage<Span>();
  * Set the output on the root investigation span.
  * Call this after the agent completes to populate OUTPUT in LLM Observability.
  *
+ * Only writes the attribute if OTEL_TRACE_CONTENT_ENABLED=true to prevent
+ * sensitive data from being exported to telemetry backends.
+ *
  * @param output - The final answer or output to record
  */
 export function setTraceOutput(output: string): void {
   const span = rootSpanStorage.getStore();
-  if (span) {
+  if (span && isTraceContentEnabled) {
     span.setAttribute("traceloop.entity.output", output);
   }
 }
@@ -124,19 +127,25 @@ export async function withAgentTracing<T>(
   const tracer = getTracer();
 
   // Create a root span for the entire investigation
-  // Use traceloop.entity.input so Datadog LLM Observability shows it in trace list
+  // Build attributes conditionally - only include content if trace content is enabled
+  const attributes: Record<string, string> = {
+    "service.operation": "investigate",
+    "traceloop.span.kind": "workflow",
+    "traceloop.entity.name": "investigate",
+  };
+
+  // Only include user question and entity input if trace content capture is enabled
+  // This prevents sensitive data from being exported to telemetry backends
+  if (isTraceContentEnabled) {
+    attributes["user.question"] = question;
+    attributes["traceloop.entity.input"] = question;
+  }
+
   return tracer.startActiveSpan(
     "cluster-whisperer.investigate",
     {
       kind: SpanKind.SERVER,
-      attributes: {
-        "user.question": question,
-        "service.operation": "investigate",
-        // These attributes populate INPUT/OUTPUT in Datadog LLM Observability trace list
-        "traceloop.entity.input": question,
-        "traceloop.span.kind": "workflow",
-        "traceloop.entity.name": "investigate",
-      },
+      attributes,
     },
     async (span: Span) => {
       // Store this context in AsyncLocalStorage so tool handlers can access it

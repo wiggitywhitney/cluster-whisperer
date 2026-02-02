@@ -73,7 +73,7 @@ On first use, Claude Code will prompt for OAuth authentication - complete the si
 ### Example: Verify cluster-whisperer traces
 
 After running the agent with OTLP export enabled, use:
-```
+```text
 search_datadog_spans with query: "service:cluster-whisperer" from: "now-1h"
 ```
 
@@ -108,4 +108,4 @@ vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell m
 
 This triggers a full investigation: LLM reasoning → kubectl_get (find pods) → kubectl_describe (check events) → kubectl_logs (read output) → multiple iterations until root cause found.
 
-View traces in Datadog: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
+View traces in Datadog: <https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer>
