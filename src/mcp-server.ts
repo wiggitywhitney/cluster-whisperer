@@ -5,21 +5,21 @@
  * What is this file?
  * This is the entry point for the MCP (Model Context Protocol) server. When an
  * MCP client like Claude Code connects, it spawns this process. The server
- * exposes our kubectl tools over stdio, letting the client's LLM use them.
+ * exposes our investigate tool over stdio.
  *
  * How it works:
  * 1. Create an McpServer with our server info
- * 2. Register all kubectl tools (get, describe, logs)
+ * 2. Register the investigate tool (wraps our LangGraph agent)
  * 3. Start the stdio transport (reads JSON-RPC from stdin, writes to stdout)
  * 4. Wait for the client to send tool requests
  *
- * CLI Agent vs MCP Server:
- * - CLI Agent (index.ts): Has its own reasoning. You ask a question, it decides
- *   which tools to call, interprets results, and gives you an answer.
- * - MCP Server (this file): Just tools. The client's LLM (Claude in Claude Code)
- *   does the reasoning and decides which tools to call.
+ * Why a single investigate tool instead of low-level kubectl tools?
+ * - Complete traces: One MCP call = one trace with all tool calls nested
+ * - Better UX: Ask questions, get answers (same as CLI mode)
+ * - Proper observability: See the full investigation flow in Datadog
  *
- * Same underlying tools, different orchestration model.
+ * The investigate tool wraps the same LangGraph agent used by the CLI, so
+ * MCP clients get the same investigation capabilities.
  */
 
 // Initialize OpenTelemetry tracing before any other imports
@@ -28,7 +28,7 @@ import "./tracing";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerKubectlTools } from "./tools/mcp";
+import { registerInvestigateTool } from "./tools/mcp";
 
 /**
  * Creates and starts the MCP server.
@@ -45,9 +45,9 @@ async function main(): Promise<void> {
     version: "0.1.0",
   });
 
-  // Register all kubectl tools with the server
-  // After this, clients can call kubectl_get, kubectl_describe, kubectl_logs
-  registerKubectlTools(server);
+  // Register the investigate tool with the server
+  // This single tool wraps our LangGraph agent for complete investigations
+  registerInvestigateTool(server);
 
   // Create stdio transport - communicates via stdin/stdout
   // This is how local MCP servers work: the client spawns this process

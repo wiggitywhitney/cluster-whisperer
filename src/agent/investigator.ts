@@ -24,9 +24,29 @@
 
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
 import { kubectlTools } from "../tools/langchain";
+
+/**
+ * Result from invoking the investigator agent.
+ *
+ * This structured result separates the different parts of the agent's response:
+ * - answer: The final text response to display to the user
+ * - thinking: Array of thinking blocks showing the agent's reasoning process
+ * - isError: Whether the investigation failed (for MCP error signaling)
+ *
+ * Why separate thinking from answer?
+ * MCP clients can't render thinking blocks specially - they just see text.
+ * By separating them, MCP tools can put thinking in trace attributes (for
+ * observability) while returning only the answer in the MCP response.
+ */
+export interface InvestigationResult {
+  answer: string;
+  thinking: string[];
+  isError: boolean;
+}
 
 /**
  * Path to the system prompt file.
@@ -155,4 +175,87 @@ export function truncate(text: string, maxLength: number = 1100): string {
     return text;
   }
   return text.slice(0, maxLength) + "...";
+}
+
+/**
+ * Invokes the investigator agent and returns a structured result.
+ *
+ * This function is designed for MCP mode where we need the complete result
+ * rather than streaming events. It:
+ * 1. Calls agent.invoke() instead of agent.streamEvents()
+ * 2. Extracts the last message from the conversation
+ * 3. Parses content blocks to separate thinking from the answer
+ *
+ * Why invoke() instead of streamEvents()?
+ * - streamEvents() is great for CLI where we display progress in real-time
+ * - invoke() is simpler when we just need the final result
+ * - MCP tools return a single response, not a stream
+ *
+ * Content block parsing:
+ * With extended thinking enabled, Claude returns an array of content blocks:
+ * - { type: "thinking", thinking: "..." } - reasoning process
+ * - { type: "text", text: "..." } - actual response text
+ *
+ * @param question - The user's natural language question about their cluster
+ * @returns Structured result with answer, thinking array, and error flag
+ */
+export async function invokeInvestigator(
+  question: string
+): Promise<InvestigationResult> {
+  try {
+    // Get the cached agent instance (same one used by CLI)
+    const agent = getInvestigatorAgent();
+
+    // Invoke the agent with the user's question
+    // This runs the full ReAct loop until the agent produces a final answer
+    const result = await agent.invoke({
+      messages: [new HumanMessage(question)],
+    });
+
+    // Extract the last message from the conversation
+    // The agent produces a series of messages; the last AI message has our answer
+    const messages = result.messages;
+    const lastMessage = messages[messages.length - 1];
+
+    // Parse content blocks to separate thinking from answer
+    const thinking: string[] = [];
+    let answer = "";
+
+    const content = lastMessage?.content;
+    if (typeof content === "string") {
+      // Simple string content (no extended thinking)
+      answer = content;
+    } else if (Array.isArray(content)) {
+      // Array of content blocks with extended thinking
+      for (const block of content) {
+        if (
+          typeof block === "object" &&
+          block !== null &&
+          "type" in block
+        ) {
+          if (block.type === "thinking" && "thinking" in block) {
+            thinking.push(String(block.thinking));
+          } else if (block.type === "text" && "text" in block) {
+            answer += String(block.text);
+          }
+        }
+      }
+    }
+
+    return {
+      answer,
+      thinking,
+      isError: false,
+    };
+  } catch (error) {
+    // Return error as structured result instead of throwing
+    // This allows MCP to signal errors via isError flag
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    return {
+      answer: `Investigation failed: ${errorMessage}`,
+      thinking: [],
+      isError: true,
+    };
+  }
 }
