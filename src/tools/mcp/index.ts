@@ -1,148 +1,152 @@
 /**
- * MCP tool registration for kubectl operations
+ * MCP tool registration for cluster-whisperer
  *
- * This module registers the core kubectl functions as MCP tools. The MCP server
- * imports from here to expose tools to MCP clients like Claude Code or Cursor.
+ * This module registers a single high-level "investigate" tool that wraps the
+ * LangGraph agent. Instead of exposing low-level kubectl operations, MCP clients
+ * get a complete investigation capability with full observability.
  *
- * How MCP tools work:
- * MCP (Model Context Protocol) is a standard for AI tools. An MCP server exposes
- * tools that any MCP client can call. The client's LLM (Claude, GPT, etc.) sees
- * the tool descriptions and decides when to use them - just like our CLI agent.
+ * Why a single investigate tool instead of kubectl_get, kubectl_describe, etc.?
  *
- * The difference from CLI:
- * - CLI: Our LangChain agent does the reasoning and calls tools
- * - MCP: External client's LLM does the reasoning and calls our tools via MCP
+ * Trace quality:
+ * - Old: Each kubectl tool call = separate trace. Fragmented observability.
+ * - New: One investigate call = one trace containing all tool calls.
  *
- * Same tools, different orchestrator.
+ * The trace hierarchy shows the complete investigation:
+ *   cluster-whisperer.mcp.investigate (root span)
+ *   ├── anthropic.chat (LLM decides which tools to call)
+ *   ├── kubectl_get.tool (internal tool call)
+ *   ├── anthropic.chat (LLM processes result)
+ *   ├── kubectl_describe.tool
+ *   └── ... complete chain of reasoning and actions
  *
- * API Note:
- * We use registerTool() which is the recommended MCP SDK method. The older tool()
- * method is deprecated. registerTool() takes a config object with inputSchema
- * instead of separate positional arguments.
- *
- * Error Handling:
- * MCP tool responses can include an `isError: true` flag to signal errors to clients.
- * Our kubectl utility returns a structured result `{ output, isError }` where isError
- * is determined by kubectl's exit code, not by inspecting the output content. This
- * avoids false positives when legitimate output (like application logs) contains
- * error messages. MCP clients can distinguish between:
- * - Successful results (even if output contains "Error" in application logs)
- * - Actual kubectl failures (e.g., namespace not found, permission denied)
+ * User experience:
+ * MCP clients (like Claude Code) ask questions, not kubectl commands. Wrapping
+ * our agent means users get the same experience in MCP mode as CLI mode - ask
+ * a question, get a reasoned answer.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import {
-  kubectlGet,
-  kubectlGetSchema,
-  kubectlGetDescription,
-  kubectlDescribe,
-  kubectlDescribeSchema,
-  kubectlDescribeDescription,
-  kubectlLogs,
-  kubectlLogsSchema,
-  kubectlLogsDescription,
-  type KubectlGetInput,
-  type KubectlDescribeInput,
-  type KubectlLogsInput,
-} from "../core";
-import { withToolTracing } from "../../tracing/tool-tracing";
-import { withMcpRequestTracing } from "../../tracing/context-bridge";
+  invokeInvestigator,
+  type InvestigationResult,
+} from "../../agent/investigator";
+import {
+  withMcpRequestTracing,
+  setTraceOutput,
+} from "../../tracing/context-bridge";
 
 /**
- * Registers all kubectl tools with an MCP server.
+ * Zod schema for the investigate tool input.
  *
- * Why a registration function instead of exporting tools directly?
- * MCP servers need tools registered via server.registerTool(). This function
- * takes a server instance and registers all our tools with it. The mcp-server.ts
- * entry point creates the server, calls this function, then starts transport.
- *
- * @param server - The McpServer instance to register tools with
+ * Single required parameter: the user's natural language question.
+ * The agent handles all the complexity of figuring out which kubectl
+ * commands to run, interpreting results, and synthesizing an answer.
  */
-export function registerKubectlTools(server: McpServer): void {
-  // kubectl_get - List resources in table format
-  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
-  // Hierarchy: cluster-whisperer.mcp.kubectl_get → kubectl_get.tool → kubectl subprocess
-  server.registerTool(
-    "kubectl_get",
-    {
-      description: kubectlGetDescription,
-      inputSchema: kubectlGetSchema.shape,
-    },
-    async (input: KubectlGetInput) => {
-      return withMcpRequestTracing(
-        "kubectl_get",
-        input as Record<string, unknown>,
-        async () => {
-          return withToolTracing(
-            "kubectl_get",
-            async (toolInput: KubectlGetInput) => {
-              const { output, isError } = await kubectlGet(toolInput);
-              return {
-                content: [{ type: "text" as const, text: output }],
-                isError,
-              };
-            }
-          )(input);
-        }
-      );
-    }
-  );
+const investigateSchema = z.object({
+  question: z
+    .string()
+    .describe(
+      "Natural language question about the Kubernetes cluster to investigate"
+    ),
+});
 
-  // kubectl_describe - Get detailed resource information
-  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
-  // Hierarchy: cluster-whisperer.mcp.kubectl_describe → kubectl_describe.tool → kubectl subprocess
-  server.registerTool(
-    "kubectl_describe",
-    {
-      description: kubectlDescribeDescription,
-      inputSchema: kubectlDescribeSchema.shape,
-    },
-    async (input: KubectlDescribeInput) => {
-      return withMcpRequestTracing(
-        "kubectl_describe",
-        input as Record<string, unknown>,
-        async () => {
-          return withToolTracing(
-            "kubectl_describe",
-            async (toolInput: KubectlDescribeInput) => {
-              const { output, isError } = await kubectlDescribe(toolInput);
-              return {
-                content: [{ type: "text" as const, text: output }],
-                isError,
-              };
-            }
-          )(input);
-        }
-      );
-    }
-  );
+type InvestigateInput = z.infer<typeof investigateSchema>;
 
-  // kubectl_logs - Get container logs
-  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
-  // Hierarchy: cluster-whisperer.mcp.kubectl_logs → kubectl_logs.tool → kubectl subprocess
+/**
+ * Description shown to MCP clients.
+ *
+ * This helps the client's LLM understand when to use this tool. Key points:
+ * - It's an AI agent, not a simple kubectl wrapper
+ * - It investigates and reasons, producing explanations
+ * - It can handle multi-step investigations autonomously
+ */
+const investigateDescription = `Investigate a Kubernetes cluster using an AI agent.
+
+This tool wraps a complete investigation agent that can:
+- Query cluster resources (pods, deployments, services, nodes, etc.)
+- Get detailed information about specific resources
+- Read container logs for debugging
+- Reason about what it finds and synthesize answers
+
+The agent uses kubectl internally and can make multiple tool calls to fully
+investigate a question. It returns a complete answer with explanation.
+
+Example questions:
+- "What pods are running in the default namespace?"
+- "Find the broken pod and tell me why it's failing"
+- "Is my nginx deployment healthy?"
+- "What's causing the high restart count on pod X?"`;
+
+/**
+ * Registers the investigate tool with an MCP server.
+ *
+ * This is the only tool cluster-whisperer exposes to MCP clients. It wraps
+ * the full LangGraph agent, providing complete investigations with proper
+ * tracing hierarchy.
+ *
+ * @param server - The McpServer instance to register the tool with
+ */
+export function registerInvestigateTool(server: McpServer): void {
   server.registerTool(
-    "kubectl_logs",
+    "investigate",
     {
-      description: kubectlLogsDescription,
-      inputSchema: kubectlLogsSchema.shape,
+      description: investigateDescription,
+      inputSchema: investigateSchema.shape,
     },
-    async (input: KubectlLogsInput) => {
+    async (input: InvestigateInput) => {
+      // Wrap entire investigation in MCP request tracing
+      // This creates the root span that all agent activity nests under
       return withMcpRequestTracing(
-        "kubectl_logs",
+        "investigate",
         input as Record<string, unknown>,
         async () => {
-          return withToolTracing(
-            "kubectl_logs",
-            async (toolInput: KubectlLogsInput) => {
-              const { output, isError } = await kubectlLogs(toolInput);
-              return {
-                content: [{ type: "text" as const, text: output }],
-                isError,
-              };
-            }
-          )(input);
+          // Invoke the investigator agent
+          const result: InvestigationResult = await invokeInvestigator(
+            input.question
+          );
+
+          // Build trace output: thinking + answer for observability
+          // This goes to traceloop.entity.output attribute (when content enabled)
+          const traceOutput = buildTraceOutput(result);
+          setTraceOutput(traceOutput);
+
+          // Return MCP response with just the answer
+          // Thinking is captured in traces, not returned to MCP client
+          return {
+            content: [{ type: "text" as const, text: result.answer }],
+            isError: result.isError,
+          };
         }
       );
     }
   );
+}
+
+/**
+ * Builds the trace output string from an investigation result.
+ *
+ * Combines thinking blocks and answer into a single string for trace attributes.
+ * This gives observability into the full investigation process.
+ *
+ * @param result - The investigation result from invokeInvestigator
+ * @returns Formatted string with thinking and answer sections
+ */
+function buildTraceOutput(result: InvestigationResult): string {
+  const parts: string[] = [];
+
+  // Include thinking if present
+  if (result.thinking.length > 0) {
+    parts.push("=== Thinking ===");
+    for (const thought of result.thinking) {
+      parts.push(thought);
+      parts.push("---");
+    }
+  }
+
+  // Always include the answer
+  parts.push("=== Answer ===");
+  parts.push(result.answer);
+
+  return parts.join("\n");
 }

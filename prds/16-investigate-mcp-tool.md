@@ -48,27 +48,27 @@ This PRD represents an intentional trade-off:
 
 ## Success Criteria
 
-- [ ] Single `investigate` MCP tool exposed (replaces kubectl_get, kubectl_describe, kubectl_logs)
-- [ ] Tool wraps existing LangGraph agent from CLI mode
-- [ ] Complete traces visible in Datadog with proper hierarchy
-- [ ] Agent thinking/reasoning captured in trace attributes (when content tracing enabled)
-- [ ] Error cases produce proper ERROR status spans
+- [x] Single `investigate` MCP tool exposed (replaces kubectl_get, kubectl_describe, kubectl_logs)
+- [x] Tool wraps existing LangGraph agent from CLI mode
+- [x] Complete traces visible in Datadog with proper hierarchy
+- [x] Agent thinking/reasoning captured in trace attributes (when content tracing enabled)
+- [x] Error cases produce proper ERROR status spans
 
 ---
 
 ## Milestones
 
 ### Milestone 1: Create Investigate MCP Tool
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Add a new `investigate` tool to the MCP server that calls the existing LangGraph agent.
 
 **Implementation**:
-- [ ] Create `investigate` tool in `src/tools/mcp/index.ts`
-- [ ] Wrap handler with `withMcpRequestTracing()` (from PRD-15)
-- [ ] Call existing `createAgent()` and `invoke()` from CLI code
-- [ ] Return agent's final answer as MCP result
-- [ ] Handle errors and set appropriate span status
+- [x] Create `investigate` tool in `src/tools/mcp/index.ts`
+- [x] Wrap handler with `withMcpRequestTracing()` (from PRD-15)
+- [x] Call existing `createAgent()` and `invoke()` from CLI code
+- [x] Return agent's final answer as MCP result
+- [x] Handle errors and set appropriate span status
 
 **Success Criteria**:
 - Tool accepts natural language question
@@ -78,15 +78,15 @@ This PRD represents an intentional trade-off:
 ---
 
 ### Milestone 2: Remove Low-Level Tools
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Remove the low-level kubectl tools from MCP registration.
 
 **Implementation**:
-- [ ] Remove `kubectl_get` tool registration
-- [ ] Remove `kubectl_describe` tool registration
-- [ ] Remove `kubectl_logs` tool registration
-- [ ] Clean up any unused imports/code
+- [x] Remove `kubectl_get` tool registration
+- [x] Remove `kubectl_describe` tool registration
+- [x] Remove `kubectl_logs` tool registration
+- [x] Clean up any unused imports/code
 
 **Success Criteria**:
 - MCP server exposes only `investigate` tool
@@ -95,15 +95,15 @@ This PRD represents an intentional trade-off:
 ---
 
 ### Milestone 3: Refactor Agent for Reuse
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Ensure the LangGraph agent can be cleanly invoked from both CLI and MCP modes.
 
 **Implementation**:
-- [ ] Extract agent creation/invocation into shared module if needed
-- [ ] Handle different output modes (CLI streams to console, MCP returns result)
-- [ ] Ensure tracing context propagates correctly in MCP mode
-- [ ] Verify agent tools work without CLI-specific assumptions
+- [x] Extract agent creation/invocation into shared module if needed
+- [x] Handle different output modes (CLI streams to console, MCP returns result)
+- [x] Ensure tracing context propagates correctly in MCP mode
+- [x] Verify agent tools work without CLI-specific assumptions
 
 **Success Criteria**:
 - Same agent code powers both CLI and MCP
@@ -112,17 +112,17 @@ This PRD represents an intentional trade-off:
 ---
 
 ### Milestone 4: End-to-End Validation
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Verify complete traces flow from MCP tool calls through to Datadog.
 
 **Validation Steps**:
-- [ ] Restart Claude Code to pick up changes
-- [ ] Ask Claude Code to investigate a cluster issue
-- [ ] Verify single trace appears in Datadog APM
-- [ ] Verify trace hierarchy: MCP root → agent → tools → kubectl
-- [ ] Verify LLM spans include prompts/completions (when content enabled)
-- [ ] Verify error scenarios produce ERROR status spans
+- [x] Restart Claude Code to pick up changes
+- [x] Ask Claude Code to investigate a cluster issue
+- [x] Verify single trace appears in Datadog APM
+- [x] Verify trace hierarchy: MCP root → agent → tools → kubectl
+- [x] Verify LLM spans include prompts/completions (when content enabled)
+- [x] Verify error scenarios produce ERROR status spans
 
 **Success Criteria**:
 - Traces visible at https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
@@ -131,6 +131,23 @@ This PRD represents an intentional trade-off:
 ---
 
 ## Progress Log
+
+### 2026-02-03: PRD Complete
+
+**Implementation summary**:
+- Added `invokeInvestigator()` function to `src/agent/investigator.ts` - uses same cached agent as CLI but with `invoke()` instead of `streamEvents()`
+- Replaced `registerKubectlTools()` with `registerInvestigateTool()` in `src/tools/mcp/index.ts`
+- Single `investigate` tool wraps full LangGraph agent with proper tracing
+
+**Validation results**:
+- MCP mode tested via Claude Code - "find the broken pod" investigation completed successfully
+- Traces visible in Datadog APM with proper hierarchy (MCP root → LangGraph workflow → kubectl tools)
+- Traces also appear in Datadog LLM Observability with token counts and cost estimation
+- Flame graph shows complete investigation: `cluster-whisperer.mcp.investigate` → `CompiledStateGraph.workflow` → `anthropic.chat` + tool spans
+
+**Known limitation**: LLM Observability CONTENT column shows "No content" due to attribute format mismatch (documented in `docs/opentelemetry.md`). Traces still contain full data in APM view.
+
+---
 
 ### 2026-02-03: PRD Created
 
@@ -155,16 +172,18 @@ This PRD represents an intentional trade-off:
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `createAgent()` | `src/agent/index.ts` | Creates LangGraph agent |
+| `getInvestigatorAgent()` | `src/agent/investigator.ts` | Creates/caches LangGraph agent |
+| `invokeInvestigator()` | `src/agent/investigator.ts` | Invokes agent and returns structured result |
 | `withMcpRequestTracing()` | `src/tracing/context-bridge.ts` | MCP root span wrapper (PRD-15) |
 | Tracing config | `.mcp.json` | Environment variables for OTLP export |
 
-### Files to Modify
+### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/tools/mcp/index.ts` | Remove low-level tools, add investigate |
-| `src/agent/index.ts` | May need refactoring for MCP reuse |
+| `src/tools/mcp/index.ts` | Replaced low-level kubectl tools with single `investigate` tool |
+| `src/agent/investigator.ts` | Added `invokeInvestigator()` for MCP mode (CLI uses `streamEvents()`) |
+| `src/mcp-server.ts` | Updated import to use `registerInvestigateTool()` |
 
 ---
 
