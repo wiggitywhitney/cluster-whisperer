@@ -31,7 +31,7 @@ file '/app/server.js'. This usually means the Docker image was built
 incorrectly or the working directory is misconfigured.
 ```
 
-The agent investigates by running kubectl commands, showing its reasoning along the way. The "Thinking:" lines appear in italic in your terminal.
+The agent investigates by running kubectl commands, showing its reasoning along the way.
 
 ## How it works: The ReAct Pattern
 
@@ -47,6 +47,13 @@ Think → Act → Observe → Think → Act → Observe → ... → Answer
 4. Repeat until the agent has enough information to answer
 
 Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing to do with the React.js frontend framework.
+
+## Features
+
+- **CLI Agent** - Ask questions directly from the terminal with visible reasoning
+- **MCP Server** - Use kubectl tools from Claude Code, Cursor, or any MCP-compatible client
+- **OpenTelemetry Tracing** - Full observability with traces exportable to Datadog, Jaeger, etc.
+- **Extended Thinking** - See the agent's reasoning process as it investigates
 
 ## Prerequisites
 
@@ -69,8 +76,15 @@ npm run build
 # Run with vals to inject ANTHROPIC_API_KEY (-i inherits PATH so kubectl is found)
 vals exec -i -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
 
-# Or if you have the key exported directly
-npm start -- "Why is my-app pod crashing?"
+# With tracing enabled (console output)
+OTEL_TRACING_ENABLED=true \
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod"
+
+# With tracing to Datadog (via local agent)
+OTEL_TRACING_ENABLED=true \
+OTEL_EXPORTER_TYPE=otlp \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod"
 ```
 
 ### MCP Server (Claude Code, Cursor, etc.)
@@ -82,15 +96,18 @@ Add to your `.mcp.json` (in project root or `~/.claude/`):
   "mcpServers": {
     "cluster-whisperer": {
       "command": "node",
-      "args": ["/path/to/cluster-whisperer/dist/mcp-server.js"]
+      "args": ["/path/to/cluster-whisperer/dist/mcp-server.js"],
+      "env": {
+        "OTEL_TRACING_ENABLED": "true",
+        "OTEL_EXPORTER_TYPE": "otlp",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
     }
   }
 }
 ```
 
-**Note**: Use an absolute path in `args`. MCP clients spawn the server as a subprocess, and relative paths resolve from the client's working directory (which varies). An absolute path ensures the server is found regardless of where you invoke the client.
-
-Restart your MCP client. The kubectl tools will be available alongside your other tools.
+**Note**: Use an absolute path in `args`. MCP clients spawn the server as a subprocess, and relative paths resolve from the client's working directory.
 
 See `docs/mcp-server.md` for details on how MCP works.
 
@@ -128,6 +145,31 @@ Both interfaces provide these read-only kubectl tools:
 - `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
 
+## Observability
+
+OpenTelemetry tracing provides visibility into agent operations:
+
+```text
+cluster-whisperer.investigate (root span)
+├── kubectl_get.tool
+│   └── kubectl get pods -n default
+├── kubectl_describe.tool
+│   └── kubectl describe pod broken-pod
+└── kubectl_logs.tool
+    └── kubectl logs broken-pod
+```
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OTEL_TRACING_ENABLED` | `false` | Enable tracing |
+| `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
+| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Capture tool inputs/outputs in traces |
+
+See `docs/tracing-conventions.md` for the complete tracing specification.
+
 ## Project Structure
 
 ```text
@@ -135,7 +177,7 @@ src/
 ├── index.ts               # CLI entry point
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
-│   └── investigator.ts    # ReAct agent setup
+│   └── investigator.ts    # ReAct agent setup (LangGraph)
 ├── tools/
 │   ├── core/              # Shared tool logic (schemas, execution)
 │   │   ├── kubectl-get.ts
@@ -145,6 +187,10 @@ src/
 │   │   └── index.ts
 │   └── mcp/               # MCP server wrappers
 │       └── index.ts
+├── tracing/               # OpenTelemetry instrumentation
+│   ├── index.ts           # Tracer initialization
+│   ├── context-bridge.ts  # AsyncLocalStorage context propagation
+│   └── tool-tracing.ts    # Tool span wrapper
 └── utils/
     └── kubectl.ts         # Shared kubectl execution helper
 
@@ -152,13 +198,12 @@ prompts/
 └── investigator.md        # System prompt (separate file for easy iteration)
 
 docs/
-├── kubectl-tools.md                # How kubectl tools work
-├── agentic-loop.md                 # How the ReAct agent works
-├── mcp-server.md                   # MCP server architecture
-├── mcp-research.md                 # MCP research findings
-├── output-format-research.md       # Why we use plain text over JSON
-├── extended-thinking-research.md   # Extended thinking implementation notes
-└── langgraph-vs-langchain.md       # LangChain vs LangGraph explained
+├── kubectl-tools.md       # How kubectl tools work
+├── agentic-loop.md        # How the ReAct agent works
+├── mcp-server.md          # MCP server architecture
+├── opentelemetry.md       # OpenTelemetry implementation guide
+├── tracing-conventions.md # Complete tracing specification
+└── langgraph-vs-langchain.md  # LangChain vs LangGraph explained
 ```
 
 ## License
