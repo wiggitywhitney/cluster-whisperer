@@ -129,18 +129,18 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ---
 
 ### Milestone 5: End-to-End Validation in Datadog
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Prerequisite**: Milestones 2, 3, 4 complete
 
 **Objective**: Verify traces flow from MCP tool calls through to Datadog APM.
 
 **Validation Steps**:
-- [ ] Restart Claude Code to pick up new `.mcp.json`
-- [ ] Use kubectl tools via Claude Code (e.g., "list pods in default namespace")
-- [ ] Verify traces appear in Datadog APM with correct hierarchy
-- [ ] Verify all documented attributes are present on spans
-- [ ] Verify error cases produce ERROR status spans
+- [x] Restart Claude Code to pick up new `.mcp.json`
+- [x] Use kubectl tools via Claude Code (e.g., "list pods in default namespace")
+- [x] Verify traces appear in Datadog APM with correct hierarchy
+- [x] Verify all documented attributes are present on spans
+- [x] Verify error cases produce ERROR status spans
 
 **Success Criteria**:
 - Traces visible at https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
@@ -237,6 +237,38 @@ All three spans share the same `traceId` and have correct parent relationships.
   - Restart requirement after config changes
 
 **Milestone 4 complete** - Ready for Milestone 5 (end-to-end Datadog validation).
+
+---
+
+### 2026-02-03: Milestone 5 Complete - PRD Complete
+
+**Completed**: End-to-end validation of MCP tracing in Datadog.
+
+**Validation performed**:
+- Restarted Claude Code to pick up new `.mcp.json` configuration
+- Executed real investigation: "Find the broken pod and tell me why it's failing"
+- Made 4 MCP tool calls: `kubectl_get pods`, `kubectl_describe pod` (x2), `kubectl_describe node`
+- Verified 23 spans in Datadog APM via `search_datadog_spans`
+
+**Trace hierarchy confirmed**:
+```
+cluster-whisperer.mcp.kubectl_describe  (root, parent: none)
+└── kubectl_describe.tool               (OpenLLMetry wrapper)
+    └── kubectl describe node           (subprocess)
+```
+
+**Attributes verified**:
+- `gen_ai.operation.name: execute_tool` ✓
+- `gen_ai.tool.name: kubectl_describe` ✓
+- `gen_ai.tool.type: function` ✓
+- `gen_ai.tool.call.id: <uuid>` ✓
+- `mcp.tool.name: kubectl_describe` ✓
+- `traceloop.span.kind: workflow` (root), `tool` (wrapper) ✓
+- `traceloop.entity.input/output` with full content ✓
+- `span.kind: internal` ✓
+- `k8s.namespace`, `k8s.output_size_bytes` ✓
+
+**PRD #15 complete** - MCP server tracing now has full observability parity with CLI mode.
 
 ---
 
