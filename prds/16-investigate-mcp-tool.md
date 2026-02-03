@@ -16,7 +16,7 @@ This agent exists and works. The MCP server just doesn't use it.
 
 Replace the low-level MCP tools with a single high-level `investigate` tool that wraps the existing LangGraph agent:
 
-```
+```text
 Current (fragmented traces):
 Claude Code → kubectl_get (trace 1)
            → kubectl_describe (trace 2)

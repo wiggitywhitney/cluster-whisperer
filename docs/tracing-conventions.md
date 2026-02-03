@@ -22,7 +22,7 @@ This document specifies all tracing conventions used in cluster-whisperer. MCP s
 
 Both CLI and MCP modes produce the same three-level hierarchy:
 
-```
+```text
 root span (workflow)
 └── tool span (e.g., kubectl_get)
     └── subprocess span (e.g., kubectl get pods)
@@ -47,7 +47,7 @@ The root span wraps the entire operation and stores context for child span paren
 | Property | Value |
 |----------|-------|
 | **Span Name** | `cluster-whisperer.investigate` |
-| **SpanKind** | `INTERNAL` *(currently SERVER - fix needed)* |
+| **SpanKind** | `INTERNAL` |
 
 **Attributes**:
 
@@ -60,7 +60,7 @@ The root span wraps the entire operation and stores context for child span paren
 | `traceloop.entity.input` | string | Content-gated | Same as `user.question` |
 | `traceloop.entity.output` | string | Content-gated | Final answer (set via `setTraceOutput()`) |
 
-### MCP Mode: `withMcpRequestTracing()` (TO BE IMPLEMENTED)
+### MCP Mode: `withMcpRequestTracing()`
 
 **File**: `src/tracing/context-bridge.ts`
 
@@ -176,7 +176,7 @@ LangGraph breaks Node.js async context propagation. Without intervention, tool s
 
 We use explicit `AsyncLocalStorage` to bridge the context gap:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ withAgentTracing() / withMcpRequestTracing()            │
 │   1. Create root span                                   │
@@ -265,19 +265,19 @@ if (isTraceContentEnabled) {
 
 ## Deviations from Standards
 
-### 1. SpanKind.SERVER for Root Span ⚠️ FIX NEEDED
+### 1. SpanKind for Root Span ✅ Fixed
 
-**What we do**: Root spans use `SpanKind.SERVER`
+**What we do**: Root spans use `SpanKind.INTERNAL`
 
 **Official guidance**: SERVER is for "server-side handling of a remote request while the client awaits a response"
 
-**Why this is incorrect**:
+**Why INTERNAL is correct**:
 - CLI mode processes a local command-line argument, not a network request
 - MCP mode (stdio transport) communicates via stdin/stdout pipes with a parent process - this is inter-process communication, not a network request
 
-**Correct value**: `SpanKind.INTERNAL` - both modes are internal operations within the application
+**Current value**: `SpanKind.INTERNAL` - both modes are internal operations within the application
 
-**Action**: Fix during Milestone 2 implementation. Change `SpanKind.SERVER` to `SpanKind.INTERNAL` in `withAgentTracing()` and the new `withMcpRequestTracing()`.
+**Status**: Fixed in PRD #15 Milestone 2. Both `withAgentTracing()` and `withMcpRequestTracing()` now use `SpanKind.INTERNAL`.
 
 **Future consideration**: SpanKind for root spans should evolve with transport:
 
@@ -289,22 +289,22 @@ if (isTraceContentEnabled) {
 
 If cluster-whisperer adds an HTTP API in the future, that request-handling span should use `SERVER`. Tool execution spans nested inside would remain `INTERNAL`.
 
-### 2. Missing GenAI Semconv Attributes ⚠️ FIX NEEDED
+### 2. GenAI Semconv Attributes ✅ Added (MCP Mode)
 
 Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/), tool execution spans should have:
 
 | Attribute | Status | Required Value |
 |-----------|--------|----------------|
-| `gen_ai.operation.name` | Missing | `"execute_tool"` |
-| `gen_ai.tool.name` | Missing | Tool name (e.g., `"kubectl_get"`) |
-| `gen_ai.tool.type` | Missing | `"function"` |
-| `gen_ai.tool.call.id` | Missing | Unique UUID per invocation |
+| `gen_ai.operation.name` | ✅ Added | `"execute_tool"` |
+| `gen_ai.tool.name` | ✅ Added | Tool name (e.g., `"kubectl_get"`) |
+| `gen_ai.tool.type` | ✅ Added | `"function"` |
+| `gen_ai.tool.call.id` | ✅ Added | Unique UUID per invocation |
 
-**Why this matters**: Datadog LLM Observability [natively supports GenAI semconv v1.37+](https://www.datadoghq.com/blog/llm-otel-semantic-convention/) and automatically maps these attributes to LLM Observability features. Without them, we get partial integration.
+**Why this matters**: Datadog LLM Observability [natively supports GenAI semconv v1.37+](https://www.datadoghq.com/blog/llm-otel-semantic-convention/) and automatically maps these attributes to LLM Observability features.
 
-**Current state**: We use OpenLLMetry's `withTool()` which sets `traceloop.*` attributes instead of `gen_ai.*` attributes.
+**Current state**: MCP mode (`withMcpRequestTracing()`) includes GenAI semconv attributes alongside OpenLLMetry `traceloop.*` attributes. CLI mode does not include GenAI semconv because the root span is human-invoked, not AI-invoked.
 
-**Action**: Add GenAI semconv attributes alongside OpenLLMetry attributes during implementation. The duplication is acceptable for better Datadog integration.
+**Status**: Fixed in PRD #15 Milestone 2. MCP root spans now include all GenAI semconv attributes for proper Datadog LLM Observability integration.
 
 ### 3. OpenLLMetry-Specific Attributes ✓ KEEP
 
