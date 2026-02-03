@@ -1,0 +1,197 @@
+# PRD #15: MCP Server Tracing
+
+## Problem Statement
+
+MCP server tool calls don't produce traces in Datadog. When Claude Code calls cluster-whisperer's kubectl tools via MCP, there's no observability into what happened - no spans, no timing, no error tracking.
+
+The CLI mode (`index.ts`) has full tracing visibility with properly nested spans:
+```
+cluster-whisperer.investigate (workflow)
+├── kubectl_get (tool)
+│   └── kubectl get pods (subprocess)
+├── kubectl_describe (tool)
+│   └── kubectl describe pod (subprocess)
+└── ...
+```
+
+MCP mode (`mcp-server.ts`) is a black box because:
+1. **Missing environment variables**: `.mcp.json` has `"env": {}` - no `OTEL_TRACING_ENABLED`
+2. **No root span**: CLI uses `withAgentTracing()` to create a parent span and store context; MCP has no equivalent
+
+## Solution Overview
+
+Implement MCP server tracing that exactly mirrors CLI conventions:
+1. **Research phase**: Document all tracing conventions (OTel semconv, OpenLLMetry, custom attributes)
+2. **Implementation**: Create `withMcpRequestTracing()` parallel to `withAgentTracing()`
+3. **Configuration**: Update `.mcp.json` with proper environment variables
+
+## Success Criteria
+
+- [ ] MCP tool calls produce traces visible in Datadog
+- [ ] Trace hierarchy mirrors CLI: `cluster-whisperer.mcp.<tool>` → `<tool>` → `kubectl` spans
+- [ ] All span attributes match documented conventions exactly
+- [ ] Environment configuration enables OTLP export to Datadog Agent
+
+---
+
+## Milestones
+
+### Milestone 1: Research and Document Tracing Conventions
+**Status**: Not Started
+
+**Objective**: Create comprehensive documentation of all tracing conventions used in cluster-whisperer, so MCP implementation can mirror them exactly.
+
+**Deliverable**: `docs/tracing-conventions.md`
+
+**Research Areas**:
+- [ ] OpenTelemetry semantic conventions used (process.*, error.*, SpanKind)
+- [ ] OpenLLMetry conventions used (traceloop.span.kind, traceloop.entity.*)
+- [ ] Custom attributes we defined (user.question, k8s.namespace, k8s.output_size_bytes)
+- [ ] Span naming patterns (cluster-whisperer.investigate, kubectl <op> <resource>)
+- [ ] Context propagation approach (AsyncLocalStorage bridge for LangGraph)
+- [ ] Content gating pattern (OTEL_TRACE_CONTENT_ENABLED)
+
+**Success Criteria**:
+- Documentation clearly catalogs every attribute, convention, and pattern
+- Another developer could implement tracing from this doc alone
+
+---
+
+### Milestone 2: Implement MCP Request Tracing
+**Status**: Not Started
+
+**Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
+
+**Objective**: Create `withMcpRequestTracing()` function that creates properly-attributed root spans for MCP tool requests.
+
+**Implementation**:
+- [ ] Add `withMcpRequestTracing()` to `src/tracing/context-bridge.ts`
+- [ ] Mirror `withAgentTracing()` conventions exactly per documentation
+- [ ] Store context in AsyncLocalStorage for child span parenting
+- [ ] Handle MCP result format (content array, isError flag)
+- [ ] Gate content capture with `isTraceContentEnabled`
+
+**Files to Modify**:
+- `src/tracing/context-bridge.ts` - Add new function
+
+**Success Criteria**:
+- Function creates spans with all documented attributes
+- Context is stored for tool span parenting
+
+---
+
+### Milestone 3: Integrate MCP Tracing with Tool Registration
+**Status**: Not Started
+
+**Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
+
+**Objective**: Update MCP tool registration to use the new tracing wrapper.
+
+**Implementation**:
+- [ ] Update `src/tools/mcp/index.ts` to wrap handlers with `withMcpRequestTracing()`
+- [ ] Ensure proper nesting: MCP request span → tool span → kubectl span
+- [ ] Verify span hierarchy in console output
+
+**Files to Modify**:
+- `src/tools/mcp/index.ts` - Update tool registration
+
+**Success Criteria**:
+- All three tools (get, describe, logs) are traced
+- Console exporter shows expected hierarchy
+
+---
+
+### Milestone 4: Configure MCP Environment Variables
+**Status**: Not Started
+
+**Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
+
+**Objective**: Update `.mcp.json` to pass tracing environment variables when Claude Code spawns the MCP server.
+
+**Implementation**:
+- [ ] Add `OTEL_TRACING_ENABLED=true` to enable tracing
+- [ ] Add `OTEL_EXPORTER_TYPE=otlp` for Datadog export
+- [ ] Add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` for local agent
+- [ ] Document in CLAUDE.md how to toggle tracing on/off
+
+**Files to Modify**:
+- `.mcp.json` - Add environment variables
+- `CLAUDE.md` - Document MCP tracing configuration
+
+**Success Criteria**:
+- MCP server starts with tracing enabled when spawned by Claude Code
+- Configuration is documented for users
+
+---
+
+### Milestone 5: End-to-End Validation in Datadog
+**Status**: Not Started
+
+**Prerequisite**: Milestones 2, 3, 4 complete
+
+**Objective**: Verify traces flow from MCP tool calls through to Datadog APM.
+
+**Validation Steps**:
+- [ ] Restart Claude Code to pick up new `.mcp.json`
+- [ ] Use kubectl tools via Claude Code (e.g., "list pods in default namespace")
+- [ ] Verify traces appear in Datadog APM with correct hierarchy
+- [ ] Verify all documented attributes are present on spans
+- [ ] Verify error cases produce ERROR status spans
+
+**Success Criteria**:
+- Traces visible at https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
+- Span hierarchy and attributes match documentation
+
+---
+
+## Progress Log
+
+_Progress entries will be added here as work proceeds._
+
+---
+
+## Technical Context
+
+### Current Architecture (CLI Mode)
+
+```
+src/index.ts
+  └── withAgentTracing(question, async () => {...})  // Creates root span, stores context
+        └── streamEvents()
+              └── tool handlers
+                    └── withToolTracing()  // Restores context, creates tool span
+                          └── withTool()   // OpenLLMetry wrapper
+                                └── kubectlGet/Describe/Logs()
+                                      └── executeKubectl()  // Creates subprocess span
+```
+
+### Target Architecture (MCP Mode)
+
+```
+src/mcp-server.ts
+  └── server.registerTool()
+        └── withMcpRequestTracing(toolName, input, async () => {...})  // NEW: Creates root span
+              └── withToolTracing()  // Existing: Creates tool span
+                    └── withTool()   // OpenLLMetry wrapper
+                          └── kubectlGet/Describe/Logs()
+                                └── executeKubectl()  // Creates subprocess span
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/tracing/index.ts` | OTel initialization, exporter setup |
+| `src/tracing/context-bridge.ts` | AsyncLocalStorage context bridging |
+| `src/tracing/tool-tracing.ts` | Tool span wrapper |
+| `src/tools/mcp/index.ts` | MCP tool registration |
+| `src/utils/kubectl.ts` | Subprocess execution with spans |
+| `.mcp.json` | MCP server configuration |
+
+---
+
+## References
+
+- [OpenLLMetry-JS Issue #476](https://github.com/traceloop/openllmetry-js/issues/476) - LangGraph context propagation
+- [OpenLLMetry Python PR #3206](https://github.com/traceloop/openllmetry/pull/3206) - Python fix for same issue
+- Datadog APM: https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer
