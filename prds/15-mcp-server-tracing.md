@@ -37,19 +37,19 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ## Milestones
 
 ### Milestone 1: Research and Document Tracing Conventions
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Create comprehensive documentation of all tracing conventions used in cluster-whisperer, so MCP implementation can mirror them exactly.
 
 **Deliverable**: `docs/tracing-conventions.md`
 
 **Research Areas**:
-- [ ] OpenTelemetry semantic conventions used (process.*, error.*, SpanKind)
-- [ ] OpenLLMetry conventions used (traceloop.span.kind, traceloop.entity.*)
-- [ ] Custom attributes we defined (user.question, k8s.namespace, k8s.output_size_bytes)
-- [ ] Span naming patterns (cluster-whisperer.investigate, kubectl <op> <resource>)
-- [ ] Context propagation approach (AsyncLocalStorage bridge for LangGraph)
-- [ ] Content gating pattern (OTEL_TRACE_CONTENT_ENABLED)
+- [x] OpenTelemetry semantic conventions used (process.*, error.*, SpanKind)
+- [x] OpenLLMetry conventions used (traceloop.span.kind, traceloop.entity.*)
+- [x] Custom attributes we defined (user.question, k8s.namespace, k8s.output_size_bytes)
+- [x] Span naming patterns (cluster-whisperer.investigate, kubectl <op> <resource>)
+- [x] Context propagation approach (AsyncLocalStorage bridge for LangGraph)
+- [x] Content gating pattern (OTEL_TRACE_CONTENT_ENABLED)
 
 **Success Criteria**:
 - Documentation clearly catalogs every attribute, convention, and pattern
@@ -62,9 +62,11 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 
 **Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
 
-**Objective**: Create `withMcpRequestTracing()` function that creates properly-attributed root spans for MCP tool requests.
+**Objective**: Create `withMcpRequestTracing()` function that creates properly-attributed root spans for MCP tool requests, and fix existing CLI tracing to match documented conventions.
 
 **Implementation**:
+- [ ] Fix `withAgentTracing()` SpanKind: SERVER → INTERNAL (per tracing-conventions.md)
+- [ ] Add GenAI semconv attributes to root spans (`gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`)
 - [ ] Add `withMcpRequestTracing()` to `src/tracing/context-bridge.ts`
 - [ ] Mirror `withAgentTracing()` conventions exactly per documentation
 - [ ] Store context in AsyncLocalStorage for child span parenting
@@ -72,9 +74,11 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 - [ ] Gate content capture with `isTraceContentEnabled`
 
 **Files to Modify**:
-- `src/tracing/context-bridge.ts` - Add new function
+- `src/tracing/context-bridge.ts` - Fix existing function, add new function
 
 **Success Criteria**:
+- Both CLI and MCP root spans use correct SpanKind (INTERNAL)
+- Both include GenAI semconv attributes for Datadog LLM Observability
 - Function creates spans with all documented attributes
 - Context is stored for tool span parenting
 
@@ -146,7 +150,16 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 
 ## Progress Log
 
-_Progress entries will be added here as work proceeds._
+### 2026-02-03: Milestone 1 Complete
+
+**Deliverable**: Created `docs/tracing-conventions.md` - comprehensive specification of all tracing conventions.
+
+**Key findings during research**:
+1. **SpanKind deviation**: Current CLI uses `SpanKind.SERVER` but should use `INTERNAL` (neither CLI nor MCP stdio involves network requests - MCP stdio is IPC via pipes)
+2. **Missing GenAI semconv**: Tool spans should include `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` for better Datadog LLM Observability integration
+3. **Future consideration**: SpanKind should evolve with transport - if HTTP API added later, those spans would correctly use SERVER
+
+**Action taken**: Added fix tasks to Milestone 2 to address deviations before implementing MCP tracing.
 
 ---
 
