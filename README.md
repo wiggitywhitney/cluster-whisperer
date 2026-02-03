@@ -4,7 +4,7 @@ AI agent that answers natural language questions about your Kubernetes cluster.
 
 ## What is this?
 
-A CLI tool that lets you ask questions about your Kubernetes cluster in plain English:
+An AI agent that lets you ask questions about your Kubernetes cluster in plain English. Available via **CLI** for direct terminal use or as an **MCP server** for integration with Claude Code, Cursor, and other MCP clients.
 
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
@@ -130,20 +130,23 @@ The CLI agent has its own reasoning loop - it decides which tools to call and in
 ### MCP Server
 
 ```text
-User Question → [Claude Code / Cursor] → MCP → [kubectl tools] → Cluster → Answer
-                        ↑                         |
-                        └─────────────────────────┘
-                       (external LLM orchestrates)
+User Question → [Claude Code / Cursor] → MCP → investigate tool → ReAct Agent → Cluster
+                                                      ↑                  |
+                                                      └──────────────────┘
+                                                     (agent reasons internally)
 ```
 
-The MCP server exposes the same tools to any MCP-compatible client. The client's LLM does the reasoning.
+The MCP server exposes a single `investigate` tool that wraps the same ReAct agent used by the CLI. This gives MCP clients complete investigations with full tracing - one call captures the entire reasoning chain.
 
 ### Available Tools
 
-Both interfaces provide these read-only kubectl tools:
+**CLI Agent**: Uses these tools internally during investigation:
 - `kubectl_get` - List resources and their status
 - `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
+
+**MCP Server**: Exposes a single high-level tool:
+- `investigate` - Ask a question, get a complete answer (wraps the ReAct agent)
 
 ## Observability
 
