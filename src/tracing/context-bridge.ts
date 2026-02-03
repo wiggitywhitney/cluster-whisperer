@@ -33,6 +33,7 @@
  */
 
 import { AsyncLocalStorage } from "async_hooks";
+import { randomUUID } from "crypto";
 import {
   Context,
   context,
@@ -42,6 +43,24 @@ import {
   SpanStatusCode,
 } from "@opentelemetry/api";
 import { getTracer, isTraceContentEnabled } from "./index";
+
+/**
+ * MCP tool result format per Model Context Protocol specification.
+ *
+ * MCP tools return results as a content array with optional error flag.
+ * The isError flag signals logical errors (e.g., kubectl failed) without
+ * throwing exceptions, allowing the MCP client to handle errors gracefully.
+ *
+ * Type compatibility notes:
+ * - `type: "text"` uses literal type to satisfy MCP SDK's strict typing
+ * - Index signature `[key: string]: unknown` allows arbitrary extra fields
+ *   (MCP SDK's CallToolResult requires this for extensibility)
+ */
+export interface McpToolResult {
+  [key: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+}
 
 /**
  * AsyncLocalStorage instance for storing trace context.
@@ -144,7 +163,7 @@ export async function withAgentTracing<T>(
   return tracer.startActiveSpan(
     "cluster-whisperer.investigate",
     {
-      kind: SpanKind.SERVER,
+      kind: SpanKind.INTERNAL,
       attributes,
     },
     async (span: Span) => {
@@ -162,6 +181,129 @@ export async function withAgentTracing<T>(
         return result;
       } catch (error) {
         // Record the error on the span
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
+    }
+  );
+}
+
+/**
+ * Run an MCP tool request with proper trace context bridging.
+ *
+ * This is the entry point for traced MCP tool invocations. It mirrors
+ * withAgentTracing() but with MCP-specific attributes:
+ * - GenAI semantic conventions for Datadog LLM Observability integration
+ * - MCP-specific attributes (mcp.tool.name)
+ * - Tool input/output instead of user question
+ *
+ * MCP Result Handling:
+ * MCP tools return `{ content: [...], isError?: boolean }`. The isError flag
+ * signals logical errors (e.g., kubectl command failed) without throwing.
+ * This function inspects the result to set appropriate span status:
+ * - isError=true → SpanStatusCode.ERROR with message from content
+ * - isError=false/undefined → SpanStatusCode.OK
+ *
+ * The span hierarchy for MCP mode:
+ *   cluster-whisperer.mcp.<toolName> (this root span)
+ *   └── <toolName>.tool (created by withToolTracing)
+ *       └── kubectl <op> <resource> (subprocess span)
+ *
+ * @param toolName - The MCP tool name (e.g., "kubectl_get")
+ * @param input - The tool input parameters
+ * @param fn - The async function that executes the tool
+ * @returns The MCP tool result with content array and optional error flag
+ *
+ * @example
+ * ```typescript
+ * const result = await withMcpRequestTracing("kubectl_get", { resource: "pods" }, async () => {
+ *   return withToolTracing("kubectl_get", async () => {
+ *     return kubectlGet(input);
+ *   })(input);
+ * });
+ * ```
+ */
+export async function withMcpRequestTracing(
+  toolName: string,
+  input: Record<string, unknown>,
+  fn: () => Promise<McpToolResult>
+): Promise<McpToolResult> {
+  const tracer = getTracer();
+
+  // Build attributes for MCP tool execution
+  // Combines OpenLLMetry conventions with GenAI semantic conventions
+  const attributes: Record<string, string> = {
+    // OpenLLMetry conventions (for Traceloop ecosystem compatibility)
+    "service.operation": toolName,
+    "traceloop.span.kind": "workflow",
+    "traceloop.entity.name": toolName,
+    // MCP-specific identification
+    "mcp.tool.name": toolName,
+    // GenAI semantic conventions (for Datadog LLM Observability)
+    // See: https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    "gen_ai.operation.name": "execute_tool",
+    "gen_ai.tool.name": toolName,
+    "gen_ai.tool.type": "function",
+    "gen_ai.tool.call.id": randomUUID(),
+  };
+
+  // Only include tool input if trace content capture is enabled
+  // This prevents sensitive data from being exported to telemetry backends
+  if (isTraceContentEnabled) {
+    attributes["traceloop.entity.input"] = JSON.stringify(input);
+  }
+
+  return tracer.startActiveSpan(
+    `cluster-whisperer.mcp.${toolName}`,
+    {
+      kind: SpanKind.INTERNAL,
+      attributes,
+    },
+    async (span: Span) => {
+      // Store context in AsyncLocalStorage for child span parenting
+      // This bridges the context gap so tool spans nest properly
+      const currentContext = trace.setSpan(context.active(), span);
+
+      try {
+        // Run the tool function with both context and span stored
+        const result = await rootSpanStorage.run(span, () =>
+          contextStorage.run(currentContext, fn)
+        );
+
+        // Extract text content from MCP result for output attribute and error message
+        const textContent = result.content
+          .filter((c) => c.type === "text" && c.text)
+          .map((c) => c.text)
+          .join("\n");
+
+        // Check MCP error flag - logical error without exception
+        // kubectl failures (non-zero exit) set isError=true but don't throw
+        if (result.isError) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: textContent || "MCP tool returned error",
+          });
+        } else {
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+
+        // Record output content if trace content capture is enabled
+        if (isTraceContentEnabled && textContent) {
+          span.setAttribute("traceloop.entity.output", textContent);
+        }
+
+        return result;
+      } catch (error) {
+        // Record thrown exceptions (different from MCP isError flag)
+        // This handles unexpected errors like network failures or bugs
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : String(error),
