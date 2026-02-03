@@ -45,6 +45,18 @@ import {
 import { getTracer, isTraceContentEnabled } from "./index";
 
 /**
+ * MCP tool result format per Model Context Protocol specification.
+ *
+ * MCP tools return results as a content array with optional error flag.
+ * The isError flag signals logical errors (e.g., kubectl failed) without
+ * throwing exceptions, allowing the MCP client to handle errors gracefully.
+ */
+export interface McpToolResult {
+  content: Array<{ type: string; text?: string }>;
+  isError?: boolean;
+}
+
+/**
  * AsyncLocalStorage instance for storing trace context.
  *
  * AsyncLocalStorage is Node.js's solution for passing context through async
@@ -187,6 +199,13 @@ export async function withAgentTracing<T>(
  * - MCP-specific attributes (mcp.tool.name)
  * - Tool input/output instead of user question
  *
+ * MCP Result Handling:
+ * MCP tools return `{ content: [...], isError?: boolean }`. The isError flag
+ * signals logical errors (e.g., kubectl command failed) without throwing.
+ * This function inspects the result to set appropriate span status:
+ * - isError=true → SpanStatusCode.ERROR with message from content
+ * - isError=false/undefined → SpanStatusCode.OK
+ *
  * The span hierarchy for MCP mode:
  *   cluster-whisperer.mcp.<toolName> (this root span)
  *   └── <toolName>.tool (created by withToolTracing)
@@ -195,7 +214,7 @@ export async function withAgentTracing<T>(
  * @param toolName - The MCP tool name (e.g., "kubectl_get")
  * @param input - The tool input parameters
  * @param fn - The async function that executes the tool
- * @returns The result of the tool function
+ * @returns The MCP tool result with content array and optional error flag
  *
  * @example
  * ```typescript
@@ -206,11 +225,11 @@ export async function withAgentTracing<T>(
  * });
  * ```
  */
-export async function withMcpRequestTracing<T>(
+export async function withMcpRequestTracing(
   toolName: string,
   input: Record<string, unknown>,
-  fn: () => Promise<T>
-): Promise<T> {
+  fn: () => Promise<McpToolResult>
+): Promise<McpToolResult> {
   const tracer = getTracer();
 
   // Build attributes for MCP tool execution
@@ -249,14 +268,36 @@ export async function withMcpRequestTracing<T>(
 
       try {
         // Run the tool function with both context and span stored
-        // The span storage allows setTraceOutput() to add the OUTPUT attribute later
         const result = await rootSpanStorage.run(span, () =>
           contextStorage.run(currentContext, fn)
         );
-        span.setStatus({ code: SpanStatusCode.OK });
+
+        // Extract text content from MCP result for output attribute and error message
+        const textContent = result.content
+          .filter((c) => c.type === "text" && c.text)
+          .map((c) => c.text)
+          .join("\n");
+
+        // Check MCP error flag - logical error without exception
+        // kubectl failures (non-zero exit) set isError=true but don't throw
+        if (result.isError) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: textContent || "MCP tool returned error",
+          });
+        } else {
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+
+        // Record output content if trace content capture is enabled
+        if (isTraceContentEnabled && textContent) {
+          span.setAttribute("traceloop.entity.output", textContent);
+        }
+
         return result;
       } catch (error) {
-        // Record the error on the span
+        // Record thrown exceptions (different from MCP isError flag)
+        // This handles unexpected errors like network failures or bugs
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : String(error),

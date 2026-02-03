@@ -58,7 +58,7 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ---
 
 ### Milestone 2: Implement MCP Request Tracing
-**Status**: In Progress
+**Status**: Complete ✅
 
 **Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
 
@@ -70,7 +70,7 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 - [x] Add `withMcpRequestTracing()` to `src/tracing/context-bridge.ts`
 - [x] Mirror `withAgentTracing()` conventions exactly per documentation
 - [x] Store context in AsyncLocalStorage for child span parenting
-- [ ] Handle MCP result format (content array, isError flag)
+- [x] Handle MCP result format (content array, isError flag)
 - [x] Gate content capture with `isTraceContentEnabled`
 
 **Files to Modify**:
@@ -176,7 +176,26 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 
 **Key insight documented**: GenAI semconv attributes apply when the invoker of a span is an AI, not a human. CLI root span (human-invoked) doesn't get them; MCP root span (Claude-invoked) does. Tool spans in both modes should eventually get GenAI semconv since the LLM decides to call them.
 
-**Remaining**: "Handle MCP result format" will be addressed in Milestone 3 during tool registration integration.
+---
+
+### 2026-02-03: Milestone 2 Complete
+
+**Final task completed**: Handle MCP result format (content array, isError flag)
+
+**Implementation**:
+- Added `McpToolResult` interface defining MCP's result structure
+- Updated `withMcpRequestTracing()` to inspect result and set appropriate span status:
+  - `isError: true` → `SpanStatusCode.ERROR` with message from content
+  - `isError: false/undefined` → `SpanStatusCode.OK`
+- Extract text content from `content` array for `traceloop.entity.output` attribute
+- Exception handling preserved for thrown errors (records exception event)
+
+**Verified with test script**:
+- Success case: `status.code: 1` (OK) ✓
+- Error case: `status.code: 2` with error message ✓
+- Exception case: `status.code: 2` with `recordException()` ✓
+
+**Milestone 2 complete** - Ready for Milestone 3 (tool registration integration).
 
 ---
 
