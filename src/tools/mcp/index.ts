@@ -46,6 +46,7 @@ import {
   type KubectlLogsInput,
 } from "../core";
 import { withToolTracing } from "../../tracing/tool-tracing";
+import { withMcpRequestTracing } from "../../tracing/context-bridge";
 
 /**
  * Registers all kubectl tools with an MCP server.
@@ -59,53 +60,89 @@ import { withToolTracing } from "../../tracing/tool-tracing";
  */
 export function registerKubectlTools(server: McpServer): void {
   // kubectl_get - List resources in table format
-  // Wrapped with tracing to create spans for observability
+  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
+  // Hierarchy: cluster-whisperer.mcp.kubectl_get → kubectl_get.tool → kubectl subprocess
   server.registerTool(
     "kubectl_get",
     {
       description: kubectlGetDescription,
       inputSchema: kubectlGetSchema.shape,
     },
-    withToolTracing("kubectl_get", async (input: KubectlGetInput) => {
-      const { output, isError } = await kubectlGet(input);
-      return {
-        content: [{ type: "text", text: output }],
-        isError,
-      };
-    })
+    async (input: KubectlGetInput) => {
+      return withMcpRequestTracing(
+        "kubectl_get",
+        input as Record<string, unknown>,
+        async () => {
+          return withToolTracing(
+            "kubectl_get",
+            async (toolInput: KubectlGetInput) => {
+              const { output, isError } = await kubectlGet(toolInput);
+              return {
+                content: [{ type: "text" as const, text: output }],
+                isError,
+              };
+            }
+          )(input);
+        }
+      );
+    }
   );
 
   // kubectl_describe - Get detailed resource information
-  // Wrapped with tracing to create spans for observability
+  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
+  // Hierarchy: cluster-whisperer.mcp.kubectl_describe → kubectl_describe.tool → kubectl subprocess
   server.registerTool(
     "kubectl_describe",
     {
       description: kubectlDescribeDescription,
       inputSchema: kubectlDescribeSchema.shape,
     },
-    withToolTracing("kubectl_describe", async (input: KubectlDescribeInput) => {
-      const { output, isError } = await kubectlDescribe(input);
-      return {
-        content: [{ type: "text", text: output }],
-        isError,
-      };
-    })
+    async (input: KubectlDescribeInput) => {
+      return withMcpRequestTracing(
+        "kubectl_describe",
+        input as Record<string, unknown>,
+        async () => {
+          return withToolTracing(
+            "kubectl_describe",
+            async (toolInput: KubectlDescribeInput) => {
+              const { output, isError } = await kubectlDescribe(toolInput);
+              return {
+                content: [{ type: "text" as const, text: output }],
+                isError,
+              };
+            }
+          )(input);
+        }
+      );
+    }
   );
 
   // kubectl_logs - Get container logs
-  // Wrapped with tracing to create spans for observability
+  // Wrapped with MCP request tracing (root span) and tool tracing (nested span)
+  // Hierarchy: cluster-whisperer.mcp.kubectl_logs → kubectl_logs.tool → kubectl subprocess
   server.registerTool(
     "kubectl_logs",
     {
       description: kubectlLogsDescription,
       inputSchema: kubectlLogsSchema.shape,
     },
-    withToolTracing("kubectl_logs", async (input: KubectlLogsInput) => {
-      const { output, isError } = await kubectlLogs(input);
-      return {
-        content: [{ type: "text", text: output }],
-        isError,
-      };
-    })
+    async (input: KubectlLogsInput) => {
+      return withMcpRequestTracing(
+        "kubectl_logs",
+        input as Record<string, unknown>,
+        async () => {
+          return withToolTracing(
+            "kubectl_logs",
+            async (toolInput: KubectlLogsInput) => {
+              const { output, isError } = await kubectlLogs(toolInput);
+              return {
+                content: [{ type: "text" as const, text: output }],
+                isError,
+              };
+            }
+          )(input);
+        }
+      );
+    }
   );
 }

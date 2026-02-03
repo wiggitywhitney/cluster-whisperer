@@ -50,9 +50,15 @@ import { getTracer, isTraceContentEnabled } from "./index";
  * MCP tools return results as a content array with optional error flag.
  * The isError flag signals logical errors (e.g., kubectl failed) without
  * throwing exceptions, allowing the MCP client to handle errors gracefully.
+ *
+ * Type compatibility notes:
+ * - `type: "text"` uses literal type to satisfy MCP SDK's strict typing
+ * - Index signature `[key: string]: unknown` allows arbitrary extra fields
+ *   (MCP SDK's CallToolResult requires this for extensibility)
  */
 export interface McpToolResult {
-  content: Array<{ type: string; text?: string }>;
+  [key: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 }
 

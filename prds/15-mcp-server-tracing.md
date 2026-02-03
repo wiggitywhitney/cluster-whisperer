@@ -85,16 +85,16 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ---
 
 ### Milestone 3: Integrate MCP Tracing with Tool Registration
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
 
 **Objective**: Update MCP tool registration to use the new tracing wrapper.
 
 **Implementation**:
-- [ ] Update `src/tools/mcp/index.ts` to wrap handlers with `withMcpRequestTracing()`
-- [ ] Ensure proper nesting: MCP request span → tool span → kubectl span
-- [ ] Verify span hierarchy in console output
+- [x] Update `src/tools/mcp/index.ts` to wrap handlers with `withMcpRequestTracing()`
+- [x] Ensure proper nesting: MCP request span → tool span → kubectl span
+- [x] Verify span hierarchy in console output
 
 **Files to Modify**:
 - `src/tools/mcp/index.ts` - Update tool registration
@@ -196,6 +196,28 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 - Exception case: `status.code: 2` with `recordException()` ✓
 
 **Milestone 2 complete** - Ready for Milestone 3 (tool registration integration).
+
+---
+
+### 2026-02-03: Milestone 3 Complete
+
+**Completed**: Integrated `withMcpRequestTracing()` with MCP tool registration.
+
+**Implementation**:
+- Wrapped all three tool handlers (`kubectl_get`, `kubectl_describe`, `kubectl_logs`) with `withMcpRequestTracing()`
+- Each handler now creates proper span hierarchy: MCP root → tool → kubectl subprocess
+- Fixed `McpToolResult` type for MCP SDK compatibility (literal `"text"` type + index signature)
+
+**Verified span hierarchy with console output**:
+```
+cluster-whisperer.mcp.kubectl_get  (traceId: abc, spanId: ROOT, parent: none)
+└── kubectl_get.tool               (traceId: abc, spanId: TOOL, parent: ROOT)
+    └── kubectl get pods           (traceId: abc, spanId: SUB, parent: TOOL)
+```
+
+All three spans share the same `traceId` and have correct parent relationships.
+
+**Milestone 3 complete** - Ready for Milestone 4 (environment configuration).
 
 ---
 
