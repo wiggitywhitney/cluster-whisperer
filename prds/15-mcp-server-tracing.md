@@ -27,10 +27,10 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 
 ## Success Criteria
 
-- [ ] MCP tool calls produce traces visible in Datadog
-- [ ] Trace hierarchy mirrors CLI: `cluster-whisperer.mcp.<tool>` → `<tool>` → `kubectl` spans
-- [ ] All span attributes match documented conventions exactly
-- [ ] Environment configuration enables OTLP export to Datadog Agent
+- [x] MCP tool calls produce traces visible in Datadog
+- [x] Trace hierarchy mirrors CLI: `cluster-whisperer.mcp.<tool>` → `<tool>` → `kubectl` spans
+- [x] All span attributes match documented conventions exactly
+- [x] Environment configuration enables OTLP export to Datadog Agent
 
 ---
 
@@ -106,17 +106,17 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ---
 
 ### Milestone 4: Configure MCP Environment Variables
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
 
 **Objective**: Update `.mcp.json` to pass tracing environment variables when Claude Code spawns the MCP server.
 
 **Implementation**:
-- [ ] Add `OTEL_TRACING_ENABLED=true` to enable tracing
-- [ ] Add `OTEL_EXPORTER_TYPE=otlp` for Datadog export
-- [ ] Add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` for local agent
-- [ ] Document in CLAUDE.md how to toggle tracing on/off
+- [x] Add `OTEL_TRACING_ENABLED=true` to enable tracing
+- [x] Add `OTEL_EXPORTER_TYPE=otlp` for Datadog export
+- [x] Add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` for local agent
+- [x] Document in CLAUDE.md how to toggle tracing on/off
 
 **Files to Modify**:
 - `.mcp.json` - Add environment variables
@@ -218,6 +218,25 @@ cluster-whisperer.mcp.kubectl_get  (traceId: abc, spanId: ROOT, parent: none)
 All three spans share the same `traceId` and have correct parent relationships.
 
 **Milestone 3 complete** - Ready for Milestone 4 (environment configuration).
+
+---
+
+### 2026-02-03: Milestone 4 Complete
+
+**Completed**: Configured MCP environment variables for tracing.
+
+**Implementation**:
+- Updated `.mcp.json` with all required environment variables:
+  - `OTEL_TRACING_ENABLED=true`
+  - `OTEL_EXPORTER_TYPE=otlp`
+  - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+  - `OTEL_TRACE_CONTENT_ENABLED=true`
+- Added MCP tracing documentation to `CLAUDE.md`:
+  - How to enable/disable MCP tracing
+  - Content capture privacy note
+  - Restart requirement after config changes
+
+**Milestone 4 complete** - Ready for Milestone 5 (end-to-end Datadog validation).
 
 ---
 
