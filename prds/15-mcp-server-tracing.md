@@ -58,20 +58,20 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 ---
 
 ### Milestone 2: Implement MCP Request Tracing
-**Status**: Not Started
+**Status**: In Progress
 
 **Prerequisite**: Read `docs/tracing-conventions.md` from Milestone 1
 
 **Objective**: Create `withMcpRequestTracing()` function that creates properly-attributed root spans for MCP tool requests, and fix existing CLI tracing to match documented conventions.
 
 **Implementation**:
-- [ ] Fix `withAgentTracing()` SpanKind: SERVER → INTERNAL (per tracing-conventions.md)
-- [ ] Add GenAI semconv attributes to root spans (`gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`)
-- [ ] Add `withMcpRequestTracing()` to `src/tracing/context-bridge.ts`
-- [ ] Mirror `withAgentTracing()` conventions exactly per documentation
-- [ ] Store context in AsyncLocalStorage for child span parenting
+- [x] Fix `withAgentTracing()` SpanKind: SERVER → INTERNAL (per tracing-conventions.md)
+- [x] Add GenAI semconv attributes to root spans (`gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`)
+- [x] Add `withMcpRequestTracing()` to `src/tracing/context-bridge.ts`
+- [x] Mirror `withAgentTracing()` conventions exactly per documentation
+- [x] Store context in AsyncLocalStorage for child span parenting
 - [ ] Handle MCP result format (content array, isError flag)
-- [ ] Gate content capture with `isTraceContentEnabled`
+- [x] Gate content capture with `isTraceContentEnabled`
 
 **Files to Modify**:
 - `src/tracing/context-bridge.ts` - Fix existing function, add new function
@@ -160,6 +160,23 @@ Implement MCP server tracing that exactly mirrors CLI conventions:
 3. **Future consideration**: SpanKind should evolve with transport - if HTTP API added later, those spans would correctly use SERVER
 
 **Action taken**: Added fix tasks to Milestone 2 to address deviations before implementing MCP tracing.
+
+---
+
+### 2026-02-03: Milestone 2 Implementation Progress
+
+**Completed**:
+- Fixed `withAgentTracing()` SpanKind from SERVER → INTERNAL
+- Created `withMcpRequestTracing()` function with all documented attributes:
+  - OpenLLMetry conventions (`traceloop.span.kind`, `traceloop.entity.name`)
+  - MCP-specific attributes (`mcp.tool.name`)
+  - GenAI semantic conventions (`gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`)
+- Content gating implemented with `isTraceContentEnabled` check
+- Context stored in AsyncLocalStorage for proper span parenting
+
+**Key insight documented**: GenAI semconv attributes apply when the invoker of a span is an AI, not a human. CLI root span (human-invoked) doesn't get them; MCP root span (Claude-invoked) does. Tool spans in both modes should eventually get GenAI semconv since the LLM decides to call them.
+
+**Remaining**: "Handle MCP result format" will be addressed in Milestone 3 during tool registration integration.
 
 ---
 
