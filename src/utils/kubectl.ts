@@ -149,7 +149,7 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  * Creates an OpenTelemetry span for the kubectl subprocess execution with:
  * - Span name: "kubectl {operation} {resource}" (e.g., "kubectl get pods")
  * - Span kind: CLIENT (outbound subprocess call)
- * - Attributes: OTel semconv process.* attributes plus k8s.namespace and k8s.output_size_bytes
+ * - Attributes: OTel semconv process.* attributes plus cluster_whisperer.k8s.namespace and cluster_whisperer.k8s.output_size_bytes
  *
  * The span is automatically parented under the active MCP tool span (if any),
  * creating the hierarchy: execute_tool kubectl_get → kubectl get pods
