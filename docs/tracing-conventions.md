@@ -53,11 +53,11 @@ The root span wraps the entire operation and stores context for child span paren
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `service.operation` | string | Yes | Always `"investigate"` |
+| `cluster_whisperer.service.operation` | string | Yes | Always `"investigate"` |
 | `traceloop.span.kind` | string | Yes | Always `"workflow"` |
 | `traceloop.entity.name` | string | Yes | Always `"investigate"` |
-| `user.question` | string | Content-gated | The user's natural language question |
-| `traceloop.entity.input` | string | Content-gated | Same as `user.question` |
+| `cluster_whisperer.user.question` | string | Content-gated | The user's natural language question |
+| `traceloop.entity.input` | string | Content-gated | Same as `cluster_whisperer.user.question` |
 | `traceloop.entity.output` | string | Content-gated | Final answer (set via `setTraceOutput()`) |
 
 ### MCP Mode: `withMcpRequestTracing()`
@@ -73,12 +73,12 @@ The root span wraps the entire operation and stores context for child span paren
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `service.operation` | string | Yes | The tool name (e.g., `"kubectl_get"`) |
+| `cluster_whisperer.service.operation` | string | Yes | The tool name (e.g., `"kubectl_get"`) |
 | `traceloop.span.kind` | string | Yes | Always `"workflow"` |
 | `traceloop.entity.name` | string | Yes | The tool name |
 | `traceloop.entity.input` | string | Content-gated | JSON stringified tool input |
 | `traceloop.entity.output` | string | Content-gated | Tool result content |
-| `mcp.tool.name` | string | Yes | The MCP tool name |
+| `cluster_whisperer.mcp.tool.name` | string | Yes | The MCP tool name |
 | `gen_ai.operation.name` | string | Yes | Always `"execute_tool"` *(GenAI semconv)* |
 | `gen_ai.tool.name` | string | Yes | The tool name *(GenAI semconv)* |
 | `gen_ai.tool.type` | string | Yes | Always `"function"` *(GenAI semconv)* |
@@ -134,12 +134,12 @@ These follow [OTel Process Semantic Conventions](https://opentelemetry.io/docs/s
 
 ### Custom Attributes
 
-These have no semconv equivalent but provide value for Kubernetes-specific queries:
+These have no semconv equivalent but provide value for Kubernetes-specific queries. They use the `cluster_whisperer.*` namespace to avoid conflicts with future OTel conventions:
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `k8s.namespace` | string | If present | Namespace from `-n` or `--namespace` flag |
-| `k8s.output_size_bytes` | int | On success | Byte length of stdout (useful for debugging large responses) |
+| `cluster_whisperer.k8s.namespace` | string | If present | Namespace from `-n` or `--namespace` flag |
+| `cluster_whisperer.k8s.output_size_bytes` | int | On success | Byte length of stdout (useful for debugging large responses) |
 
 ### Error Handling
 
@@ -321,13 +321,15 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 
 ### 4. Custom Attributes Without Semconv Equivalent ✓ KEEP
 
+All custom attributes use the `cluster_whisperer.*` namespace to avoid conflicts with future OTel conventions:
+
 | Attribute | Why custom | Semconv gap |
 |-----------|-----------|-------------|
-| `user.question` | Captures the investigation question | No user input semconv for CLI tools |
-| `service.operation` | Describes the operation type | Could use span name instead |
-| `k8s.namespace` | Kubernetes-specific filtering | No k8s semconv for CLI tools |
-| `k8s.output_size_bytes` | Debug large responses | No output size semconv |
-| `mcp.tool.name` | MCP-specific identification | MCP has no semconv yet |
+| `cluster_whisperer.user.question` | Captures the investigation question | No user input semconv for CLI tools |
+| `cluster_whisperer.service.operation` | Describes the operation type | Could use span name instead |
+| `cluster_whisperer.k8s.namespace` | Kubernetes-specific filtering | No k8s semconv for CLI tools |
+| `cluster_whisperer.k8s.output_size_bytes` | Debug large responses | No output size semconv |
+| `cluster_whisperer.mcp.tool.name` | MCP-specific identification | MCP has no semconv yet |
 
 **Recommendation**: Keep - they provide genuine value with no standard alternative.
 
@@ -358,6 +360,6 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 | Span | Kind | Key Attributes |
 |------|------|----------------|
 | `cluster-whisperer.investigate` | INTERNAL | `traceloop.span.kind=workflow` |
-| `cluster-whisperer.mcp.<tool>` | INTERNAL | `traceloop.span.kind=workflow`, `mcp.tool.name` |
+| `cluster-whisperer.mcp.<tool>` | INTERNAL | `traceloop.span.kind=workflow`, `cluster_whisperer.mcp.tool.name` |
 | `<tool>.tool` | INTERNAL | `traceloop.span.kind=tool` |
-| `kubectl {op} {resource}` | CLIENT | `process.*`, `k8s.namespace`, `k8s.output_size_bytes` |
+| `kubectl {op} {resource}` | CLIENT | `process.*`, `cluster_whisperer.k8s.namespace`, `cluster_whisperer.k8s.output_size_bytes` |
