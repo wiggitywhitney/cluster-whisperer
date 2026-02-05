@@ -192,24 +192,46 @@ OpenTelemetry Weaver is a CLI tool for **schema-driven observability**. It:
 - Produces documentation from schemas
 - Validates live telemetry against schemas
 
-### Assessment: NOT Applicable
+### Original Assessment (January 2026): NOT Applicable
 
-**Weaver is not useful for this project because:**
+The initial PRD #6 assessment concluded Weaver was not useful because:
 
-1. **Constants already exist** - The `@opentelemetry/semantic-conventions` npm package provides all TypeScript constants we need. This package IS generated using Weaver.
+1. **Constants already exist** - The `@opentelemetry/semantic-conventions` npm package provides TypeScript constants
+2. **Solves enterprise-scale problems** - Designed for organizations managing custom conventions across many teams
+3. **No custom schemas** - We were following standard conventions only
 
-2. **Solves enterprise-scale problems** - Designed for organizations managing custom semantic conventions across many teams/services. We're using standard OTel conventions.
+**This assessment was correct at the time** - cluster-whisperer had zero custom attributes and no documented conventions.
 
-3. **No custom schemas** - Weaver shines when defining/versioning organization-specific conventions. We follow standard conventions.
+### Updated Assessment (February 2026): Now Applicable
 
-**What to use instead:**
-```typescript
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_PROCESS_COMMAND,
-  ATTR_PROCESS_COMMAND_ARGS,
-} from '@opentelemetry/semantic-conventions';
+**Circumstances changed.** Since PRD #6, cluster-whisperer evolved:
+
+| Then (PRD #6) | Now (PRD #19) |
+|---------------|---------------|
+| Zero custom attributes | 5 custom attributes (`cluster_whisperer.*`) |
+| No documented conventions | 364-line `docs/tracing-conventions.md` |
+| Single entry point | Two modes (CLI/MCP) with distinct attribute sets |
+
+**Weaver is now in use** for schema validation following the commit-story-v2 lightweight pattern:
+
+```text
+telemetry/registry/
+├── registry_manifest.yaml    # OTel v1.37.0 dependency
+├── attributes.yaml           # 4 attribute groups, 17 attributes
+└── resolved.json             # Expanded OTel references
 ```
+
+**What we use Weaver for:**
+- Schema as source of truth for custom attributes
+- Validation that OTel references (`gen_ai.*`, `process.*`, `error.*`) resolve correctly
+- Documentation generation from schema
+
+**What we don't use Weaver for:**
+- Code generation (Weaver generates Go/Rust, not TypeScript)
+- Live telemetry validation (deferred until schema is stable)
+- Enterprise governance
+
+See `docs/weaver-research.md` for full rationale and attribute inventory.
 
 ---
 
@@ -462,6 +484,8 @@ const traceExporter = new OTLPTraceExporter({
 ### Weaver
 
 **Decision: Not using Weaver.** The `@opentelemetry/semantic-conventions` package provides all constants needed. Weaver solves organization-scale governance problems we don't have.
+
+> **Note (February 2026):** This decision was revised in PRD #19. We now use Weaver for schema validation of custom attributes. See Section 3 and `docs/weaver-research.md`.
 
 ### Manual Instrumentation
 

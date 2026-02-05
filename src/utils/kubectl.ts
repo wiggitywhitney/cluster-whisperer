@@ -26,7 +26,7 @@
  * OpenTelemetry instrumentation:
  * Each kubectl execution creates a span following OTel semantic conventions.
  * We use process.* semconv attributes plus two pragmatic custom attributes
- * (k8s.namespace and k8s.output_size_bytes) that have no semconv equivalent.
+ * (cluster_whisperer.k8s.namespace and cluster_whisperer.k8s.output_size_bytes) that have no semconv equivalent.
  * See docs/opentelemetry-research.md Section 10 for the semconv gap analysis.
  */
 
@@ -149,7 +149,7 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  * Creates an OpenTelemetry span for the kubectl subprocess execution with:
  * - Span name: "kubectl {operation} {resource}" (e.g., "kubectl get pods")
  * - Span kind: CLIENT (outbound subprocess call)
- * - Attributes: OTel semconv process.* attributes plus k8s.namespace and k8s.output_size_bytes
+ * - Attributes: OTel semconv process.* attributes plus cluster_whisperer.k8s.namespace and cluster_whisperer.k8s.output_size_bytes
  *
  * The span is automatically parented under the active MCP tool span (if any),
  * creating the hierarchy: execute_tool kubectl_get → kubectl get pods
@@ -186,10 +186,10 @@ export function executeKubectl(args: string[]): KubectlResult {
         ...redactSensitiveArgs(args),
       ]);
 
-      // Pragmatic custom attributes (no semconv equivalent)
-      // k8s.namespace is useful for filtering queries by namespace
+      // Pragmatic custom attributes (no semconv equivalent, namespaced to project)
+      // cluster_whisperer.k8s.namespace is useful for filtering queries by namespace
       if (metadata.namespace) {
-        span.setAttribute("k8s.namespace", metadata.namespace);
+        span.setAttribute("cluster_whisperer.k8s.namespace", metadata.namespace);
       }
 
       try {
@@ -235,10 +235,10 @@ export function executeKubectl(args: string[]): KubectlResult {
         }
 
         // Success case
-        // k8s.output_size_bytes is a pragmatic custom attribute (no semconv equivalent)
+        // cluster_whisperer.k8s.output_size_bytes is a pragmatic custom attribute (no semconv equivalent)
         // Useful for debugging when kubectl returns unexpectedly large output
         span.setAttribute(
-          "k8s.output_size_bytes",
+          "cluster_whisperer.k8s.output_size_bytes",
           Buffer.byteLength(result.stdout, "utf-8")
         );
         span.setStatus({ code: SpanStatusCode.OK });

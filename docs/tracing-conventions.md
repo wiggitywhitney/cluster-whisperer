@@ -1,8 +1,10 @@
 # Tracing Conventions
 
-This document specifies all tracing conventions used in cluster-whisperer. MCP server tracing must mirror these conventions exactly to ensure consistent observability across both CLI and MCP modes.
+This document explains how tracing works in cluster-whisperer, the architectural decisions behind it, and how to implement tracing for new entry points.
 
 **Audience**: Developers implementing tracing for new entry points (MCP server, future APIs)
+
+> **Attribute Definitions**: For the complete list of span attributes (names, types, descriptions), see the Weaver schema in `telemetry/registry/attributes.yaml`. This document focuses on architecture, context propagation, and design rationale.
 
 ---
 
@@ -49,16 +51,7 @@ The root span wraps the entire operation and stores context for child span paren
 | **Span Name** | `cluster-whisperer.investigate` |
 | **SpanKind** | `INTERNAL` |
 
-**Attributes**:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `service.operation` | string | Yes | Always `"investigate"` |
-| `traceloop.span.kind` | string | Yes | Always `"workflow"` |
-| `traceloop.entity.name` | string | Yes | Always `"investigate"` |
-| `user.question` | string | Content-gated | The user's natural language question |
-| `traceloop.entity.input` | string | Content-gated | Same as `user.question` |
-| `traceloop.entity.output` | string | Content-gated | Final answer (set via `setTraceOutput()`) |
+Attributes: See `registry.cluster_whisperer.root` in `telemetry/registry/attributes.yaml`
 
 ### MCP Mode: `withMcpRequestTracing()`
 
@@ -69,20 +62,9 @@ The root span wraps the entire operation and stores context for child span paren
 | **Span Name** | `cluster-whisperer.mcp.<toolName>` |
 | **SpanKind** | `INTERNAL` |
 
-**Attributes**:
+Attributes: See `registry.cluster_whisperer.mcp` in `telemetry/registry/attributes.yaml`
 
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `service.operation` | string | Yes | The tool name (e.g., `"kubectl_get"`) |
-| `traceloop.span.kind` | string | Yes | Always `"workflow"` |
-| `traceloop.entity.name` | string | Yes | The tool name |
-| `traceloop.entity.input` | string | Content-gated | JSON stringified tool input |
-| `traceloop.entity.output` | string | Content-gated | Tool result content |
-| `mcp.tool.name` | string | Yes | The MCP tool name |
-| `gen_ai.operation.name` | string | Yes | Always `"execute_tool"` *(GenAI semconv)* |
-| `gen_ai.tool.name` | string | Yes | The tool name *(GenAI semconv)* |
-| `gen_ai.tool.type` | string | Yes | Always `"function"` *(GenAI semconv)* |
-| `gen_ai.tool.call.id` | string | Yes | Unique UUID per invocation *(GenAI semconv)* |
+**Key difference**: MCP mode includes GenAI semantic convention attributes (`gen_ai.*`) for Datadog LLM Observability integration. CLI mode does not include these because the root span is human-invoked, not AI-invoked.
 
 ---
 
@@ -121,25 +103,9 @@ Subprocess spans track kubectl command execution.
 | **Span Name** | `kubectl {operation} {resource}` |
 | **SpanKind** | `CLIENT` |
 
-### Standard Semconv Attributes
+Attributes: See `registry.cluster_whisperer.subprocess` in `telemetry/registry/attributes.yaml`
 
-These follow [OTel Process Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/resource/process/):
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `process.executable.name` | string | Yes | Always `"kubectl"` |
-| `process.command_args` | string[] | Yes | Full command including executable: `["kubectl", "get", "pods", "-n", "default"]` |
-| `process.exit.code` | int | Yes | Exit code (`0` = success, `-1` = spawn error) |
-| `error.type` | string | On error | Error class name (e.g., `"KubectlError"`, `"Error"`) |
-
-### Custom Attributes
-
-These have no semconv equivalent but provide value for Kubernetes-specific queries:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `k8s.namespace` | string | If present | Namespace from `-n` or `--namespace` flag |
-| `k8s.output_size_bytes` | int | On success | Byte length of stdout (useful for debugging large responses) |
+The subprocess group includes OTel Process semantic convention references (`process.*`, `error.*`) and custom Kubernetes-specific attributes (`cluster_whisperer.k8s.*`).
 
 ### Error Handling
 
@@ -235,13 +201,7 @@ Sensitive content (user questions, tool inputs/outputs) is only captured when ex
 OTEL_TRACE_CONTENT_ENABLED=true  # Default: false (disabled)
 ```
 
-### Gated Attributes
-
-| Attribute | Location | Description |
-|-----------|----------|-------------|
-| `user.question` | Root span | User's natural language question |
-| `traceloop.entity.input` | Root span | Input to the workflow/tool |
-| `traceloop.entity.output` | Root span | Output from the workflow/tool |
+Content-gated attributes are marked in the Weaver schema with `note: "Content-gated"`. These include `cluster_whisperer.user.question` and all `traceloop.entity.*` attributes.
 
 ### Implementation
 
@@ -249,7 +209,7 @@ OTEL_TRACE_CONTENT_ENABLED=true  # Default: false (disabled)
 import { isTraceContentEnabled } from "./index";
 
 if (isTraceContentEnabled) {
-  span.setAttribute("user.question", question);
+  span.setAttribute("cluster_whisperer.user.question", question);
   span.setAttribute("traceloop.entity.input", question);
 }
 ```
@@ -321,13 +281,9 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 
 ### 4. Custom Attributes Without Semconv Equivalent ✓ KEEP
 
-| Attribute | Why custom | Semconv gap |
-|-----------|-----------|-------------|
-| `user.question` | Captures the investigation question | No user input semconv for CLI tools |
-| `service.operation` | Describes the operation type | Could use span name instead |
-| `k8s.namespace` | Kubernetes-specific filtering | No k8s semconv for CLI tools |
-| `k8s.output_size_bytes` | Debug large responses | No output size semconv |
-| `mcp.tool.name` | MCP-specific identification | MCP has no semconv yet |
+All custom attributes use the `cluster_whisperer.*` namespace to avoid conflicts with future OTel conventions. See `telemetry/registry/attributes.yaml` for the complete list with descriptions.
+
+**Why custom namespace**: These attributes have no OTel semantic convention equivalent. The `cluster_whisperer.*` prefix ensures they won't conflict if OTel adds similar conventions in the future.
 
 **Recommendation**: Keep - they provide genuine value with no standard alternative.
 
@@ -358,6 +314,6 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 | Span | Kind | Key Attributes |
 |------|------|----------------|
 | `cluster-whisperer.investigate` | INTERNAL | `traceloop.span.kind=workflow` |
-| `cluster-whisperer.mcp.<tool>` | INTERNAL | `traceloop.span.kind=workflow`, `mcp.tool.name` |
+| `cluster-whisperer.mcp.<tool>` | INTERNAL | `traceloop.span.kind=workflow`, `cluster_whisperer.mcp.tool.name` |
 | `<tool>.tool` | INTERNAL | `traceloop.span.kind=tool` |
-| `kubectl {op} {resource}` | CLIENT | `process.*`, `k8s.namespace`, `k8s.output_size_bytes` |
+| `kubectl {op} {resource}` | CLIENT | `process.*`, `cluster_whisperer.k8s.namespace`, `cluster_whisperer.k8s.output_size_bytes` |

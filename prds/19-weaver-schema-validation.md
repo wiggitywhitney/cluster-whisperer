@@ -15,7 +15,7 @@ The existing assessment in `docs/opentelemetry-research.md` Section 3 concluded 
 - "No custom schemas"
 
 **This assessment is now outdated** because:
-1. We have custom attributes (`k8s.namespace`, `k8s.output_size_bytes`, `user.question`, `mcp.tool.name`)
+1. We have custom attributes (`cluster_whisperer.k8s.namespace`, `cluster_whisperer.k8s.output_size_bytes`, `cluster_whisperer.user.question`, `cluster_whisperer.mcp.tool.name`)
 2. We have documented conventions that should be machine-validated
 3. commit-story-v2 demonstrated a lightweight Weaver pattern that works for small projects
 4. The investigate tool will grow, making drift prevention valuable now
@@ -39,18 +39,18 @@ This provides:
 
 ## Success Criteria
 
-- [ ] Schema validates all attributes documented in `docs/tracing-conventions.md`
-- [ ] OTel semantic convention references resolve successfully
-- [ ] Custom attributes are properly typed and documented
-- [ ] `weaver registry resolve` completes without errors
-- [ ] npm scripts provide easy validation workflow
+- [x] Schema validates all attributes documented in `docs/tracing-conventions.md`
+- [x] OTel semantic convention references resolve successfully
+- [x] Custom attributes are properly typed and documented
+- [x] `weaver registry resolve` completes without errors
+- [x] npm scripts provide easy validation workflow
 
 ---
 
 ## Milestones
 
 ### Milestone 1: Research and Documentation
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Create research document specific to Weaver in cluster-whisperer context, updating the outdated assessment.
 
@@ -58,16 +58,16 @@ This provides:
 - `docs/weaver-research.md` containing:
   - Current attribute inventory extracted from code (not just docs)
   - OTel conventions to reference (`gen_ai.*`, `process.*`, `error.*`)
-  - Custom attributes requiring definition (`k8s.*`, `mcp.*`, `traceloop.*`)
+  - Custom attributes requiring definition (`cluster_whisperer.k8s.*`, `cluster_whisperer.mcp.*`, `traceloop.*`)
   - Weaver CLI installation and commands
   - Updated rationale for why Weaver is now applicable
 
 **Implementation**:
-- [ ] Extract attribute usage from `src/tracing/context-bridge.ts`
-- [ ] Extract attribute usage from `src/utils/kubectl.ts`
-- [ ] Categorize each attribute as OTel ref or custom
-- [ ] Document Weaver CLI workflow
-- [ ] Explain changed circumstances since PRD #6
+- [x] Extract attribute usage from `src/tracing/context-bridge.ts`
+- [x] Extract attribute usage from `src/utils/kubectl.ts`
+- [x] Categorize each attribute as OTel ref or custom
+- [x] Document Weaver CLI workflow
+- [x] Explain changed circumstances since PRD #6
 
 **Success Criteria**:
 - Complete inventory of all span attributes used in code
@@ -82,7 +82,7 @@ This provides:
 ---
 
 ### Milestone 2: Registry Structure
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Create the base Weaver registry structure with OTel dependency.
 
@@ -90,13 +90,13 @@ This provides:
 
 **Deliverables**:
 - `telemetry/registry/registry_manifest.yaml`
-- `telemetry/registry/attributes.yaml` (placeholder)
+- `telemetry/registry/attributes.yaml`
 
 **Implementation**:
-- [ ] Create `telemetry/registry/` directory
-- [ ] Create `registry_manifest.yaml` pinning OTel v1.37.0
-- [ ] Create placeholder `attributes.yaml`
-- [ ] Verify `weaver registry check` passes
+- [x] Create `telemetry/registry/` directory
+- [x] Create `registry_manifest.yaml` pinning OTel v1.37.0
+- [x] Create `attributes.yaml`
+- [x] Verify `weaver registry check` passes
 
 **registry_manifest.yaml**:
 ```yaml
@@ -115,7 +115,7 @@ dependencies:
 ---
 
 ### Milestone 3: Attribute Definitions
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Define all attribute groups in `attributes.yaml`.
 
@@ -127,15 +127,11 @@ dependencies:
 **Attribute Groups**:
 
 1. **`registry.cluster_whisperer.root`** - Root span attributes
-   - `service.operation` (string)
-   - `traceloop.span.kind` (enum: workflow, tool)
-   - `traceloop.entity.name` (string)
-   - `user.question` (string, content-gated)
-   - `traceloop.entity.input` (string, content-gated)
-   - `traceloop.entity.output` (string, content-gated)
+   - `cluster_whisperer.service.operation` (string)
+   - `cluster_whisperer.user.question` (string, content-gated)
 
 2. **`registry.cluster_whisperer.mcp`** - MCP-specific attributes
-   - `mcp.tool.name` (string)
+   - `cluster_whisperer.mcp.tool.name` (string)
    - `ref: gen_ai.operation.name`
    - `ref: gen_ai.tool.name`
    - `ref: gen_ai.tool.type`
@@ -146,15 +142,21 @@ dependencies:
    - `ref: process.command_args`
    - `ref: process.exit.code`
    - `ref: error.type`
-   - `k8s.namespace` (string, custom)
-   - `k8s.output_size_bytes` (int, custom)
+   - `cluster_whisperer.k8s.namespace` (string, custom)
+   - `cluster_whisperer.k8s.output_size_bytes` (int, custom)
+
+4. **`registry.cluster_whisperer.openllmetry`** - OpenLLMetry/Traceloop attributes
+   - `traceloop.span.kind` (enum: workflow, tool, task)
+   - `traceloop.entity.name` (string)
+   - `traceloop.entity.input` (string, content-gated)
+   - `traceloop.entity.output` (string, content-gated)
 
 **Implementation**:
-- [ ] Define root span attribute group
-- [ ] Define MCP attribute group with GenAI refs
-- [ ] Define subprocess attribute group with process refs
-- [ ] Add custom k8s attributes
-- [ ] Verify `weaver registry resolve` succeeds
+- [x] Define root span attribute group
+- [x] Define MCP attribute group with GenAI refs
+- [x] Define subprocess attribute group with process refs
+- [x] Add custom k8s attributes
+- [x] Verify `weaver registry resolve` succeeds
 
 **Success Criteria**:
 - All attributes from `docs/tracing-conventions.md` represented
@@ -164,21 +166,21 @@ dependencies:
 ---
 
 ### Milestone 4: Validation Integration
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Add npm scripts for Weaver workflow and generate resolved output.
 
-**Prerequisite**: Milestones 2-3 complete
+**Prerequisite**: Milestones 2-3 complete ✅
 
 **Deliverables**:
 - npm scripts in `package.json`
 - `telemetry/registry/resolved.json`
 
 **Implementation**:
-- [ ] Add `telemetry:check` script
-- [ ] Add `telemetry:resolve` script
-- [ ] Generate `resolved.json`
-- [ ] Document Weaver installation in README or CLAUDE.md
+- [x] Add `telemetry:check` script
+- [x] Add `telemetry:resolve` script
+- [x] Generate `resolved.json`
+- [x] Document Weaver installation in CLAUDE.md
 
 **npm scripts**:
 ```json
@@ -196,20 +198,20 @@ dependencies:
 ---
 
 ### Milestone 5: Documentation Update
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Update existing docs to reference schema as source of truth.
 
-**Prerequisite**: Milestone 4 complete
+**Prerequisite**: Milestone 4 complete ✅
 
 **Deliverables**:
 - Updated `docs/tracing-conventions.md`
 - Updated `docs/opentelemetry-research.md` Section 3
 
 **Implementation**:
-- [ ] Add note to `tracing-conventions.md` about Weaver schema
-- [ ] Update Section 3 assessment in `opentelemetry-research.md`
-- [ ] Add Weaver workflow to CLAUDE.md
+- [x] Add note to `tracing-conventions.md` about Weaver schema
+- [x] Update Section 3 assessment in `opentelemetry-research.md`
+- [x] Add Weaver workflow to CLAUDE.md
 
 **Success Criteria**:
 - Documentation reflects schema as source of truth
@@ -218,6 +220,83 @@ dependencies:
 ---
 
 ## Progress Log
+
+### 2026-02-05: Milestone 5 Complete - PRD #19 Done
+
+**Completed**: Final documentation update
+
+**Deliverable**:
+- Updated `docs/opentelemetry-research.md` Section 3 to reflect current Weaver usage
+- Reframed original "NOT Applicable" assessment as historical context (January 2026)
+- Added "Updated Assessment (February 2026): Now Applicable" with current implementation details
+- Added revision note in Section 6 pointing to PRD #19
+
+**All milestones complete. All success criteria met.**
+
+---
+
+### 2026-02-05: Milestone 4 Complete, Milestone 5 Partial
+
+**Completed**: Validation Integration and partial Documentation Update
+
+**Milestone 4 Deliverables**:
+- Added `telemetry:check` npm script (validates registry structure)
+- Added `telemetry:resolve` npm script (generates resolved.json)
+- Added Weaver documentation to CLAUDE.md (installation, commands, registry structure)
+
+**Milestone 5 Partial**:
+- Slimmed `docs/tracing-conventions.md` from 366 to 319 lines
+- Removed redundant attribute tables (now in Weaver schema)
+- Added callout pointing to schema as source of truth for attributes
+- Preserved architectural content: context propagation, error handling, security rationale
+
+**Remaining**: Update Section 3 in `opentelemetry-research.md` to correct outdated "NOT Applicable" assessment.
+
+---
+
+### 2026-02-05: Milestones 2 & 3 Complete
+
+**Completed**: Registry Structure and Attribute Definitions
+
+**Deliverables**:
+- Created `telemetry/registry/registry_manifest.yaml` with OTel v1.37.0 dependency
+- Created `telemetry/registry/attributes.yaml` with 4 attribute groups (17 total attributes)
+- Generated `telemetry/registry/resolved.json` with expanded OTel references
+
+**Attribute Groups Created**:
+
+| Group | Custom | OTel Refs | Total |
+|-------|--------|-----------|-------|
+| `registry.cluster_whisperer.root` | 2 | 0 | 2 |
+| `registry.cluster_whisperer.mcp` | 1 | 4 | 5 |
+| `registry.cluster_whisperer.subprocess` | 2 | 4 | 6 |
+| `registry.cluster_whisperer.openllmetry` | 4 | 0 | 4 |
+
+**Validation**:
+- `weaver registry check` passes with no warnings
+- `weaver registry resolve` succeeds, all OTel refs (gen_ai.*, process.*, error.*) expand correctly
+
+**Key insight**: Combined Milestones 2 and 3 because Weaver requires at least one valid attribute to pass `registry check` - empty placeholders aren't valid schema.
+
+---
+
+### 2026-02-05: Milestone 1 Complete
+
+**Completed**: Research and Documentation milestone
+
+**Deliverables**:
+- Created `docs/weaver-research.md` with complete attribute inventory
+- Extracted 17 attributes from code (8 OTel refs, 4 OpenLLMetry, 5 custom)
+- Documented Weaver CLI workflow and installation
+- Explained why Weaver is now applicable (addressing outdated Section 3 assessment)
+
+**Additional work**:
+- Updated code to use `cluster_whisperer.*` namespaced attributes (industry standard compliance)
+- Updated `docs/tracing-conventions.md` to reflect namespaced attribute names
+
+**Key insight**: Custom attributes should use project namespace to avoid conflicts with future OTel semconvs.
+
+---
 
 ### 2026-02-03: PRD Created
 
@@ -230,8 +309,8 @@ dependencies:
 4. CI integration deferred until schema is stable
 
 **References**:
-- commit-story-v2 Weaver implementation: `/Users/whitney.lee/Documents/Repositories/commit-story-v2/telemetry/registry/`
-- commit-story-v2 research: `/Users/whitney.lee/Documents/Repositories/commit-story-v2/docs/research/weaver-schema-research.md`
+- commit-story-v2 Weaver implementation: (external project reference - see local clone)
+- commit-story-v2 research: (external project reference - see local clone)
 
 ---
 
@@ -239,17 +318,19 @@ dependencies:
 
 ### Current Attribute Inventory
 
+**Note**: Custom attributes use `cluster_whisperer.*` namespace per OTel conventions. See `docs/weaver-research.md` for full inventory and categorization.
+
 **Root Spans** (`src/tracing/context-bridge.ts`):
 
 | Attribute | CLI Mode | MCP Mode | OTel Ref? |
 |-----------|----------|----------|-----------|
-| `service.operation` | Yes | Yes | Custom |
+| `cluster_whisperer.service.operation` | Yes | Yes | Custom |
 | `traceloop.span.kind` | Yes | Yes | Custom (OpenLLMetry) |
 | `traceloop.entity.name` | Yes | Yes | Custom (OpenLLMetry) |
-| `user.question` | Content-gated | No | Custom |
+| `cluster_whisperer.user.question` | Content-gated | No | Custom |
 | `traceloop.entity.input` | Content-gated | Content-gated | Custom (OpenLLMetry) |
 | `traceloop.entity.output` | Content-gated | Content-gated | Custom (OpenLLMetry) |
-| `mcp.tool.name` | No | Yes | Custom |
+| `cluster_whisperer.mcp.tool.name` | No | Yes | Custom |
 | `gen_ai.operation.name` | No | Yes | OTel GenAI |
 | `gen_ai.tool.name` | No | Yes | OTel GenAI |
 | `gen_ai.tool.type` | No | Yes | OTel GenAI |
@@ -263,8 +344,8 @@ dependencies:
 | `process.command_args` | Yes | | OTel Process |
 | `process.exit.code` | Yes | | OTel Process |
 | `error.type` | | On error | OTel Error |
-| `k8s.namespace` | | If -n flag | Custom |
-| `k8s.output_size_bytes` | | On success | Custom |
+| `cluster_whisperer.k8s.namespace` | | If -n flag | Custom |
+| `cluster_whisperer.k8s.output_size_bytes` | | On success | Custom |
 
 ### Weaver CLI Commands
 
@@ -273,10 +354,10 @@ dependencies:
 cargo install weaver
 
 # Validate registry
-weaver registry check telemetry/registry
+weaver registry check -r telemetry/registry
 
 # Resolve references to JSON
-weaver registry resolve telemetry/registry -f json -o telemetry/registry/resolved.json
+weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json
 ```
 
 ---

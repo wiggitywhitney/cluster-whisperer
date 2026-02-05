@@ -1,0 +1,133 @@
+# Cluster Whisperer Attribute Definitions
+# Custom attributes for cluster-whisperer tracing conventions
+#
+# Categories:
+# - OTel References: gen_ai.*, process.*, error.* (imported via ref:)
+# - OpenLLMetry: traceloop.* (custom definitions for vendor conventions)
+# - Custom: cluster_whisperer.* (project-specific attributes)
+
+groups:
+  # ==========================================================================
+  # ROOT SPAN ATTRIBUTES
+  # Used by both CLI mode (withAgentTracing) and MCP mode (withMcpRequestTracing)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.root
+    type: attribute_group
+    display_name: Root Span Attributes
+    brief: Attributes for root investigation/tool spans
+    attributes:
+      - id: cluster_whisperer.service.operation
+        type: string
+        stability: development
+        brief: The high-level operation type
+        examples: ["investigate", "kubectl_get", "kubectl_describe", "kubectl_logs"]
+
+      - id: cluster_whisperer.user.question
+        type: string
+        stability: development
+        brief: User's natural language question (content-gated)
+        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true. CLI mode only.
+        examples: ["Find the broken pod and tell me why it's failing"]
+
+  # ==========================================================================
+  # MCP-SPECIFIC ATTRIBUTES
+  # Used by MCP mode (withMcpRequestTracing) for tool execution tracking
+  # ==========================================================================
+  - id: registry.cluster_whisperer.mcp
+    type: attribute_group
+    display_name: MCP Tool Attributes
+    brief: MCP tool execution attributes with GenAI semantic convention references
+    attributes:
+      - id: cluster_whisperer.mcp.tool.name
+        type: string
+        stability: development
+        brief: The MCP tool name
+        note: MCP has no semconv yet; provides MCP-specific tool identification
+        examples: ["kubectl_get", "kubectl_describe", "kubectl_logs", "investigate"]
+
+      # OTel GenAI semantic convention references
+      - ref: gen_ai.operation.name
+      - ref: gen_ai.tool.name
+      - ref: gen_ai.tool.type
+      - ref: gen_ai.tool.call.id
+
+  # ==========================================================================
+  # SUBPROCESS ATTRIBUTES
+  # Used by kubectl execution spans (src/utils/kubectl.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.subprocess
+    type: attribute_group
+    display_name: Subprocess Attributes
+    brief: kubectl subprocess execution attributes with Process semantic convention references
+    attributes:
+      # OTel Process semantic convention references
+      - ref: process.executable.name
+      - ref: process.command_args
+      - ref: process.exit.code
+
+      # OTel Error semantic convention reference
+      - ref: error.type
+
+      # Custom k8s attributes
+      - id: cluster_whisperer.k8s.namespace
+        type: string
+        stability: development
+        brief: Kubernetes namespace from -n flag
+        note: Extracted from command args when -n flag is present
+        examples: ["default", "kube-system", "monitoring"]
+
+      - id: cluster_whisperer.k8s.output_size_bytes
+        type: int
+        stability: development
+        brief: Byte length of kubectl stdout
+        note: Only set on successful execution. Useful for debugging large responses.
+        examples: [1234, 5678, 102400]
+
+  # ==========================================================================
+  # OPENLLMETRY ATTRIBUTES
+  # Vendor conventions from Traceloop/OpenLLMetry for LLM observability
+  # These are not official OTel semconvs but are part of our instrumentation
+  # ==========================================================================
+  - id: registry.cluster_whisperer.openllmetry
+    type: attribute_group
+    display_name: OpenLLMetry Attributes
+    brief: OpenLLMetry/Traceloop attributes for LLM observability
+    note: These are vendor conventions from Traceloop, not official OTel semconvs
+    attributes:
+      - id: traceloop.span.kind
+        type:
+          members:
+            - id: workflow
+              value: workflow
+              brief: Top-level workflow span
+              stability: development
+            - id: tool
+              value: tool
+              brief: Tool execution span
+              stability: development
+            - id: task
+              value: task
+              brief: Task execution span
+              stability: development
+        stability: development
+        brief: OpenLLMetry span category
+
+      - id: traceloop.entity.name
+        type: string
+        stability: development
+        brief: Entity identifier within the span kind
+        examples: ["investigate", "kubectl_get", "kubectl_describe"]
+
+      - id: traceloop.entity.input
+        type: string
+        stability: development
+        brief: Input content (content-gated)
+        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true
+        examples: ["{\"question\":\"Find the broken pod\"}"]
+
+      - id: traceloop.entity.output
+        type: string
+        stability: development
+        brief: Output content (content-gated)
+        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true
+        examples: ["The pod 'nginx-broken' is failing due to ImagePullBackOff..."]

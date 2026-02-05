@@ -148,7 +148,7 @@ export async function withAgentTracing<T>(
   // Create a root span for the entire investigation
   // Build attributes conditionally - only include content if trace content is enabled
   const attributes: Record<string, string> = {
-    "service.operation": "investigate",
+    "cluster_whisperer.service.operation": "investigate",
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": "investigate",
   };
@@ -156,7 +156,7 @@ export async function withAgentTracing<T>(
   // Only include user question and entity input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
   if (isTraceContentEnabled) {
-    attributes["user.question"] = question;
+    attributes["cluster_whisperer.user.question"] = question;
     attributes["traceloop.entity.input"] = question;
   }
 
@@ -242,11 +242,11 @@ export async function withMcpRequestTracing(
   // Combines OpenLLMetry conventions with GenAI semantic conventions
   const attributes: Record<string, string> = {
     // OpenLLMetry conventions (for Traceloop ecosystem compatibility)
-    "service.operation": toolName,
+    "cluster_whisperer.service.operation": toolName,
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": toolName,
-    // MCP-specific identification
-    "mcp.tool.name": toolName,
+    // MCP-specific identification (namespaced to avoid conflicts)
+    "cluster_whisperer.mcp.tool.name": toolName,
     // GenAI semantic conventions (for Datadog LLM Observability)
     // See: https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
     "gen_ai.operation.name": "execute_tool",
