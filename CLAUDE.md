@@ -173,7 +173,7 @@ npm run telemetry:resolve
 
 ### Registry Structure
 
-```
+```text
 telemetry/registry/
 ├── registry_manifest.yaml    # Schema name, version, OTel dependency
 ├── attributes.yaml           # Attribute groups with refs + custom definitions

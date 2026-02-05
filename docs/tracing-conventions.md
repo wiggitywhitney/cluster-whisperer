@@ -209,7 +209,7 @@ Content-gated attributes are marked in the Weaver schema with `note: "Content-ga
 import { isTraceContentEnabled } from "./index";
 
 if (isTraceContentEnabled) {
-  span.setAttribute("user.question", question);
+  span.setAttribute("cluster_whisperer.user.question", question);
   span.setAttribute("traceloop.entity.input", question);
 }
 ```

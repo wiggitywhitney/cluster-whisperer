@@ -350,6 +350,6 @@ groups:
 
 - [OpenTelemetry Weaver](https://github.com/open-telemetry/weaver)
 - [OTel Semantic Conventions v1.37.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.37.0)
-- commit-story-v2 implementation: `/Users/whitney.lee/Documents/Repositories/commit-story-v2/telemetry/registry/`
+- commit-story-v2 implementation: (external project reference - see local clone)
 - Existing conventions: `docs/tracing-conventions.md`
 - Previous assessment: `docs/opentelemetry-research.md` Section 3

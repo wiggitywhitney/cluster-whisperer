@@ -264,6 +264,7 @@ dependencies:
 - Generated `telemetry/registry/resolved.json` with expanded OTel references
 
 **Attribute Groups Created**:
+
 | Group | Custom | OTel Refs | Total |
 |-------|--------|-----------|-------|
 | `registry.cluster_whisperer.root` | 2 | 0 | 2 |
@@ -308,8 +309,8 @@ dependencies:
 4. CI integration deferred until schema is stable
 
 **References**:
-- commit-story-v2 Weaver implementation: `/Users/whitney.lee/Documents/Repositories/commit-story-v2/telemetry/registry/`
-- commit-story-v2 research: `/Users/whitney.lee/Documents/Repositories/commit-story-v2/docs/research/weaver-schema-research.md`
+- commit-story-v2 Weaver implementation: (external project reference - see local clone)
+- commit-story-v2 research: (external project reference - see local clone)
 
 ---
 

@@ -26,7 +26,7 @@
  * OpenTelemetry instrumentation:
  * Each kubectl execution creates a span following OTel semantic conventions.
  * We use process.* semconv attributes plus two pragmatic custom attributes
- * (k8s.namespace and k8s.output_size_bytes) that have no semconv equivalent.
+ * (cluster_whisperer.k8s.namespace and cluster_whisperer.k8s.output_size_bytes) that have no semconv equivalent.
  * See docs/opentelemetry-research.md Section 10 for the semconv gap analysis.
  */
 

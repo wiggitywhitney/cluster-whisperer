@@ -214,7 +214,7 @@ The initial PRD #6 assessment concluded Weaver was not useful because:
 
 **Weaver is now in use** for schema validation following the commit-story-v2 lightweight pattern:
 
-```
+```text
 telemetry/registry/
 ├── registry_manifest.yaml    # OTel v1.37.0 dependency
 ├── attributes.yaml           # 4 attribute groups, 17 attributes
