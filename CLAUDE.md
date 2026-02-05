@@ -148,3 +148,36 @@ This triggers a full investigation: LLM reasoning → kubectl_get (find pods) �
 The local Datadog Agent receives traces on `localhost:4318` and forwards them to Datadog. No port-forwarding required.
 
 View traces in Datadog: <https://app.datadoghq.com/apm/traces?query=service%3Acluster-whisperer>
+
+## OpenTelemetry Weaver Schema Validation
+
+This project uses [OpenTelemetry Weaver](https://github.com/open-telemetry/weaver) to define and validate span attributes. The schema in `telemetry/registry/` is the source of truth for tracing conventions.
+
+### Installation
+
+Weaver requires Rust. Install with:
+
+```bash
+cargo install weaver
+```
+
+### Validation Commands
+
+```bash
+# Validate registry structure and attribute definitions
+npm run telemetry:check
+
+# Resolve OTel references and generate resolved.json
+npm run telemetry:resolve
+```
+
+### Registry Structure
+
+```
+telemetry/registry/
+├── registry_manifest.yaml    # Schema name, version, OTel dependency
+├── attributes.yaml           # Attribute groups with refs + custom definitions
+└── resolved.json             # Generated output with expanded OTel references
+```
+
+See `docs/weaver-research.md` for the complete attribute inventory and rationale.

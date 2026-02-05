@@ -43,7 +43,7 @@ This provides:
 - [x] OTel semantic convention references resolve successfully
 - [x] Custom attributes are properly typed and documented
 - [x] `weaver registry resolve` completes without errors
-- [ ] npm scripts provide easy validation workflow
+- [x] npm scripts provide easy validation workflow
 
 ---
 
@@ -166,7 +166,7 @@ dependencies:
 ---
 
 ### Milestone 4: Validation Integration
-**Status**: In Progress
+**Status**: Complete ✅
 
 **Objective**: Add npm scripts for Weaver workflow and generate resolved output.
 
@@ -177,10 +177,10 @@ dependencies:
 - `telemetry/registry/resolved.json`
 
 **Implementation**:
-- [ ] Add `telemetry:check` script
-- [ ] Add `telemetry:resolve` script
+- [x] Add `telemetry:check` script
+- [x] Add `telemetry:resolve` script
 - [x] Generate `resolved.json`
-- [ ] Document Weaver installation in README or CLAUDE.md
+- [x] Document Weaver installation in CLAUDE.md
 
 **npm scripts**:
 ```json
@@ -198,20 +198,20 @@ dependencies:
 ---
 
 ### Milestone 5: Documentation Update
-**Status**: Not Started
+**Status**: In Progress
 
 **Objective**: Update existing docs to reference schema as source of truth.
 
-**Prerequisite**: Milestone 4 complete
+**Prerequisite**: Milestone 4 complete ✅
 
 **Deliverables**:
 - Updated `docs/tracing-conventions.md`
 - Updated `docs/opentelemetry-research.md` Section 3
 
 **Implementation**:
-- [ ] Add note to `tracing-conventions.md` about Weaver schema
+- [x] Add note to `tracing-conventions.md` about Weaver schema
 - [ ] Update Section 3 assessment in `opentelemetry-research.md`
-- [ ] Add Weaver workflow to CLAUDE.md
+- [x] Add Weaver workflow to CLAUDE.md
 
 **Success Criteria**:
 - Documentation reflects schema as source of truth
@@ -220,6 +220,25 @@ dependencies:
 ---
 
 ## Progress Log
+
+### 2026-02-05: Milestone 4 Complete, Milestone 5 Partial
+
+**Completed**: Validation Integration and partial Documentation Update
+
+**Milestone 4 Deliverables**:
+- Added `telemetry:check` npm script (validates registry structure)
+- Added `telemetry:resolve` npm script (generates resolved.json)
+- Added Weaver documentation to CLAUDE.md (installation, commands, registry structure)
+
+**Milestone 5 Partial**:
+- Slimmed `docs/tracing-conventions.md` from 366 to 319 lines
+- Removed redundant attribute tables (now in Weaver schema)
+- Added callout pointing to schema as source of truth for attributes
+- Preserved architectural content: context propagation, error handling, security rationale
+
+**Remaining**: Update Section 3 in `opentelemetry-research.md` to correct outdated "NOT Applicable" assessment.
+
+---
 
 ### 2026-02-05: Milestones 2 & 3 Complete
 
