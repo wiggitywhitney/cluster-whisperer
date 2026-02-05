@@ -1,0 +1,13 @@
+# Cluster Whisperer Telemetry Registry
+# OpenTelemetry Weaver schema for cluster-whisperer tracing conventions
+
+name: cluster_whisperer
+description: OpenTelemetry semantic conventions for cluster-whisperer
+repository_url: https://github.com/wiggitywhitney/cluster-whisperer
+semconv_version: 0.1.0
+
+# Import official OTel semantic conventions
+# The [model] suffix specifies the subdirectory containing registry files
+dependencies:
+  - name: otel
+    registry_path: https://github.com/open-telemetry/semantic-conventions/archive/refs/tags/v1.37.0.zip[model]

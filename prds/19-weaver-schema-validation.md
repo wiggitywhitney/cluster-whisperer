@@ -39,10 +39,10 @@ This provides:
 
 ## Success Criteria
 
-- [ ] Schema validates all attributes documented in `docs/tracing-conventions.md`
-- [ ] OTel semantic convention references resolve successfully
-- [ ] Custom attributes are properly typed and documented
-- [ ] `weaver registry resolve` completes without errors
+- [x] Schema validates all attributes documented in `docs/tracing-conventions.md`
+- [x] OTel semantic convention references resolve successfully
+- [x] Custom attributes are properly typed and documented
+- [x] `weaver registry resolve` completes without errors
 - [ ] npm scripts provide easy validation workflow
 
 ---
@@ -82,7 +82,7 @@ This provides:
 ---
 
 ### Milestone 2: Registry Structure
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Create the base Weaver registry structure with OTel dependency.
 
@@ -90,13 +90,13 @@ This provides:
 
 **Deliverables**:
 - `telemetry/registry/registry_manifest.yaml`
-- `telemetry/registry/attributes.yaml` (placeholder)
+- `telemetry/registry/attributes.yaml`
 
 **Implementation**:
-- [ ] Create `telemetry/registry/` directory
-- [ ] Create `registry_manifest.yaml` pinning OTel v1.37.0
-- [ ] Create placeholder `attributes.yaml`
-- [ ] Verify `weaver registry check` passes
+- [x] Create `telemetry/registry/` directory
+- [x] Create `registry_manifest.yaml` pinning OTel v1.37.0
+- [x] Create `attributes.yaml`
+- [x] Verify `weaver registry check` passes
 
 **registry_manifest.yaml**:
 ```yaml
@@ -115,7 +115,7 @@ dependencies:
 ---
 
 ### Milestone 3: Attribute Definitions
-**Status**: Not Started
+**Status**: Complete ✅
 
 **Objective**: Define all attribute groups in `attributes.yaml`.
 
@@ -128,11 +128,7 @@ dependencies:
 
 1. **`registry.cluster_whisperer.root`** - Root span attributes
    - `cluster_whisperer.service.operation` (string)
-   - `traceloop.span.kind` (enum: workflow, tool)
-   - `traceloop.entity.name` (string)
    - `cluster_whisperer.user.question` (string, content-gated)
-   - `traceloop.entity.input` (string, content-gated)
-   - `traceloop.entity.output` (string, content-gated)
 
 2. **`registry.cluster_whisperer.mcp`** - MCP-specific attributes
    - `cluster_whisperer.mcp.tool.name` (string)
@@ -149,12 +145,18 @@ dependencies:
    - `cluster_whisperer.k8s.namespace` (string, custom)
    - `cluster_whisperer.k8s.output_size_bytes` (int, custom)
 
+4. **`registry.cluster_whisperer.openllmetry`** - OpenLLMetry/Traceloop attributes
+   - `traceloop.span.kind` (enum: workflow, tool, task)
+   - `traceloop.entity.name` (string)
+   - `traceloop.entity.input` (string, content-gated)
+   - `traceloop.entity.output` (string, content-gated)
+
 **Implementation**:
-- [ ] Define root span attribute group
-- [ ] Define MCP attribute group with GenAI refs
-- [ ] Define subprocess attribute group with process refs
-- [ ] Add custom k8s attributes
-- [ ] Verify `weaver registry resolve` succeeds
+- [x] Define root span attribute group
+- [x] Define MCP attribute group with GenAI refs
+- [x] Define subprocess attribute group with process refs
+- [x] Add custom k8s attributes
+- [x] Verify `weaver registry resolve` succeeds
 
 **Success Criteria**:
 - All attributes from `docs/tracing-conventions.md` represented
@@ -164,11 +166,11 @@ dependencies:
 ---
 
 ### Milestone 4: Validation Integration
-**Status**: Not Started
+**Status**: In Progress
 
 **Objective**: Add npm scripts for Weaver workflow and generate resolved output.
 
-**Prerequisite**: Milestones 2-3 complete
+**Prerequisite**: Milestones 2-3 complete ✅
 
 **Deliverables**:
 - npm scripts in `package.json`
@@ -177,7 +179,7 @@ dependencies:
 **Implementation**:
 - [ ] Add `telemetry:check` script
 - [ ] Add `telemetry:resolve` script
-- [ ] Generate `resolved.json`
+- [x] Generate `resolved.json`
 - [ ] Document Weaver installation in README or CLAUDE.md
 
 **npm scripts**:
@@ -218,6 +220,31 @@ dependencies:
 ---
 
 ## Progress Log
+
+### 2026-02-05: Milestones 2 & 3 Complete
+
+**Completed**: Registry Structure and Attribute Definitions
+
+**Deliverables**:
+- Created `telemetry/registry/registry_manifest.yaml` with OTel v1.37.0 dependency
+- Created `telemetry/registry/attributes.yaml` with 4 attribute groups (17 total attributes)
+- Generated `telemetry/registry/resolved.json` with expanded OTel references
+
+**Attribute Groups Created**:
+| Group | Custom | OTel Refs | Total |
+|-------|--------|-----------|-------|
+| `registry.cluster_whisperer.root` | 2 | 0 | 2 |
+| `registry.cluster_whisperer.mcp` | 1 | 4 | 5 |
+| `registry.cluster_whisperer.subprocess` | 2 | 4 | 6 |
+| `registry.cluster_whisperer.openllmetry` | 4 | 0 | 4 |
+
+**Validation**:
+- `weaver registry check` passes with no warnings
+- `weaver registry resolve` succeeds, all OTel refs (gen_ai.*, process.*, error.*) expand correctly
+
+**Key insight**: Combined Milestones 2 and 3 because Weaver requires at least one valid attribute to pass `registry check` - empty placeholders aren't valid schema.
+
+---
 
 ### 2026-02-05: Milestone 1 Complete
 
@@ -293,10 +320,10 @@ dependencies:
 cargo install weaver
 
 # Validate registry
-weaver registry check telemetry/registry
+weaver registry check -r telemetry/registry
 
 # Resolve references to JSON
-weaver registry resolve telemetry/registry -f json -o telemetry/registry/resolved.json
+weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json
 ```
 
 ---
