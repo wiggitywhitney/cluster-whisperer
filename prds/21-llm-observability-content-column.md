@@ -29,20 +29,31 @@ This matters for the KubeCon demo — the audience needs to see the full investi
 The following changes have already been made on the `feature/prd-7-vector-database-chroma` branch (will be moved to a dedicated branch when implementation starts):
 
 ### Already completed:
-- Added `gen_ai.input.messages` and `gen_ai.output.messages` attributes to `src/tracing/context-bridge.ts` (4 setAttribute calls)
 - Renamed env var `OTEL_TRACE_CONTENT_ENABLED` → `OTEL_CAPTURE_AI_PAYLOADS` across entire codebase
 - Renamed code variable `isTraceContentEnabled` → `isCaptureAiPayloads`
 - Updated all docs, CLAUDE.md, .mcp.json, README.md, Weaver schema
 - Regenerated `telemetry/registry/resolved.json`
-- Confirmed `gen_ai.input.messages` appears in Datadog traces (CLI mode)
 - Confirmed OUTPUT is missing due to `setTraceOutput()` never being called
 
+**Note**: The `gen_ai.input.messages` / `gen_ai.output.messages` attributes mentioned in the original PRD were on the prd-7 branch and are **not present** on this branch. They need to be implemented from scratch.
+
 ### What remains:
-- Research: Determine why Datadog renders INPUT as raw JSON instead of text
 - Fix: CLI `finalAnswer` extraction from `on_chat_model_end` stream events
-- Fix: Adjust `gen_ai.input/output.messages` format if research reveals different requirements
+- Fix: Implement `gen_ai.input/output.messages` in correct v1.37+ format
 - Verify: End-to-end CONTENT column rendering in both CLI and MCP modes
 - Verify: MCP mode with new code (requires Claude Code restart to pick up `.mcp.json` changes)
+
+---
+
+## Key Research Finding: Extended Thinking Is the Root Cause
+
+Research (see `docs/research/21-content-column-research.md`) revealed that **extended thinking is the root cause** of two major problems:
+
+1. **Empty `gen_ai.completion.0.content`**: OpenLLMetry-JS's thinking support (PR [#671](https://github.com/traceloop/openllmetry-js/pull/671)) only covers `anthropic.beta.messages.create()`, not the standard `anthropic.messages.create()` that LangChain uses. With extended thinking enabled, the completion content is an empty string.
+
+2. **CLI `finalAnswer` extraction failure**: Interleaved thinking (`anthropic-beta: interleaved-thinking-2025-05-14`) likely changes the content block structure in LangGraph v2 stream events, preventing the `on_chat_model_end` handler from capturing text.
+
+**Decision**: Disable extended thinking as the first implementation step. This removes the root cause, simplifying M2 and M3. MCP mode already doesn't return thinking to the client — it only captures it in trace attributes. Extended thinking can be re-enabled later once OpenLLMetry-JS fixes standard API instrumentation.
 
 ---
 
@@ -88,19 +99,22 @@ Research findings will be documented in `docs/research/21-content-column-researc
 ## Milestones
 
 ### M1: Research — Determine Correct Format and Root Causes
-- [ ] Investigate what format Datadog actually parses for the CONTENT column by examining working OTel instrumentation source code
-- [ ] Determine why `on_chat_model_end` events don't capture `finalAnswer` in CLI mode (add debug logging, compare event structure)
-- [ ] Document findings in `docs/research/21-content-column-research.md`
+- [x] Investigate what format Datadog actually parses for the CONTENT column by examining working OTel instrumentation source code
+- [x] Determine root causes of empty completion and CLI finalAnswer failure (extended thinking identified as root cause; empirical debug logging deferred to M2)
+- [x] Document findings in `docs/research/21-content-column-research.md`
 
 **Success criteria**: Research document answers all 4 questions above with evidence (code references, trace examples, or Datadog docs).
 
-### M2: Fix CLI Answer Extraction
-- [ ] Read research document
-- [ ] Fix `src/index.ts` stream event handling so `finalAnswer` is captured
-- [ ] Verify `setTraceOutput()` is called and both `traceloop.entity.output` and `gen_ai.output.messages` appear on CLI traces
+### M2: Disable Extended Thinking and Fix CLI Answer Extraction
+- [ ] Disable extended thinking in `src/agent/investigator.ts` (remove `thinking` config and `interleaved-thinking` beta header)
+- [ ] Update `src/index.ts` stream event handling to remove thinking block logic (simplify `on_chat_model_end` handler)
+- [ ] Update `src/agent/investigator.ts` `invokeInvestigator()` to remove thinking block parsing
+- [ ] Update `src/tools/mcp/index.ts` `buildTraceOutput()` to remove thinking section
+- [ ] Verify `finalAnswer` is captured and `setTraceOutput()` is called in CLI mode
+- [ ] Verify `gen_ai.completion.0.content` is no longer empty on `chat.anthropic` spans
 - [ ] Verify CLI prints "Answer:" with the response text
 
-**Success criteria**: Run `vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"` and see both terminal output AND `traceloop.entity.output` on the Datadog trace.
+**Success criteria**: Run `vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"` and see both terminal output AND `traceloop.entity.output` on the Datadog trace. `gen_ai.completion.0.content` is populated on `chat.anthropic` spans.
 
 ### M3: Correct gen_ai.input/output.messages Format
 - [ ] Read research document
@@ -137,7 +151,7 @@ Research findings will be documented in `docs/research/21-content-column-researc
 | `src/tracing/context-bridge.ts` | Root span creation, `gen_ai.input/output.messages` attributes |
 | `src/tracing/index.ts` | `isCaptureAiPayloads` flag, OpenLLMetry config |
 | `src/tools/mcp/index.ts` | MCP entry point — `setTraceOutput()` call (works correctly) |
-| `src/agent/investigator.ts` | `invokeInvestigator()` — MCP's non-streaming approach (works correctly) |
+| `src/agent/investigator.ts` | Agent config (extended thinking settings), `invokeInvestigator()` — MCP's non-streaming approach |
 | `docs/opentelemetry.md` | Known limitations and workaround documentation |
 | `docs/tracing-conventions.md` | Content gating docs, attribute reference |
 | `telemetry/registry/attributes.yaml` | Weaver schema for span attributes |
@@ -153,9 +167,10 @@ Research findings will be documented in `docs/research/21-content-column-researc
 
 | Risk | Mitigation |
 |------|------------|
-| Datadog may not fully support `parts` format yet | Research M1 will determine actual format; can fall back to simpler OpenAI-style format |
-| `on_chat_model_end` fix may require LangGraph version change | Compare with MCP's `invoke()` approach as fallback — could extract answer post-stream |
+| Datadog may not fully support `parts` format yet | Research M1 determined actual format; can fall back to simpler OpenAI-style format |
 | OpenLLMetry may overwrite our manual `gen_ai.*` attributes | Test carefully; may need to set attributes after OpenLLMetry's instrumentation runs |
+| Disabling extended thinking may reduce investigation quality | Sonnet 4 is highly capable without explicit thinking; re-enable once OpenLLMetry fixes standard API |
+| OpenLLMetry empty completion may persist even without thinking | Verify `gen_ai.completion.0.content` is populated after disabling thinking; file upstream issue if not |
 
 ---
 
@@ -167,3 +182,4 @@ Research findings will be documented in `docs/research/21-content-column-researc
 | 2026-02-07 | Pre-PRD | Renamed `OTEL_TRACE_CONTENT_ENABLED` → `OTEL_CAPTURE_AI_PAYLOADS` |
 | 2026-02-07 | Pre-PRD | Confirmed INPUT shows in Datadog (as raw JSON), OUTPUT missing |
 | 2026-02-07 | PRD created | Defined 5 milestones with research-first approach |
+| 2026-02-07 | M1 complete | Research doc created; identified extended thinking as root cause of empty completions and CLI finalAnswer failure; no upstream issue exists for OpenLLMetry-JS standard API + thinking; decided to disable extended thinking first |
