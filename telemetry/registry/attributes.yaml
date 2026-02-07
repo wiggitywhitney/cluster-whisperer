@@ -26,7 +26,7 @@ groups:
         type: string
         stability: development
         brief: User's natural language question (content-gated)
-        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true. CLI mode only.
+        note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.
         examples: ["Find the broken pod and tell me why it's failing"]
 
   # ==========================================================================
@@ -122,12 +122,12 @@ groups:
         type: string
         stability: development
         brief: Input content (content-gated)
-        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true
+        note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
         examples: ["{\"question\":\"Find the broken pod\"}"]
 
       - id: traceloop.entity.output
         type: string
         stability: development
         brief: Output content (content-gated)
-        note: Only captured when OTEL_TRACE_CONTENT_ENABLED=true
+        note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
         examples: ["The pod 'nginx-broken' is failing due to ImagePullBackOff..."]

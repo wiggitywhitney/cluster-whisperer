@@ -198,7 +198,7 @@ Sensitive content (user questions, tool inputs/outputs) is only captured when ex
 ### Environment Variable
 
 ```bash
-OTEL_TRACE_CONTENT_ENABLED=true  # Default: false (disabled)
+OTEL_CAPTURE_AI_PAYLOADS=true  # Default: false (disabled)
 ```
 
 Content-gated attributes are marked in the Weaver schema with `note: "Content-gated"`. These include `cluster_whisperer.user.question` and all `traceloop.entity.*` attributes.
@@ -206,9 +206,9 @@ Content-gated attributes are marked in the Weaver schema with `note: "Content-ga
 ### Implementation
 
 ```typescript
-import { isTraceContentEnabled } from "./index";
+import { isCaptureAiPayloads } from "./index";
 
-if (isTraceContentEnabled) {
+if (isCaptureAiPayloads) {
   span.setAttribute("cluster_whisperer.user.question", question);
   span.setAttribute("traceloop.entity.input", question);
 }
@@ -296,7 +296,7 @@ All custom attributes use the `cluster_whisperer.*` namespace to avoid conflicts
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OTEL_TRACING_ENABLED` | `false` | Enable tracing |
-| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Capture sensitive content |
+| `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture sensitive content |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL |
 

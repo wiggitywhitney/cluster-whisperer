@@ -42,7 +42,7 @@ import {
   SpanKind,
   SpanStatusCode,
 } from "@opentelemetry/api";
-import { getTracer, isTraceContentEnabled } from "./index";
+import { getTracer, isCaptureAiPayloads } from "./index";
 
 /**
  * MCP tool result format per Model Context Protocol specification.
@@ -80,14 +80,14 @@ const rootSpanStorage = new AsyncLocalStorage<Span>();
  * Set the output on the root investigation span.
  * Call this after the agent completes to populate OUTPUT in LLM Observability.
  *
- * Only writes the attribute if OTEL_TRACE_CONTENT_ENABLED=true to prevent
+ * Only writes the attribute if OTEL_CAPTURE_AI_PAYLOADS=true to prevent
  * sensitive data from being exported to telemetry backends.
  *
  * @param output - The final answer or output to record
  */
 export function setTraceOutput(output: string): void {
   const span = rootSpanStorage.getStore();
-  if (span && isTraceContentEnabled) {
+  if (span && isCaptureAiPayloads) {
     span.setAttribute("traceloop.entity.output", output);
   }
 }
@@ -155,7 +155,7 @@ export async function withAgentTracing<T>(
 
   // Only include user question and entity input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
-  if (isTraceContentEnabled) {
+  if (isCaptureAiPayloads) {
     attributes["cluster_whisperer.user.question"] = question;
     attributes["traceloop.entity.input"] = question;
   }
@@ -257,7 +257,7 @@ export async function withMcpRequestTracing(
 
   // Only include tool input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
-  if (isTraceContentEnabled) {
+  if (isCaptureAiPayloads) {
     attributes["traceloop.entity.input"] = JSON.stringify(input);
   }
 
@@ -296,7 +296,7 @@ export async function withMcpRequestTracing(
         }
 
         // Record output content if trace content capture is enabled
-        if (isTraceContentEnabled && textContent) {
+        if (isCaptureAiPayloads && textContent) {
           span.setAttribute("traceloop.entity.output", textContent);
         }
 

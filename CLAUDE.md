@@ -119,11 +119,11 @@ To re-enable, restore the environment variables:
   "OTEL_TRACING_ENABLED": "true",
   "OTEL_EXPORTER_TYPE": "otlp",
   "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
-  "OTEL_TRACE_CONTENT_ENABLED": "true"
+  "OTEL_CAPTURE_AI_PAYLOADS": "true"
 }
 ```
 
-**Note**: `OTEL_TRACE_CONTENT_ENABLED` captures tool inputs/outputs in traces. Disable this (`"false"` or remove) if tracing sensitive data.
+**Note**: `OTEL_CAPTURE_AI_PAYLOADS` captures tool inputs/outputs in traces. Disable this (`"false"` or remove) if tracing sensitive data.
 
 After changing `.mcp.json`, restart Claude Code to pick up the new configuration.
 

@@ -179,7 +179,7 @@ Tracing is **opt-in** - disabled by default for quiet development.
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
-| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
+| `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
 
 ### Enabling Tracing
 
@@ -245,7 +245,7 @@ Note: `kind: 0` is INTERNAL, `status.code: 1` is OK.
 
 ```bash
 # Enable content capture (default: disabled for security)
-export OTEL_TRACE_CONTENT_ENABLED=true
+export OTEL_CAPTURE_AI_PAYLOADS=true
 ```
 
 This controls both OpenLLMetry's content capture and our custom span attributes (`user.question`, `traceloop.entity.input/output`).
@@ -353,7 +353,7 @@ Traces can be sent to any OTLP-compatible backend (Datadog, Jaeger, etc.) by con
 | `OTEL_TRACING_ENABLED` | `false` | Set to `true` to enable tracing |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` for stdout, `otlp` for OTLP export |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (required when type=otlp) |
-| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
+| `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Set to `true` to capture prompts/completions (security: opt-in) |
 
 ### Using Console Exporter (Development)
 
@@ -463,9 +463,9 @@ View LLM traces at: <https://app.datadoghq.com/llm/traces?query=%40ml_app%3Aclus
 
 **Datadog support**: For OTel + LLM Observability questions, use internal Slack channel `#ml-obs-otel`.
 
-**Workaround (if needed for KubeCon demo)**: Add `gen_ai.input.messages` and `gen_ai.output.messages` attributes manually in `src/tracing/context-bridge.ts`. Format must include `parts` array: `[{"role":"user","parts":[{"type":"text","content":"..."}]}]`
+**Attempted workaround**: We tried manually setting `gen_ai.input.messages` and `gen_ai.output.messages` with OTel semconv v1.37+ `parts` array format. INPUT appeared but rendered as raw JSON in the CONTENT column; OUTPUT showed "No content" due to a separate CLI answer extraction bug. Reverted pending further research (PRD #21).
 
-**Current behavior**: Click into individual traces to see full INPUT/OUTPUT content, or query via Datadog API/MCP.
+**Workaround (if needed for KubeCon demo)**: Requires two fixes — see PRD #21 for details.
 
 ### Jaeger Setup
 
@@ -622,7 +622,7 @@ We track two upstream issues:
 | Issue | Problem | Impact |
 |-------|---------|--------|
 | [traceloop/openllmetry-js#476](https://github.com/traceloop/openllmetry-js/issues/476) | LangGraph breaks async context propagation | We use `context-bridge.ts` as workaround |
-| [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) | Old semconv format for content attributes | Datadog CONTENT column shows "No content" |
+| [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) | Old semconv format for content attributes | Datadog CONTENT column shows "No content" — see PRD #21 |
 
 ## Further Reading
 

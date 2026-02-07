@@ -26,8 +26,6 @@ This matters for the KubeCon demo — the audience needs to see the full investi
 
 ## Current State (Work Done Before PRD)
 
-The following changes have already been made on the `feature/prd-7-vector-database-chroma` branch (will be moved to a dedicated branch when implementation starts):
-
 ### Already completed:
 - Renamed env var `OTEL_TRACE_CONTENT_ENABLED` → `OTEL_CAPTURE_AI_PAYLOADS` across entire codebase
 - Renamed code variable `isTraceContentEnabled` → `isCaptureAiPayloads`
@@ -38,10 +36,9 @@ The following changes have already been made on the `feature/prd-7-vector-databa
 **Note**: The `gen_ai.input.messages` / `gen_ai.output.messages` attributes mentioned in the original PRD were on the prd-7 branch and are **not present** on this branch. They need to be implemented from scratch.
 
 ### What remains:
-- Fix: CLI `finalAnswer` extraction from `on_chat_model_end` stream events
+- Fix: CLI `finalAnswer` extraction from `on_chain_stream` events (LangGraph v2 does not emit `on_chat_model_end`)
 - Fix: Implement `gen_ai.input/output.messages` in correct v1.37+ format
 - Verify: End-to-end CONTENT column rendering in both CLI and MCP modes
-- Verify: MCP mode with new code (requires Claude Code restart to pick up `.mcp.json` changes)
 
 ---
 
@@ -178,7 +175,6 @@ Research findings will be documented in `docs/research/21-content-column-researc
 
 | Date | Milestone | Notes |
 |------|-----------|-------|
-| 2026-02-07 | Pre-PRD | Added `gen_ai.input/output.messages` to context-bridge.ts |
 | 2026-02-07 | Pre-PRD | Renamed `OTEL_TRACE_CONTENT_ENABLED` → `OTEL_CAPTURE_AI_PAYLOADS` |
 | 2026-02-07 | Pre-PRD | Confirmed INPUT shows in Datadog (as raw JSON), OUTPUT missing |
 | 2026-02-07 | PRD created | Defined 5 milestones with research-first approach |

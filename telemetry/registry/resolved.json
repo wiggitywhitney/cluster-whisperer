@@ -170,7 +170,7 @@
             "{\"question\":\"Find the broken pod\"}"
           ],
           "requirement_level": "recommended",
-          "note": "Only captured when OTEL_TRACE_CONTENT_ENABLED=true",
+          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true",
           "stability": "development"
         },
         {
@@ -193,7 +193,7 @@
             "The pod 'nginx-broken' is failing due to ImagePullBackOff..."
           ],
           "requirement_level": "recommended",
-          "note": "Only captured when OTEL_TRACE_CONTENT_ENABLED=true",
+          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true",
           "stability": "development"
         },
         {
@@ -259,7 +259,7 @@
             "Find the broken pod and tell me why it's failing"
           ],
           "requirement_level": "recommended",
-          "note": "Only captured when OTEL_TRACE_CONTENT_ENABLED=true. CLI mode only.",
+          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.",
           "stability": "development"
         }
       ],
