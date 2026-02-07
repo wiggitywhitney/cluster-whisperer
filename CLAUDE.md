@@ -129,7 +129,7 @@ After changing `.mcp.json`, restart Claude Code to pick up the new configuration
 
 ### CLI Mode
 
-For complex tracing scenarios that trigger multiple LLM calls and tool invocations, use the "broken pod" investigation:
+**Always use this question when testing tracing** — it triggers multiple tool calls (get, describe, describe, get, describe) and multiple LLM reasoning steps, which is essential for verifying the full trace hierarchy:
 
 ```bash
 # Console output (development)
@@ -140,6 +140,7 @@ vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell m
 OTEL_TRACING_ENABLED=true \
 OTEL_EXPORTER_TYPE=otlp \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_CAPTURE_AI_PAYLOADS=true \
 vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
 ```
 
