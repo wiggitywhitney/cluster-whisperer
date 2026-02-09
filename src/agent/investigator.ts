@@ -30,6 +30,12 @@ import * as path from "path";
 import { kubectlTools } from "../tools/langchain";
 
 /**
+ * The Anthropic model used by the investigator agent.
+ * Exported so tracing code can reference the same model in span attributes.
+ */
+export const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
+/**
  * Result from invoking the investigator agent.
  *
  * This structured result separates the different parts of the agent's response:
@@ -136,7 +142,7 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
 export function getInvestigatorAgent() {
   if (!cachedAgent) {
     const model = new ChatAnthropic({
-      model: "claude-sonnet-4-20250514",
+      model: ANTHROPIC_MODEL,
       maxTokens: 10000,
       thinking: { type: "enabled", budget_tokens: 4000 },
       // Enable interleaved thinking so Claude can reason between tool calls

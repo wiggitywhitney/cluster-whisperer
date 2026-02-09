@@ -198,21 +198,35 @@ Sensitive content (user questions, tool inputs/outputs) is only captured when ex
 ### Environment Variable
 
 ```bash
-OTEL_TRACE_CONTENT_ENABLED=true  # Default: false (disabled)
+OTEL_CAPTURE_AI_PAYLOADS=true  # Default: false (disabled)
 ```
 
-Content-gated attributes are marked in the Weaver schema with `note: "Content-gated"`. These include `cluster_whisperer.user.question` and all `traceloop.entity.*` attributes.
+Content-gated attributes are marked in the Weaver schema with a note referencing `OTEL_CAPTURE_AI_PAYLOADS`. These include:
+
+| Attribute | Purpose |
+|-----------|---------|
+| `cluster_whisperer.user.question` | User's natural language question |
+| `traceloop.entity.input` | OpenLLMetry input content |
+| `traceloop.entity.output` | OpenLLMetry output content |
+| `gen_ai.input.messages` | OTel v1.37+ input for Datadog CONTENT column |
+| `gen_ai.output.messages` | OTel v1.37+ output for Datadog CONTENT column |
 
 ### Implementation
 
 ```typescript
-import { isTraceContentEnabled } from "./index";
+import { isCaptureAiPayloads } from "./index";
 
-if (isTraceContentEnabled) {
+if (isCaptureAiPayloads) {
   span.setAttribute("cluster_whisperer.user.question", question);
   span.setAttribute("traceloop.entity.input", question);
+  // OTel v1.37+ format for Datadog LLM Observability CONTENT column
+  span.setAttribute("gen_ai.input.messages", JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: question }] },
+  ]));
 }
 ```
+
+The `gen_ai.output.messages` attribute is set separately via `setTraceOutput()` after the agent completes.
 
 ### Security Rationale
 
@@ -262,7 +276,7 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 
 **Why this matters**: Datadog LLM Observability [natively supports GenAI semconv v1.37+](https://www.datadoghq.com/blog/llm-otel-semantic-convention/) and automatically maps these attributes to LLM Observability features.
 
-**Current state**: MCP mode (`withMcpRequestTracing()`) includes GenAI semconv attributes alongside OpenLLMetry `traceloop.*` attributes. CLI mode does not include GenAI semconv because the root span is human-invoked, not AI-invoked.
+**Current state**: MCP mode (`withMcpRequestTracing()`) includes GenAI tool execution attributes alongside OpenLLMetry `traceloop.*` attributes. CLI mode does not include GenAI tool execution attributes because the root span is human-invoked, not AI-invoked. (Note: CLI mode *does* set `gen_ai.system`, `gen_ai.operation.name`, and `gen_ai.request.model` on the root span — these are needed for Datadog to render the CONTENT column.)
 
 **Status**: Fixed in PRD #15 Milestone 2. MCP root spans now include all GenAI semconv attributes for proper Datadog LLM Observability integration.
 
@@ -296,7 +310,7 @@ All custom attributes use the `cluster_whisperer.*` namespace to avoid conflicts
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OTEL_TRACING_ENABLED` | `false` | Enable tracing |
-| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Capture sensitive content |
+| `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture sensitive content |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL |
 

@@ -169,7 +169,7 @@ cluster-whisperer.investigate (root span)
 | `OTEL_TRACING_ENABLED` | `false` | Enable tracing |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
-| `OTEL_TRACE_CONTENT_ENABLED` | `false` | Capture tool inputs/outputs in traces |
+| `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture tool inputs/outputs in traces |
 
 See `docs/tracing-conventions.md` for the complete tracing specification.
 

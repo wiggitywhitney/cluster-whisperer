@@ -42,7 +42,8 @@ import {
   SpanKind,
   SpanStatusCode,
 } from "@opentelemetry/api";
-import { getTracer, isTraceContentEnabled } from "./index";
+import { getTracer, isCaptureAiPayloads } from "./index";
+import { ANTHROPIC_MODEL } from "../agent/investigator";
 
 /**
  * MCP tool result format per Model Context Protocol specification.
@@ -80,15 +81,34 @@ const rootSpanStorage = new AsyncLocalStorage<Span>();
  * Set the output on the root investigation span.
  * Call this after the agent completes to populate OUTPUT in LLM Observability.
  *
- * Only writes the attribute if OTEL_TRACE_CONTENT_ENABLED=true to prevent
+ * Sets two attributes:
+ * - traceloop.entity.output: The full trace output (may include thinking blocks)
+ * - gen_ai.output.messages: OTel v1.37+ format for Datadog CONTENT column
+ *
+ * The optional `answer` parameter lets callers provide a clean answer for
+ * gen_ai.output.messages separately from the full trace output. If not provided,
+ * the output value is used for both.
+ *
+ * Only writes attributes if OTEL_CAPTURE_AI_PAYLOADS=true to prevent
  * sensitive data from being exported to telemetry backends.
  *
- * @param output - The final answer or output to record
+ * @param output - The full output to record (for traceloop.entity.output)
+ * @param answer - Optional clean answer text (for gen_ai.output.messages). Defaults to output.
  */
-export function setTraceOutput(output: string): void {
+export function setTraceOutput(output: string, answer?: string): void {
   const span = rootSpanStorage.getStore();
-  if (span && isTraceContentEnabled) {
+  if (span && isCaptureAiPayloads) {
     span.setAttribute("traceloop.entity.output", output);
+    span.setAttribute(
+      "gen_ai.output.messages",
+      JSON.stringify([
+        {
+          role: "assistant",
+          parts: [{ type: "text", content: answer ?? output }],
+          finish_reason: "end_turn",
+        },
+      ])
+    );
   }
 }
 
@@ -151,13 +171,22 @@ export async function withAgentTracing<T>(
     "cluster_whisperer.service.operation": "investigate",
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": "investigate",
+    // GenAI semantic conventions v1.37+ — required for Datadog LLM Observability
+    // to recognize this span and process gen_ai.input/output.messages
+    "gen_ai.system": "anthropic",
+    "gen_ai.operation.name": "chat",
+    "gen_ai.request.model": ANTHROPIC_MODEL,
   };
 
   // Only include user question and entity input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
-  if (isTraceContentEnabled) {
+  if (isCaptureAiPayloads) {
     attributes["cluster_whisperer.user.question"] = question;
     attributes["traceloop.entity.input"] = question;
+    // OTel v1.37+ format for Datadog LLM Observability CONTENT column
+    attributes["gen_ai.input.messages"] = JSON.stringify([
+      { role: "user", parts: [{ type: "text", content: question }] },
+    ]);
   }
 
   return tracer.startActiveSpan(
@@ -249,16 +278,35 @@ export async function withMcpRequestTracing(
     "cluster_whisperer.mcp.tool.name": toolName,
     // GenAI semantic conventions (for Datadog LLM Observability)
     // See: https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
-    "gen_ai.operation.name": "execute_tool",
     "gen_ai.tool.name": toolName,
     "gen_ai.tool.type": "function",
     "gen_ai.tool.call.id": randomUUID(),
   };
 
+  // The "investigate" tool wraps a full LLM agent invocation.
+  // Mark it as a GenAI chat operation so Datadog LLM Observability
+  // recognizes the span and processes gen_ai.input/output.messages.
+  if (toolName === "investigate") {
+    attributes["gen_ai.system"] = "anthropic";
+    attributes["gen_ai.operation.name"] = "chat";
+    attributes["gen_ai.request.model"] = ANTHROPIC_MODEL;
+  } else {
+    attributes["gen_ai.operation.name"] = "execute_tool";
+  }
+
   // Only include tool input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
-  if (isTraceContentEnabled) {
+  if (isCaptureAiPayloads) {
     attributes["traceloop.entity.input"] = JSON.stringify(input);
+    // OTel v1.37+ format for Datadog LLM Observability CONTENT column
+    // Extract question from input if available (investigate tool), otherwise stringify
+    const inputText =
+      typeof input.question === "string"
+        ? input.question
+        : JSON.stringify(input);
+    attributes["gen_ai.input.messages"] = JSON.stringify([
+      { role: "user", parts: [{ type: "text", content: inputText }] },
+    ]);
   }
 
   return tracer.startActiveSpan(
@@ -296,7 +344,7 @@ export async function withMcpRequestTracing(
         }
 
         // Record output content if trace content capture is enabled
-        if (isTraceContentEnabled && textContent) {
+        if (isCaptureAiPayloads && textContent) {
           span.setAttribute("traceloop.entity.output", textContent);
         }
 

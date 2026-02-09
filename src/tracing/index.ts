@@ -64,8 +64,8 @@ const isTracingEnabled = process.env.OTEL_TRACING_ENABLED === "true";
  * SECURITY: Default to false to prevent accidental data exposure.
  * Only enable for development/debugging with non-sensitive data.
  */
-const isTraceContentEnabled =
-  process.env.OTEL_TRACE_CONTENT_ENABLED === "true";
+const isCaptureAiPayloads =
+  process.env.OTEL_CAPTURE_AI_PAYLOADS === "true";
 
 /**
  * Exporter type: "console" for development, "otlp" for production backends.
@@ -151,7 +151,7 @@ if (isTracingEnabled) {
     // Disable batching for immediate export - better for development and short-lived CLI
     disableBatch: true,
     // Capture prompt/completion content only when explicitly enabled (security: default false)
-    traceContent: isTraceContentEnabled,
+    traceContent: isCaptureAiPayloads,
     // Silence the default "Traceloop exporting traces to..." message
     silenceInitializationMessage: true,
   });
@@ -219,9 +219,9 @@ export function getTracer(): Tracer {
 export const withTool = traceloop.withTool;
 
 /**
- * Export trace content flag for use in context-bridge.ts
+ * Export AI payload capture flag for use in context-bridge.ts
  *
- * When false, sensitive content (user questions, agent outputs) should not
- * be written to span attributes to prevent data exposure.
+ * When false, AI interaction payloads (user prompts, model completions,
+ * tool arguments, tool return values) are not written to span attributes.
  */
-export { isTraceContentEnabled };
+export { isCaptureAiPayloads };

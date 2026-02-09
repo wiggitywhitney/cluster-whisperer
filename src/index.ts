@@ -119,69 +119,68 @@ async function main() {
         /**
          * Process events as they stream in.
          *
-         * Event types we care about:
-         * - on_tool_start: Agent decided to call a tool, shows name and args
-         * - on_tool_end: Tool finished, shows the result
-         * - on_chat_model_end: Model finished generating, capture final answer
+         * LangGraph v2 streamEvents() emits on_chain_stream events, each
+         * containing a chunk with one key indicating its source:
+         * - "agent": AI message with content blocks and optional tool_calls
+         * - "tools": Tool result message with string content
          *
-         * There are many other event types (on_chain_start, on_llm_stream, etc.)
-         * but these three give us the visibility we need without noise.
+         * The agent messages contain an array of content blocks:
+         * - { type: "thinking", thinking: "..." } - Claude's reasoning process
+         * - { type: "text", text: "..." } - response text shown to the user
+         * - { type: "tool_use", ... } - tool call (also in msg.tool_calls)
+         *
+         * When the agent message has tool_calls, it's an intermediate step.
+         * When it has no tool_calls, it's the final answer.
          */
         for await (const event of eventStream) {
-          if (event.event === "on_tool_start") {
-            // Agent is calling a tool - show which one and with what arguments
-            // event.data.input contains the tool arguments
-            const toolName = event.name;
-            const toolInput = event.data.input;
+          if (event.event !== "on_chain_stream") continue;
 
-            // The input might be nested in an 'input' property if it was serialized
-            let args = toolInput;
-            try {
-              if (typeof toolInput === "object" && toolInput?.input) {
-                args = JSON.parse(toolInput.input);
-              }
-            } catch {
-              // If parsing fails, use the raw input - better than crashing
-            }
+          const chunk = event.data?.chunk;
+          if (!chunk) continue;
 
-            console.log(`🔧 Tool: ${toolName}`);
-            console.log(`   Args: ${JSON.stringify(args)}`);
-          }
+          // Agent message: AI decided something (tool call or final answer)
+          if (chunk.agent?.messages) {
+            for (const msg of chunk.agent.messages) {
+              const content = msg.content;
 
-          if (event.event === "on_tool_end") {
-            // Tool finished - show the result (truncated to avoid flooding terminal)
-            // event.data.output is a ToolMessage object with a .content property
-            const output = event.data.output;
-            const content = output?.content ?? output;
-            console.log(`   Result:\n${truncate(String(content), 1100)}`);
-            console.log(); // blank line between tool calls
-          }
-
-          if (event.event === "on_chat_model_end") {
-            // Model finished generating - capture the response for final display
-            // The output contains the message(s) the model produced
-            // Content might be a string or an array of content blocks
-            //
-            // With extended thinking enabled, content includes both:
-            // - type: "thinking" blocks - Claude's reasoning process
-            // - type: "text" blocks - the actual response text
-            const output = event.data.output;
-            if (output?.content) {
-              const content = output.content;
-              if (typeof content === "string") {
-                finalAnswer = content;
-              } else if (Array.isArray(content)) {
+              // Process content blocks (thinking, text, tool_use)
+              if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === "thinking") {
-                    // Display thinking content so users can see the reasoning
+                    // Display thinking so users can see the reasoning process
                     // \x1b[3m starts italic, \x1b[0m resets formatting
                     console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
-                  } else if (block.type === "text") {
-                    // Capture text for final answer display
-                    finalAnswer += block.text;
                   }
                 }
               }
+
+              // Show tool calls if present (intermediate step)
+              if (msg.tool_calls?.length) {
+                for (const tc of msg.tool_calls) {
+                  console.log(`🔧 Tool: ${tc.name}`);
+                  console.log(`   Args: ${JSON.stringify(tc.args)}`);
+                }
+              } else {
+                // No tool calls = final answer. Extract text from content blocks.
+                finalAnswer = "";
+                if (typeof content === "string") {
+                  finalAnswer = content;
+                } else if (Array.isArray(content)) {
+                  for (const block of content) {
+                    if (block.type === "text") {
+                      finalAnswer += block.text;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Tool result: kubectl output from a tool execution
+          if (chunk.tools?.messages) {
+            for (const msg of chunk.tools.messages) {
+              console.log(`   Result:\n${truncate(String(msg.content), 1100)}`);
+              console.log(); // blank line between tool calls
             }
           }
         }

@@ -107,9 +107,10 @@ export function registerInvestigateTool(server: McpServer): void {
           );
 
           // Build trace output: thinking + answer for observability
-          // This goes to traceloop.entity.output attribute (when content enabled)
+          // Full output goes to traceloop.entity.output; clean answer goes to
+          // gen_ai.output.messages for Datadog LLM Observability CONTENT column
           const traceOutput = buildTraceOutput(result);
-          setTraceOutput(traceOutput);
+          setTraceOutput(traceOutput, result.answer);
 
           // Return MCP response with just the answer
           // Thinking is captured in traces, not returned to MCP client
