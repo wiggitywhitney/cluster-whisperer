@@ -29,6 +29,28 @@ groups:
         note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.
         examples: ["Find the broken pod and tell me why it's failing"]
 
+      - id: gen_ai.input.messages
+        type: string
+        stability: development
+        brief: JSON-stringified input messages in OTel v1.37+ parts format (content-gated)
+        note: >
+          Only captured when OTEL_CAPTURE_AI_PAYLOADS=true.
+          Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format.
+          Format: [{"role":"user","parts":[{"type":"text","content":"..."}]}]
+          See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+        examples: ['[{"role":"user","parts":[{"type":"text","content":"Find the broken pod"}]}]']
+
+      - id: gen_ai.output.messages
+        type: string
+        stability: development
+        brief: JSON-stringified output messages in OTel v1.37+ parts format (content-gated)
+        note: >
+          Only captured when OTEL_CAPTURE_AI_PAYLOADS=true.
+          Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format.
+          Format: [{"role":"assistant","parts":[{"type":"text","content":"..."}],"finish_reason":"end_turn"}]
+          See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+        examples: ['[{"role":"assistant","parts":[{"type":"text","content":"The pod is failing..."}],"finish_reason":"end_turn"}]']
+
   # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES
   # Used by MCP mode (withMcpRequestTracing) for tool execution tracking

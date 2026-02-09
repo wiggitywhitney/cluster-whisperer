@@ -124,11 +124,11 @@ Research findings will be documented in `docs/research/21-content-column-researc
 **Success criteria**: Datadog LLM Observability trace list shows readable text (not raw JSON) in the CONTENT column for both INPUT and OUTPUT.
 
 ### M4: Update Documentation and Schema
-- [ ] Read research document
-- [ ] Add `gen_ai.input.messages` and `gen_ai.output.messages` to Weaver schema (`telemetry/registry/attributes.yaml`)
-- [ ] Update `docs/opentelemetry.md` Known Limitations section with final status
-- [ ] Update `docs/tracing-conventions.md` Content Gating section with new env var name and gen_ai attributes
-- [ ] Regenerate `resolved.json`
+- [x] Read research document
+- [x] Add `gen_ai.input.messages` and `gen_ai.output.messages` to Weaver schema (`telemetry/registry/attributes.yaml`)
+- [x] Update `docs/opentelemetry.md` Known Limitations section with final status
+- [x] Update `docs/tracing-conventions.md` Content Gating section with new env var name and gen_ai attributes
+- [x] Regenerate `resolved.json`
 
 **Success criteria**: `npm run telemetry:check` and `npm run telemetry:resolve` pass. Documentation accurately reflects the current implementation.
 
@@ -183,3 +183,4 @@ Research findings will be documented in `docs/research/21-content-column-researc
 | 2026-02-07 | M1 complete | Research doc created; identified extended thinking as cause of empty `gen_ai.completion.0.content`; hypothesized it also caused CLI finalAnswer failure |
 | 2026-02-07 | M2 complete | Empirically disproved M1 hypothesis — CLI failure caused by wrong stream event types (`on_chat_model_end` never fires in LangGraph v2), not extended thinking. Rewrote handlers to use `on_chain_stream`. CLI output and `traceloop.entity.output` trace attribute now working. Cherry-picked env var rename from prd-7 branch, deleted stale branch. |
 | 2026-02-09 | M3 complete | Verified `gen_ai.input/output.messages` in v1.37+ `parts` format renders clean text in Datadog CONTENT column. Both CLI and MCP modes confirmed via Datadog UI screenshots. Wrote fix narrative doc. |
+| 2026-02-09 | M4 complete | Added `gen_ai.input/output.messages` to Weaver schema, updated opentelemetry.md (Known Limitation → Fixed), updated tracing-conventions.md Content Gating with new attributes table, regenerated resolved.json. Schema validation passes. |

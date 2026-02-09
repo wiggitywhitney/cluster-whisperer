@@ -448,24 +448,29 @@ Traces also appear in Datadog LLM Observability with full feature support:
 
 View LLM traces at: <https://app.datadoghq.com/llm/traces?query=%40ml_app%3Acluster-whisperer>
 
-#### Known Limitation: CONTENT Column
+#### CONTENT Column (Fixed)
 
-**Issue**: The trace list view in LLM Observability shows "No content" in the CONTENT column for INPUT/OUTPUT, even though the data exists on the spans.
+The Datadog LLM Observability CONTENT column now displays clean INPUT and OUTPUT text for cluster-whisperer traces in both CLI and MCP modes.
 
-**Details**:
-- We set `traceloop.entity.input` and `traceloop.entity.output` attributes on the root span
-- This data IS captured and visible when drilling into span details or querying via API
-- The trace list summary column doesn't render these OpenLLMetry attributes
+**How it works**: We manually set `gen_ai.input.messages` and `gen_ai.output.messages` as JSON-stringified span attributes on root spans using the OTel v1.37+ `parts` format. This works around OpenLLMetry-JS still using the deprecated `gen_ai.prompt.N` / `gen_ai.completion.N` format.
 
-**Root cause**: Datadog LLM Observability requires v1.37+ semconv attributes (`gen_ai.input.messages`, `gen_ai.output.messages`) with a specific `parts` array format. OpenLLMetry JS v0.22.6 still emits old format (`gen_ai.prompt`, `traceloop.entity.input`). The env var `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` should enable new format, but OpenLLMetry JS hasn't implemented support yet.
+**Format** (set in `src/tracing/context-bridge.ts`):
+```json
+// gen_ai.input.messages
+[{"role": "user", "parts": [{"type": "text", "content": "Find the broken pod..."}]}]
 
-**Status**: Waiting for OpenLLMetry fix. Track upstream: [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515)
+// gen_ai.output.messages
+[{"role": "assistant", "parts": [{"type": "text", "content": "The pod is failing..."}], "finish_reason": "end_turn"}]
+```
 
-**Datadog support**: For OTel + LLM Observability questions, use internal Slack channel `#ml-obs-otel`.
+**Key details**:
+- Both attributes are content-gated behind `OTEL_CAPTURE_AI_PAYLOADS=true`
+- Root spans also need `gen_ai.system`, `gen_ai.operation.name`, and `gen_ai.request.model` for Datadog to recognize them as LLM call spans
+- `gen_ai.completion.0.content` on `chat.anthropic` spans remains empty due to an OpenLLMetry-JS bug with extended thinking ([traceloop/openllmetry-js#671](https://github.com/traceloop/openllmetry-js/pull/671)) — our manual attributes bypass this
 
-**Attempted workaround**: We tried manually setting `gen_ai.input.messages` and `gen_ai.output.messages` with OTel semconv v1.37+ `parts` array format. INPUT appeared but rendered as raw JSON in the CONTENT column; OUTPUT showed "No content" due to a separate CLI answer extraction bug. Reverted pending further research (PRD #21).
+**Upstream tracking**: [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) — when OpenLLMetry-JS adopts the v1.37+ format natively, our manual workaround can be removed.
 
-**Workaround (if needed for KubeCon demo)**: Requires two fixes — see PRD #21 for details.
+**Full details**: See PRD #21 and `docs/research/21-content-column-research.md`.
 
 ### Jaeger Setup
 

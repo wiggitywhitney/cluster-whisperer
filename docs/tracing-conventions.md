@@ -201,7 +201,15 @@ Sensitive content (user questions, tool inputs/outputs) is only captured when ex
 OTEL_CAPTURE_AI_PAYLOADS=true  # Default: false (disabled)
 ```
 
-Content-gated attributes are marked in the Weaver schema with `note: "Content-gated"`. These include `cluster_whisperer.user.question` and all `traceloop.entity.*` attributes.
+Content-gated attributes are marked in the Weaver schema with a note referencing `OTEL_CAPTURE_AI_PAYLOADS`. These include:
+
+| Attribute | Purpose |
+|-----------|---------|
+| `cluster_whisperer.user.question` | User's natural language question |
+| `traceloop.entity.input` | OpenLLMetry input content |
+| `traceloop.entity.output` | OpenLLMetry output content |
+| `gen_ai.input.messages` | OTel v1.37+ input for Datadog CONTENT column |
+| `gen_ai.output.messages` | OTel v1.37+ output for Datadog CONTENT column |
 
 ### Implementation
 
@@ -211,8 +219,14 @@ import { isCaptureAiPayloads } from "./index";
 if (isCaptureAiPayloads) {
   span.setAttribute("cluster_whisperer.user.question", question);
   span.setAttribute("traceloop.entity.input", question);
+  // OTel v1.37+ format for Datadog LLM Observability CONTENT column
+  span.setAttribute("gen_ai.input.messages", JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: question }] },
+  ]));
 }
 ```
+
+The `gen_ai.output.messages` attribute is set separately via `setTraceOutput()` after the agent completes.
 
 ### Security Rationale
 

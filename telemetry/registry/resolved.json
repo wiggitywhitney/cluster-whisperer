@@ -261,6 +261,28 @@
           "requirement_level": "recommended",
           "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.",
           "stability": "development"
+        },
+        {
+          "name": "gen_ai.input.messages",
+          "type": "string",
+          "brief": "JSON-stringified input messages in OTel v1.37+ parts format (content-gated)",
+          "examples": [
+            "[{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"Find the broken pod\"}]}]"
+          ],
+          "requirement_level": "recommended",
+          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format. Format: [{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"...\"}]}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.output.messages",
+          "type": "string",
+          "brief": "JSON-stringified output messages in OTel v1.37+ parts format (content-gated)",
+          "examples": [
+            "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"The pod is failing...\"}],\"finish_reason\":\"end_turn\"}]"
+          ],
+          "requirement_level": "recommended",
+          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format. Format: [{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"...\"}],\"finish_reason\":\"end_turn\"}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
+          "stability": "development"
         }
       ],
       "lineage": {
