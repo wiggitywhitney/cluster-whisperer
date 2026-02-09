@@ -289,7 +289,7 @@ export async function withMcpRequestTracing(
   if (toolName === "investigate") {
     attributes["gen_ai.system"] = "anthropic";
     attributes["gen_ai.operation.name"] = "chat";
-    attributes["gen_ai.request.model"] = "claude-sonnet-4-20250514";
+    attributes["gen_ai.request.model"] = ANTHROPIC_MODEL;
   } else {
     attributes["gen_ai.operation.name"] = "execute_tool";
   }
