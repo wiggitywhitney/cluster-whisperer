@@ -116,10 +116,10 @@ Research findings will be documented in `docs/research/21-content-column-researc
 **Note**: `gen_ai.completion.0.content` is empty due to an OpenLLMetry-JS bug where `JSON.stringify(result.content)` produces an empty string when extended thinking blocks are present. This is an upstream issue — our code cannot fix it without disabling extended thinking (which we chose not to do).
 
 ### M3: Correct gen_ai.input/output.messages Format
-- [ ] Read research document
-- [ ] Adjust `gen_ai.input.messages` and `gen_ai.output.messages` format in `context-bridge.ts` based on research findings
-- [ ] Test both CLI and MCP modes (MCP requires Claude Code restart)
-- [ ] Verify CONTENT column in Datadog LLM Observability shows clean text for both INPUT and OUTPUT
+- [x] Read research document
+- [x] Adjust `gen_ai.input.messages` and `gen_ai.output.messages` format in `context-bridge.ts` based on research findings
+- [x] Test both CLI and MCP modes (MCP requires Claude Code restart)
+- [x] Verify CONTENT column in Datadog LLM Observability shows clean text for both INPUT and OUTPUT
 
 **Success criteria**: Datadog LLM Observability trace list shows readable text (not raw JSON) in the CONTENT column for both INPUT and OUTPUT.
 
@@ -182,3 +182,4 @@ Research findings will be documented in `docs/research/21-content-column-researc
 | 2026-02-07 | PRD created | Defined 5 milestones with research-first approach |
 | 2026-02-07 | M1 complete | Research doc created; identified extended thinking as cause of empty `gen_ai.completion.0.content`; hypothesized it also caused CLI finalAnswer failure |
 | 2026-02-07 | M2 complete | Empirically disproved M1 hypothesis — CLI failure caused by wrong stream event types (`on_chat_model_end` never fires in LangGraph v2), not extended thinking. Rewrote handlers to use `on_chain_stream`. CLI output and `traceloop.entity.output` trace attribute now working. Cherry-picked env var rename from prd-7 branch, deleted stale branch. |
+| 2026-02-09 | M3 complete | Verified `gen_ai.input/output.messages` in v1.37+ `parts` format renders clean text in Datadog CONTENT column. Both CLI and MCP modes confirmed via Datadog UI screenshots. Wrote fix narrative doc. |
