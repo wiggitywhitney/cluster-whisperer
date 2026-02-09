@@ -1,6 +1,6 @@
 # PRD #21: Fix LLM Observability CONTENT Column
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-02-07
 **GitHub Issue**: [#21](https://github.com/wiggitywhitney/cluster-whisperer/issues/21)
 
@@ -133,10 +133,10 @@ Research findings will be documented in `docs/research/21-content-column-researc
 **Success criteria**: `npm run telemetry:check` and `npm run telemetry:resolve` pass. Documentation accurately reflects the current implementation.
 
 ### M5: End-to-End Verification
-- [ ] Run CLI mode with tracing → verify CONTENT column in Datadog
-- [ ] Run MCP mode via Claude Code → verify CONTENT column in Datadog
-- [ ] Confirm both INPUT and OUTPUT render as readable text
-- [ ] Verify no regressions in span hierarchy or other trace attributes
+- [x] Run CLI mode with tracing → verify CONTENT column in Datadog
+- [x] Run MCP mode via Claude Code → verify CONTENT column in Datadog
+- [x] Confirm both INPUT and OUTPUT render as readable text
+- [x] Verify no regressions in span hierarchy or other trace attributes
 
 **Success criteria**: Both CLI and MCP traces show clean INPUT and OUTPUT text in the Datadog LLM Observability CONTENT column. Traces verified via `search_datadog_spans` MCP tool.
 
@@ -184,3 +184,4 @@ Research findings will be documented in `docs/research/21-content-column-researc
 | 2026-02-07 | M2 complete | Empirically disproved M1 hypothesis — CLI failure caused by wrong stream event types (`on_chat_model_end` never fires in LangGraph v2), not extended thinking. Rewrote handlers to use `on_chain_stream`. CLI output and `traceloop.entity.output` trace attribute now working. Cherry-picked env var rename from prd-7 branch, deleted stale branch. |
 | 2026-02-09 | M3 complete | Verified `gen_ai.input/output.messages` in v1.37+ `parts` format renders clean text in Datadog CONTENT column. Both CLI and MCP modes confirmed via Datadog UI screenshots. Wrote fix narrative doc. |
 | 2026-02-09 | M4 complete | Added `gen_ai.input/output.messages` to Weaver schema, updated opentelemetry.md (Known Limitation → Fixed), updated tracing-conventions.md Content Gating with new attributes table, regenerated resolved.json. Schema validation passes. |
+| 2026-02-09 | M5 complete | End-to-end verification of both CLI and MCP modes via Datadog MCP tools. CLI trace `0ebce4ab...` and MCP trace `0b1467ca...` both show clean readable text in CONTENT column for INPUT and OUTPUT. Span hierarchy intact (51 spans CLI, similar MCP) with no regressions. |
