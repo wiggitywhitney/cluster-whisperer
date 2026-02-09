@@ -627,7 +627,7 @@ We track two upstream issues:
 | Issue | Problem | Impact |
 |-------|---------|--------|
 | [traceloop/openllmetry-js#476](https://github.com/traceloop/openllmetry-js/issues/476) | LangGraph breaks async context propagation | We use `context-bridge.ts` as workaround |
-| [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) | Old semconv format for content attributes | Datadog CONTENT column shows "No content" — see PRD #21 |
+| [traceloop/openllmetry#3515](https://github.com/traceloop/openllmetry/issues/3515) | Old semconv format for content attributes | `gen_ai.completion.0.content` is empty with extended thinking — **workaround in place** via `gen_ai.output.messages` (PRD #21) |
 
 ## Further Reading
 

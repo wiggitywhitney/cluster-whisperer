@@ -276,7 +276,7 @@ Per [OTel GenAI Semantic Conventions v1.37+](https://opentelemetry.io/docs/specs
 
 **Why this matters**: Datadog LLM Observability [natively supports GenAI semconv v1.37+](https://www.datadoghq.com/blog/llm-otel-semantic-convention/) and automatically maps these attributes to LLM Observability features.
 
-**Current state**: MCP mode (`withMcpRequestTracing()`) includes GenAI semconv attributes alongside OpenLLMetry `traceloop.*` attributes. CLI mode does not include GenAI semconv because the root span is human-invoked, not AI-invoked.
+**Current state**: MCP mode (`withMcpRequestTracing()`) includes GenAI tool execution attributes alongside OpenLLMetry `traceloop.*` attributes. CLI mode does not include GenAI tool execution attributes because the root span is human-invoked, not AI-invoked. (Note: CLI mode *does* set `gen_ai.system`, `gen_ai.operation.name`, and `gen_ai.request.model` on the root span — these are needed for Datadog to render the CONTENT column.)
 
 **Status**: Fixed in PRD #15 Milestone 2. MCP root spans now include all GenAI semconv attributes for proper Datadog LLM Observability integration.
 

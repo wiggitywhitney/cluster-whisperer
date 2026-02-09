@@ -22,7 +22,7 @@ The fix requires setting `gen_ai.input.messages` and `gen_ai.output.messages` as
 
 From trace `a018b9759be514a81505225d6d78bdc7`, the `chat.anthropic` span set by OpenLLMetry-JS:
 
-```
+```text
 gen_ai.prompt.0.role: "system"
 gen_ai.prompt.0.content: "# Kubernetes Investigation Assistant..."
 gen_ai.prompt.1.role: "user"
@@ -99,7 +99,7 @@ The newer semconv (opt-in via `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_exper
 ### OpenLLMetry-JS (what cluster-whisperer uses): Deprecated flat attributes
 
 Uses span attributes (not events) with indexed naming:
-```
+```text
 gen_ai.prompt.N.role = "user"
 gen_ai.prompt.N.content = "Find the broken pod"
 gen_ai.completion.N.role = "assistant"

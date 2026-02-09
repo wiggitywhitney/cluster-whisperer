@@ -43,6 +43,7 @@ import {
   SpanStatusCode,
 } from "@opentelemetry/api";
 import { getTracer, isCaptureAiPayloads } from "./index";
+import { ANTHROPIC_MODEL } from "../agent/investigator";
 
 /**
  * MCP tool result format per Model Context Protocol specification.
@@ -174,7 +175,7 @@ export async function withAgentTracing<T>(
     // to recognize this span and process gen_ai.input/output.messages
     "gen_ai.system": "anthropic",
     "gen_ai.operation.name": "chat",
-    "gen_ai.request.model": "claude-sonnet-4-20250514",
+    "gen_ai.request.model": ANTHROPIC_MODEL,
   };
 
   // Only include user question and entity input if trace content capture is enabled
