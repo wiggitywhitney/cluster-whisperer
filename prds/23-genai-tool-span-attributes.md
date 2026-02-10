@@ -148,18 +148,21 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 - [x] Regenerate `telemetry/registry/resolved.json`
 - [x] Validate with `npm run telemetry:check` and `npm run telemetry:resolve`
 
-### M3: Add tool definitions to LLM spans
+### M3: Add tool definitions to LLM spans *(complete)*
 
 **Goal**: LLM/chat spans include `gen_ai.tool.definitions` — a JSON array describing available tools.
 
-**Investigation needed**: The `chat.anthropic`/`anthropic.chat` spans are created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. Determine whether OpenLLMetry already sets `gen_ai.tool.definitions`, or if we need a custom SpanProcessor to inject it.
+**Investigation result**: OpenLLMetry does NOT set `gen_ai.tool.definitions` on `anthropic.chat` spans. Option B confirmed — custom SpanProcessor needed.
 
-**Changes** (depends on investigation):
-- Option A: OpenLLMetry already sets it — no code changes, just verify
-- Option B: Need a custom SpanProcessor that intercepts `chat.anthropic` spans and adds `gen_ai.tool.definitions` with the tool schema JSON
+- [x] Investigate whether OpenLLMetry sets `gen_ai.tool.definitions` — confirmed it does not
+- [x] Create `ToolDefinitionsProcessor` SpanProcessor (`src/tracing/tool-definitions-processor.ts`) that intercepts `anthropic.chat` spans and sets `gen_ai.tool.definitions`
+- [x] Register processor via `traceloop.initialize()`'s `processor` option (clean, supported API)
+- [x] Lazy `require()` for tool metadata to break circular dependency: `tracing/index → processor → tools/core → utils/kubectl → tracing/index`
+- [x] Tool definitions in OpenAI-style format with full JSON Schema from Zod via `zod-to-json-schema`
+- [x] Validated: `gen_ai.tool.definitions` on all `anthropic.chat` spans with all 3 tools (names, descriptions, parameter schemas)
 
 **Validation**:
-- Run CLI with console exporter and check `chat.anthropic` span attributes for `gen_ai.tool.definitions`
+- Run CLI with console exporter and check `anthropic.chat` span attributes for `gen_ai.tool.definitions`
 - Verify the JSON array contains all three tools (`kubectl_get`, `kubectl_describe`, `kubectl_logs`) with names, descriptions, and parameter schemas
 
 ### M4: Verify in Datadog LLM Observability — CLI mode
@@ -205,6 +208,16 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 ---
 
 ## Progress Log
+
+### 2026-02-10: M3 complete — tool definitions injected into LLM chat spans via custom SpanProcessor
+- Investigation: OpenLLMetry does NOT set `gen_ai.tool.definitions` on `anthropic.chat` spans — Option B confirmed
+- Created `src/tracing/tool-definitions-processor.ts` — `ToolDefinitionsProcessor` SpanProcessor that intercepts `anthropic.chat` spans in `onStart()` and sets `gen_ai.tool.definitions`
+- Registered via `traceloop.initialize()`'s undocumented `processor` option — clean API, no internal hacking
+- Lazy `require()` pattern to break circular dependency: `tracing/index → processor → tools/core → utils/kubectl → tracing/index`
+- Tool definitions use OpenAI-style format (`type: "function"` with nested function object) and full JSON Schema from `zod-to-json-schema`
+- Cached on first span — tool definitions are static, computed once at runtime
+- Validated with console exporter: `gen_ai.tool.definitions` on all 6 `anthropic.chat` spans (full investigation with logs verification), attribute does NOT leak to other span types
+- Updated CLAUDE.md test question to include "Verify your answer with the logs." for more complete trace coverage (triggers all 3 tool types)
 
 ### 2026-02-10: M2 complete — Weaver schema fully updated with all tool + LLM span attributes
 - Added `gen_ai.tool.description` as OTel `ref:` (exists in v1.37.0 registry)
