@@ -428,6 +428,148 @@
         }
       },
       "display_name": "Subprocess Attributes"
+    },
+    {
+      "id": "registry.cluster_whisperer.tool",
+      "type": "attribute_group",
+      "brief": "GenAI semantic convention attributes for agentic tool execution spans",
+      "note": "Set by withToolTracing() on spans created by OpenLLMetry's withTool(). Both gen_ai.* (OTel GenAI semconv) and traceloop.* (OpenLLMetry) attributes coexist on the same span for ecosystem compatibility. See PRD #23 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
+      "attributes": [
+        {
+          "name": "gen_ai.operation.name",
+          "type": {
+            "members": [
+              {
+                "id": "chat",
+                "value": "chat",
+                "brief": "Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)",
+                "stability": "development"
+              },
+              {
+                "id": "generate_content",
+                "value": "generate_content",
+                "brief": "Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)",
+                "stability": "development"
+              },
+              {
+                "id": "text_completion",
+                "value": "text_completion",
+                "brief": "Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)",
+                "stability": "development"
+              },
+              {
+                "id": "embeddings",
+                "value": "embeddings",
+                "brief": "Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)",
+                "stability": "development"
+              },
+              {
+                "id": "create_agent",
+                "value": "create_agent",
+                "brief": "Create GenAI agent",
+                "stability": "development"
+              },
+              {
+                "id": "invoke_agent",
+                "value": "invoke_agent",
+                "brief": "Invoke GenAI agent",
+                "stability": "development"
+              },
+              {
+                "id": "execute_tool",
+                "value": "execute_tool",
+                "brief": "Execute a tool",
+                "stability": "development"
+              }
+            ]
+          },
+          "brief": "The name of the operation being performed.",
+          "requirement_level": "required",
+          "note": "If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.tool.call.id",
+          "type": "string",
+          "brief": "The tool call identifier.",
+          "examples": [
+            "call_mszuSIzqtI65i1wAUOE8w5H4"
+          ],
+          "requirement_level": "recommended",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.tool.name",
+          "type": "string",
+          "brief": "Name of the tool utilized by the agent.",
+          "examples": [
+            "Flights"
+          ],
+          "requirement_level": "recommended",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.tool.type",
+          "type": "string",
+          "brief": "Type of the tool utilized by the agent",
+          "examples": [
+            "function",
+            "extension",
+            "datastore"
+          ],
+          "requirement_level": "recommended",
+          "note": "Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.\n  Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.\nFunction: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.\n  Client-side operations are actions taken on the user's end or within the client application.\nDatastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.\n",
+          "stability": "development"
+        }
+      ],
+      "lineage": {
+        "provenance": {
+          "registry_id": "cluster_whisperer",
+          "path": "telemetry/registry/attributes.yaml"
+        },
+        "attributes": {
+          "gen_ai.operation.name": {
+            "source_group": "attributes.gen_ai.common.client",
+            "inherited_fields": [
+              "brief",
+              "note",
+              "requirement_level",
+              "stability"
+            ]
+          },
+          "gen_ai.tool.call.id": {
+            "source_group": "registry.gen_ai",
+            "inherited_fields": [
+              "brief",
+              "examples",
+              "note",
+              "requirement_level",
+              "stability"
+            ]
+          },
+          "gen_ai.tool.name": {
+            "source_group": "registry.gen_ai",
+            "inherited_fields": [
+              "brief",
+              "examples",
+              "note",
+              "requirement_level",
+              "stability"
+            ]
+          },
+          "gen_ai.tool.type": {
+            "source_group": "registry.gen_ai",
+            "inherited_fields": [
+              "brief",
+              "examples",
+              "note",
+              "requirement_level",
+              "stability"
+            ]
+          }
+        }
+      },
+      "display_name": "Tool Span Attributes"
     }
   ]
 }

@@ -146,3 +146,8 @@ We will implement Required + Recommended attributes. Opt-in attributes (`argumen
 - Modified `withToolTracing()` in `src/tracing/tool-tracing.ts` to set `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` on the active span after `withTool()` creates it
 - Validated with console exporter: all 5 tool spans (kubectl_get x2, kubectl_describe x3) contain both `gen_ai.*` and `traceloop.*` attributes
 - Build passes cleanly
+
+### 2026-02-10: M2 complete — Weaver schema updated
+- Added `registry.cluster_whisperer.tool` attribute group to `telemetry/registry/attributes.yaml` with refs to `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`
+- Regenerated `telemetry/registry/resolved.json` — all 4 OTel refs expanded correctly
+- `npm run telemetry:check` and `npm run telemetry:resolve` both pass

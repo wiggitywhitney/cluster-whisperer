@@ -52,6 +52,26 @@ groups:
         examples: ['[{"role":"assistant","parts":[{"type":"text","content":"The pod is failing..."}],"finish_reason":"end_turn"}]']
 
   # ==========================================================================
+  # TOOL SPAN ATTRIBUTES
+  # Used by withToolTracing() for agentic tool execution spans (CLI mode)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.tool
+    type: attribute_group
+    display_name: Tool Span Attributes
+    brief: GenAI semantic convention attributes for agentic tool execution spans
+    note: >
+      Set by withToolTracing() on spans created by OpenLLMetry's withTool().
+      Both gen_ai.* (OTel GenAI semconv) and traceloop.* (OpenLLMetry) attributes
+      coexist on the same span for ecosystem compatibility.
+      See PRD #23 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    attributes:
+      # OTel GenAI semantic convention references
+      - ref: gen_ai.operation.name
+      - ref: gen_ai.tool.name
+      - ref: gen_ai.tool.type
+      - ref: gen_ai.tool.call.id
+
+  # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES
   # Used by MCP mode (withMcpRequestTracing) for tool execution tracking
   # ==========================================================================
