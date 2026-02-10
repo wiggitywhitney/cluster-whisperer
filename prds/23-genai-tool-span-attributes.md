@@ -1,4 +1,4 @@
-# PRD #23: Add GenAI Semantic Conventions to Tool Spans
+# PRD #23: Add GenAI Semantic Conventions to Tool and LLM Spans
 
 **Status**: In Progress
 **Created**: 2026-02-09
@@ -52,17 +52,53 @@ gen_ai.operation.name: "execute_tool"
 gen_ai.tool.name: "kubectl_get"
 gen_ai.tool.type: "function"
 gen_ai.tool.call.id: "<uuid>"
+gen_ai.tool.description: "List Kubernetes resources in TABLE FORMAT..."
+gen_ai.tool.call.arguments: '{"resource":"pods","namespace":"all"}'   # content-gated
+gen_ai.tool.call.result: "NAME  READY  STATUS..."                     # content-gated
 
 # OpenLLMetry conventions (EXISTING — set by withTool())
 traceloop.span.kind: "tool"
 traceloop.entity.name: "kubectl_get"
 ```
 
+**Datadog LLM Observability UI mapping:**
+
+| `gen_ai.*` Attribute | Datadog UI Element |
+|---|---|
+| `gen_ai.operation.name` | Span type badge ("Tool") |
+| `gen_ai.tool.name` | Span name in list |
+| `gen_ai.tool.call.id` | Metadata: `tool_id` |
+| `gen_ai.tool.type` | Metadata: `tool_type` |
+| `gen_ai.tool.description` | Metadata: `tool_description` |
+| `gen_ai.tool.call.arguments` | Input panel content |
+| `gen_ai.tool.call.result` | Output panel content |
+
+Note: Datadog's LLM Observability view only reads `gen_ai.*` attributes. The `traceloop.entity.input`/`traceloop.entity.output` values are invisible in LLM Observability (they remain visible in APM).
+
+### LLM Span Enhancement: Tool Definitions
+
+In addition to tool span attributes, LLM/chat spans should include `gen_ai.tool.definitions` — a JSON array describing the available tools. Datadog maps this to `meta.tool_definitions` in the LLM Observability view.
+
+```
+# On chat.anthropic / anthropic.chat spans:
+gen_ai.tool.definitions: '[{"name":"kubectl_get","description":"...","parameters":{...}}, ...]'
+```
+
+This tells the observer which tools the LLM had available during each reasoning step.
+
 ### Files to Change
 
-1. **`src/tracing/tool-tracing.ts`** — Add `gen_ai.*` attributes inside `withToolTracing()` after `withTool()` creates the span
-2. **`telemetry/registry/attributes.yaml`** — Add tool span attribute group referencing `gen_ai.tool.*` semconvs
-3. **`telemetry/registry/resolved.json`** — Regenerate with `npm run telemetry:resolve`
+**Tool spans (gen_ai.tool.* on execute_tool spans):**
+1. **`src/tracing/tool-tracing.ts`** — Add all `gen_ai.*` attributes inside `withToolTracing()` after `withTool()` creates the span. Content attributes (`arguments`, `result`) gated behind `OTEL_CAPTURE_AI_PAYLOADS`. Accept `description` as a new parameter.
+2. **`src/tools/langchain/index.ts`** — Pass tool descriptions to `withToolTracing()` calls
+3. **`src/tools/mcp/index.ts`** — Pass tool descriptions to `withToolTracing()` calls
+
+**LLM spans (gen_ai.tool.definitions on chat spans):**
+4. **Investigation needed** — The `chat.anthropic`/`anthropic.chat` spans are created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. We need to determine whether OpenLLMetry already sets `gen_ai.tool.definitions`, or if we need a custom SpanProcessor to inject it. Check the actual span attributes in Datadog/console output first.
+
+**Schema:**
+5. **`telemetry/registry/attributes.yaml`** — Add tool span attribute group referencing all `gen_ai.tool.*` semconvs including opt-in attributes, plus `gen_ai.tool.definitions` for LLM spans
+6. **`telemetry/registry/resolved.json`** — Regenerate with `npm run telemetry:resolve`
 
 ### OTel GenAI Execute Tool Spec Reference
 
@@ -78,7 +114,7 @@ From [OTel GenAI Spans - Execute Tool](https://opentelemetry.io/docs/specs/semco
 | `gen_ai.tool.call.arguments` | Opt-In | Tool input (content-gated) |
 | `gen_ai.tool.call.result` | Opt-In | Tool output (content-gated) |
 
-We will implement Required + Recommended attributes. Opt-in attributes (`arguments`, `result`) are deferred — the existing `traceloop.entity.input`/`traceloop.entity.output` already capture this content.
+We will implement all attributes — Required, Recommended, and Opt-In. The opt-in content attributes (`arguments`, `result`) are gated behind `OTEL_CAPTURE_AI_PAYLOADS` to prevent accidental data exposure, consistent with how we gate `gen_ai.input.messages`/`gen_ai.output.messages` on the root span.
 
 ---
 
@@ -86,28 +122,36 @@ We will implement Required + Recommended attributes. Opt-in attributes (`argumen
 
 ### M1: Add GenAI attributes to tool spans
 
-**Goal**: Tool spans have both `gen_ai.*` and `traceloop.*` attributes.
+**Goal**: Tool spans have both `gen_ai.*` and `traceloop.*` attributes, including tool input/output content.
 
 **Changes**:
-- Modify `withToolTracing()` in `src/tracing/tool-tracing.ts` to retrieve the active span after `withTool()` creates it, then set `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` on it
+- Modify `withToolTracing()` in `src/tracing/tool-tracing.ts` to retrieve the active span after `withTool()` creates it, then set all `gen_ai.*` attributes:
+  - `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` (always set)
+  - `gen_ai.tool.description` (always set — accept as new parameter)
+  - `gen_ai.tool.call.arguments` (content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`)
+  - `gen_ai.tool.call.result` (content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`)
 - Import `trace` from `@opentelemetry/api` and `randomUUID` from `crypto`
+- Update callers (`src/tools/langchain/index.ts`, `src/tools/mcp/index.ts`) to pass tool descriptions
 
 **Validation**:
-- Run CLI with console exporter: `OTEL_TRACING_ENABLED=true vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"`
+- Run CLI with console exporter: `OTEL_TRACING_ENABLED=true OTEL_CAPTURE_AI_PAYLOADS=true vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"`
 - Verify tool spans in console output contain both `gen_ai.*` and `traceloop.*` attributes
+- Verify `gen_ai.tool.call.arguments` contains the tool input (e.g., `{"resource":"pods","namespace":"all"}`)
+- Verify `gen_ai.tool.call.result` contains the tool output (e.g., kubectl table output)
+- Verify `gen_ai.tool.description` is present
 
 ### M2: Update Weaver schema
 
-**Goal**: Attribute registry reflects the new tool span attributes.
+**Goal**: Attribute registry reflects all tool span attributes including content attributes.
 
 **Changes**:
-- Add a tool span attribute group to `telemetry/registry/attributes.yaml` with refs to `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`
+- Update tool span attribute group in `telemetry/registry/attributes.yaml` with refs to all `gen_ai.tool.*` attributes: `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`, `gen_ai.tool.description`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result`
 - Regenerate `telemetry/registry/resolved.json` with `npm run telemetry:resolve`
 - Validate with `npm run telemetry:check`
 
 ### M3: Verify in Datadog LLM Observability — CLI mode
 
-**Goal**: Tool spans are visible in Datadog's LLM Observability trace view when run from CLI.
+**Goal**: Tool spans are fully populated in Datadog's LLM Observability trace view when run from CLI — span visibility, metadata, input, and output.
 
 **Steps**:
 1. Build: `npm run build`
@@ -123,26 +167,42 @@ We will implement Required + Recommended attributes. Opt-in attributes (`argumen
 4. Open the trace in LLM Observability view (the "LLM" badge view)
 5. Verify `kubectl_get.tool`, `kubectl_describe.tool` spans appear in the span list alongside `chat.anthropic`/`anthropic.chat` spans
 
-**Success criteria**: Tool spans visible in LLM Observability view with `gen_ai.operation.name: "execute_tool"` attribute.
+**Success criteria**:
+- Tool spans visible in LLM Observability view with "Tool" badge
+- Metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
+- Input panel shows tool arguments (e.g., `{"resource":"pods","namespace":"all"}`)
+- Output panel shows tool result (e.g., kubectl table output)
+- LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
 
 ### M4: Verify in Datadog LLM Observability — MCP mode
 
-**Goal**: Tool spans are visible in Datadog's LLM Observability trace view when run via MCP (Claude Code).
+**Goal**: Tool spans are fully populated in Datadog's LLM Observability trace view when run via MCP (Claude Code) — same fidelity as CLI mode.
 
 **Steps**:
-1. Ensure `.mcp.json` has tracing environment variables enabled (OTEL_TRACING_ENABLED, OTEL_EXPORTER_TYPE=otlp, etc.)
+1. Ensure `.mcp.json` has tracing environment variables enabled (OTEL_TRACING_ENABLED, OTEL_EXPORTER_TYPE=otlp, OTEL_CAPTURE_AI_PAYLOADS=true, etc.)
 2. Restart Claude Code to pick up `.mcp.json` changes
 3. Call the investigate tool via Claude Code (use the cluster-whisperer MCP server)
 4. Open the resulting trace in Datadog LLM Observability view
-5. Verify tool spans appear in the span list
+5. Verify tool spans appear in the span list with full content
 
-**Success criteria**: Same as M3 — tool spans visible in LLM Observability view for MCP-initiated traces.
+**Success criteria** (same as M3):
+- Tool spans visible in LLM Observability view with "Tool" badge
+- Metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
+- Input panel shows tool arguments
+- Output panel shows tool result
+- LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
 
 ---
 
 ## Progress Log
 
-### 2026-02-10: M1 complete — GenAI attributes added to tool spans
+### 2026-02-10: Scope expanded — tool content attributes + tool definitions on LLM spans
+- **Decision**: Don't defer opt-in attributes. Implement `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result`, and `gen_ai.tool.description` on tool spans so Datadog LLM Observability shows full tool input/output content
+- **Rationale**: The KubeCon demo needs the audience to see what each tool was called with and what it returned. "No Data" in the tool span panels defeats the purpose of LLM Observability visibility. The `traceloop.entity.input`/`traceloop.entity.output` values are invisible in LLM Observability — only `gen_ai.*` attributes are mapped
+- **Additional scope**: Add `gen_ai.tool.definitions` to LLM/chat spans so observers can see which tools were available during each reasoning step
+- **Impact**: M1 needs rework to add content attributes + description. M2 schema needs additional attribute refs. M3/M4 success criteria expanded to verify tool input/output panels + tool definitions
+
+### 2026-02-10: M1 partially complete — GenAI attributes added to tool spans (needs rework)
 - Modified `withToolTracing()` in `src/tracing/tool-tracing.ts` to set `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` on the active span after `withTool()` creates it
 - Validated with console exporter: all 5 tool spans (kubectl_get x2, kubectl_describe x3) contain both `gen_ai.*` and `traceloop.*` attributes
 - Build passes cleanly
