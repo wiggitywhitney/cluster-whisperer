@@ -29,6 +29,8 @@
  * - Async context propagation
  */
 
+import { trace } from "@opentelemetry/api";
+import { randomUUID } from "crypto";
 import { withTool } from "./index";
 import { withStoredContext } from "./context-bridge";
 
@@ -77,6 +79,19 @@ export function withToolTracing<TInput, TResult>(
       // Use OpenLLMetry's withTool wrapper inside the restored context
       // This creates a properly-parented span and handles context propagation
       return withTool({ name: toolName }, async () => {
+        // Add OTel GenAI semantic convention attributes to the span that
+        // withTool() just created. This makes tool spans visible in Datadog's
+        // LLM Observability view, which requires gen_ai.* attributes.
+        // We keep both namespaces: traceloop.* (set by withTool) for OpenLLMetry
+        // ecosystem compatibility + gen_ai.* for OTel GenAI spec compliance.
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan) {
+          activeSpan.setAttribute("gen_ai.operation.name", "execute_tool");
+          activeSpan.setAttribute("gen_ai.tool.name", toolName);
+          activeSpan.setAttribute("gen_ai.tool.type", "function");
+          activeSpan.setAttribute("gen_ai.tool.call.id", randomUUID());
+        }
+
         return handler(input);
       });
     });
