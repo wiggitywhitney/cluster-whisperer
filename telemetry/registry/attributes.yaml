@@ -70,6 +70,56 @@ groups:
       - ref: gen_ai.tool.name
       - ref: gen_ai.tool.type
       - ref: gen_ai.tool.call.id
+      - ref: gen_ai.tool.description
+
+      # Custom gen_ai.tool.call.* attributes
+      # These are in the OTel GenAI span spec but not yet in the v1.37.0 registry
+      # as standalone attributes. Defined here to document what we set on spans.
+      - id: gen_ai.tool.call.arguments
+        type: string
+        stability: development
+        brief: JSON-stringified tool input arguments (content-gated)
+        note: >
+          Only captured when OTEL_CAPTURE_AI_PAYLOADS=true.
+          Not yet a standalone attribute in OTel semconv v1.37.0 registry,
+          but part of the execute_tool span spec.
+          See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+        examples: ['{"resource":"pods","namespace":"all"}']
+
+      - id: gen_ai.tool.call.result
+        type: string
+        stability: development
+        brief: Tool execution result as string (content-gated)
+        note: >
+          Only captured when OTEL_CAPTURE_AI_PAYLOADS=true.
+          Not yet a standalone attribute in OTel semconv v1.37.0 registry,
+          but part of the execute_tool span spec.
+          See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+        examples: ["NAME  READY  STATUS  RESTARTS  AGE\nnginx  1/1  Running  0  5m"]
+
+  # ==========================================================================
+  # LLM SPAN ATTRIBUTES
+  # Used by chat.anthropic/anthropic.chat spans (OpenLLMetry auto-instrumentation)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.llm
+    type: attribute_group
+    display_name: LLM Span Attributes
+    brief: GenAI semantic convention attributes for LLM/chat completion spans
+    note: >
+      Attributes set on chat.anthropic spans created by OpenLLMetry's
+      auto-instrumentation of the Anthropic SDK. gen_ai.tool.definitions
+      describes which tools were available during each LLM reasoning step.
+      See PRD #23 M3 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    attributes:
+      - id: gen_ai.tool.definitions
+        type: string
+        stability: development
+        brief: JSON array of tool definitions available to the LLM
+        note: >
+          Not yet in OTel semconv v1.37.0 registry.
+          Datadog maps this to meta.tool_definitions in LLM Observability.
+          Contains tool names, descriptions, and parameter schemas.
+        examples: ['[{"name":"kubectl_get","description":"List Kubernetes resources...","parameters":{...}}]']
 
   # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES
