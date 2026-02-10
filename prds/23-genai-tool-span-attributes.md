@@ -165,7 +165,7 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 - Run CLI with console exporter and check `anthropic.chat` span attributes for `gen_ai.tool.definitions`
 - Verify the JSON array contains all three tools (`kubectl_get`, `kubectl_describe`, `kubectl_logs`) with names, descriptions, and parameter schemas
 
-### M4: Verify in Datadog LLM Observability — CLI mode
+### M4: Verify in Datadog LLM Observability — CLI mode *(complete)*
 
 **Goal**: Tool spans and LLM spans are fully populated in Datadog's LLM Observability trace view when run from CLI.
 
@@ -177,18 +177,18 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
    OTEL_EXPORTER_TYPE=otlp \
    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
    OTEL_CAPTURE_AI_PAYLOADS=true \
-   vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
+   vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing. Verify your answer with the logs."
    ```
 3. Open Datadog APM traces: search for `service:cluster-whisperer`
 4. Open the trace in LLM Observability view (the "LLM" badge view)
 5. Verify tool and LLM spans
 
 **Success criteria**:
-- Tool spans visible with "Tool" badge
-- Tool metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
-- Tool input panel shows arguments (e.g., `{"resource":"pods","namespace":"all"}`)
-- Tool output panel shows result (e.g., kubectl table output)
-- LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
+- [x] Tool spans visible with "Tool" badge
+- [x] Tool metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
+- [x] Tool input panel shows arguments (e.g., `{"resource":"pods","namespace":"all"}`)
+- [x] Tool output panel shows result (e.g., kubectl table output)
+- [x] LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
 
 ### M5: Verify in Datadog LLM Observability — MCP mode
 
@@ -208,6 +208,15 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 ---
 
 ## Progress Log
+
+### 2026-02-10: M4 complete — all attributes verified in Datadog LLM Observability (CLI mode)
+- Ran CLI with OTLP export to local Datadog Agent, full investigation question triggering all 3 tool types
+- Trace `bff51b57a0753c66fbaf39c8ae82dfea`: 6 tool spans + 6 LLM spans, all with correct `gen_ai.*` attributes
+- Tool spans: orange "Tool" badge, metadata panel shows `tool_description`, `tool_id`, `tool_type: "function"`
+- Tool input panel: JSON arguments rendered correctly (e.g., `{"resource":"pods","namespace":"all"}`)
+- Tool output panel: full kubectl output (pod tables, describe output) displayed in LLM Observability view
+- LLM spans: blue "LLM" badge, `gen_ai.tool.definitions` confirmed on all `anthropic.chat` spans with all 3 tools
+- Both `gen_ai.*` and `traceloop.*` attributes coexist — LLM Observability reads `gen_ai.*`, APM still has `traceloop.*`
 
 ### 2026-02-10: M3 complete — tool definitions injected into LLM chat spans via custom SpanProcessor
 - Investigation: OpenLLMetry does NOT set `gen_ai.tool.definitions` on `anthropic.chat` spans — Option B confirmed
