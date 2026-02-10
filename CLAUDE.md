@@ -129,19 +129,19 @@ After changing `.mcp.json`, restart Claude Code to pick up the new configuration
 
 ### CLI Mode
 
-**Always use this question when testing tracing** — it triggers multiple tool calls (get, describe, describe, get, describe) and multiple LLM reasoning steps, which is essential for verifying the full trace hierarchy:
+**Always use this question when testing tracing** — it triggers multiple tool calls (get, describe, logs) and multiple LLM reasoning steps, which is essential for verifying the full trace hierarchy:
 
 ```bash
 # Console output (development)
 OTEL_TRACING_ENABLED=true \
-vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing. Verify your answer with the logs."
 
 # OTLP export to Datadog (via local agent)
 OTEL_TRACING_ENABLED=true \
 OTEL_EXPORTER_TYPE=otlp \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 OTEL_CAPTURE_AI_PAYLOADS=true \
-vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
+vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing. Verify your answer with the logs."
 ```
 
 This triggers a full investigation: LLM reasoning → kubectl_get (find pods) → kubectl_describe (check events) → kubectl_logs (read output) → multiple iterations until root cause found.

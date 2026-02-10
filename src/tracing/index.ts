@@ -36,6 +36,7 @@ import {
 } from "@opentelemetry/sdk-trace-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { Tracer } from "@opentelemetry/api";
+import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
 
 /**
  * Configuration constants
@@ -154,6 +155,10 @@ if (isTracingEnabled) {
     traceContent: isCaptureAiPayloads,
     // Silence the default "Traceloop exporting traces to..." message
     silenceInitializationMessage: true,
+    // Custom SpanProcessor that adds gen_ai.tool.definitions to LLM chat spans.
+    // OpenLLMetry's auto-instrumentation creates anthropic.chat spans but doesn't
+    // include tool definitions — our processor fills that gap for LLM Observability.
+    processor: new ToolDefinitionsProcessor(),
   });
 
   console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`);
