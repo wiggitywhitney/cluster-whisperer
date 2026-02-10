@@ -120,38 +120,57 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 
 ## Milestones
 
-### M1: Add GenAI attributes to tool spans
+### M1: Add GenAI attributes to tool spans *(partial — needs rework)*
 
 **Goal**: Tool spans have both `gen_ai.*` and `traceloop.*` attributes, including tool input/output content.
 
-**Changes**:
-- Modify `withToolTracing()` in `src/tracing/tool-tracing.ts` to retrieve the active span after `withTool()` creates it, then set all `gen_ai.*` attributes:
-  - `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` (always set)
-  - `gen_ai.tool.description` (always set — accept as new parameter)
-  - `gen_ai.tool.call.arguments` (content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`)
-  - `gen_ai.tool.call.result` (content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`)
-- Import `trace` from `@opentelemetry/api` and `randomUUID` from `crypto`
-- Update callers (`src/tools/langchain/index.ts`, `src/tools/mcp/index.ts`) to pass tool descriptions
+**Done** (committed in `15d671e`):
+- [x] `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` set on active span
+- [x] Import `trace` from `@opentelemetry/api` and `randomUUID` from `crypto`
+
+**Remaining**:
+- [ ] Add `gen_ai.tool.description` — accept as new parameter to `withToolTracing()`, always set
+- [ ] Add `gen_ai.tool.call.arguments` — serialize tool input as JSON string, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
+- [ ] Add `gen_ai.tool.call.result` — serialize tool output as string, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
+- [ ] Update callers (`src/tools/langchain/index.ts`, `src/tools/mcp/index.ts`) to pass tool descriptions
 
 **Validation**:
 - Run CLI with console exporter: `OTEL_TRACING_ENABLED=true OTEL_CAPTURE_AI_PAYLOADS=true vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"`
-- Verify tool spans in console output contain both `gen_ai.*` and `traceloop.*` attributes
-- Verify `gen_ai.tool.call.arguments` contains the tool input (e.g., `{"resource":"pods","namespace":"all"}`)
-- Verify `gen_ai.tool.call.result` contains the tool output (e.g., kubectl table output)
-- Verify `gen_ai.tool.description` is present
+- Verify tool spans contain `gen_ai.tool.call.arguments` (e.g., `{"resource":"pods","namespace":"all"}`)
+- Verify tool spans contain `gen_ai.tool.call.result` (e.g., kubectl table output)
+- Verify tool spans contain `gen_ai.tool.description`
 
-### M2: Update Weaver schema
+### M2: Update Weaver schema *(partial — needs rework)*
 
-**Goal**: Attribute registry reflects all tool span attributes including content attributes.
+**Goal**: Attribute registry reflects all tool and LLM span attributes.
 
-**Changes**:
-- Update tool span attribute group in `telemetry/registry/attributes.yaml` with refs to all `gen_ai.tool.*` attributes: `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`, `gen_ai.tool.description`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result`
-- Regenerate `telemetry/registry/resolved.json` with `npm run telemetry:resolve`
-- Validate with `npm run telemetry:check`
+**Done** (committed in `c055b01`):
+- [x] `registry.cluster_whisperer.tool` attribute group with refs to `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`
+- [x] `npm run telemetry:check` and `npm run telemetry:resolve` pass
 
-### M3: Verify in Datadog LLM Observability — CLI mode
+**Remaining**:
+- [ ] Add refs for `gen_ai.tool.description`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` to tool attribute group
+- [ ] Add `gen_ai.tool.definitions` ref (for LLM span attribute group or new group)
+- [ ] Regenerate `telemetry/registry/resolved.json`
+- [ ] Validate with `npm run telemetry:check`
 
-**Goal**: Tool spans are fully populated in Datadog's LLM Observability trace view when run from CLI — span visibility, metadata, input, and output.
+### M3: Add tool definitions to LLM spans
+
+**Goal**: LLM/chat spans include `gen_ai.tool.definitions` — a JSON array describing available tools.
+
+**Investigation needed**: The `chat.anthropic`/`anthropic.chat` spans are created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. Determine whether OpenLLMetry already sets `gen_ai.tool.definitions`, or if we need a custom SpanProcessor to inject it.
+
+**Changes** (depends on investigation):
+- Option A: OpenLLMetry already sets it — no code changes, just verify
+- Option B: Need a custom SpanProcessor that intercepts `chat.anthropic` spans and adds `gen_ai.tool.definitions` with the tool schema JSON
+
+**Validation**:
+- Run CLI with console exporter and check `chat.anthropic` span attributes for `gen_ai.tool.definitions`
+- Verify the JSON array contains all three tools (`kubectl_get`, `kubectl_describe`, `kubectl_logs`) with names, descriptions, and parameter schemas
+
+### M4: Verify in Datadog LLM Observability — CLI mode
+
+**Goal**: Tool spans and LLM spans are fully populated in Datadog's LLM Observability trace view when run from CLI.
 
 **Steps**:
 1. Build: `npm run build`
@@ -165,32 +184,29 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
    ```
 3. Open Datadog APM traces: search for `service:cluster-whisperer`
 4. Open the trace in LLM Observability view (the "LLM" badge view)
-5. Verify `kubectl_get.tool`, `kubectl_describe.tool` spans appear in the span list alongside `chat.anthropic`/`anthropic.chat` spans
+5. Verify tool and LLM spans
 
 **Success criteria**:
-- Tool spans visible in LLM Observability view with "Tool" badge
-- Metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
-- Input panel shows tool arguments (e.g., `{"resource":"pods","namespace":"all"}`)
-- Output panel shows tool result (e.g., kubectl table output)
+- Tool spans visible with "Tool" badge
+- Tool metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
+- Tool input panel shows arguments (e.g., `{"resource":"pods","namespace":"all"}`)
+- Tool output panel shows result (e.g., kubectl table output)
 - LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
 
-### M4: Verify in Datadog LLM Observability — MCP mode
+### M5: Verify in Datadog LLM Observability — MCP mode
 
-**Goal**: Tool spans are fully populated in Datadog's LLM Observability trace view when run via MCP (Claude Code) — same fidelity as CLI mode.
+**Goal**: Same fidelity as M4 when run via MCP (Claude Code).
 
 **Steps**:
 1. Ensure `.mcp.json` has tracing environment variables enabled (OTEL_TRACING_ENABLED, OTEL_EXPORTER_TYPE=otlp, OTEL_CAPTURE_AI_PAYLOADS=true, etc.)
 2. Restart Claude Code to pick up `.mcp.json` changes
 3. Call the investigate tool via Claude Code (use the cluster-whisperer MCP server)
 4. Open the resulting trace in Datadog LLM Observability view
-5. Verify tool spans appear in the span list with full content
+5. Verify tool spans appear with full content
 
-**Success criteria** (same as M3):
-- Tool spans visible in LLM Observability view with "Tool" badge
-- Metadata panel shows `tool_id`, `tool_type: "function"`, and `tool_description`
-- Input panel shows tool arguments
-- Output panel shows tool result
-- LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
+**Success criteria** (same as M4):
+- Tool spans visible with "Tool" badge, metadata, input, and output populated
+- LLM spans show tool definitions in metadata
 
 ---
 
@@ -207,7 +223,8 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 - Validated with console exporter: all 5 tool spans (kubectl_get x2, kubectl_describe x3) contain both `gen_ai.*` and `traceloop.*` attributes
 - Build passes cleanly
 
-### 2026-02-10: M2 complete — Weaver schema updated
+### 2026-02-10: M2 partially complete — Weaver schema updated (needs rework)
 - Added `registry.cluster_whisperer.tool` attribute group to `telemetry/registry/attributes.yaml` with refs to `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`
 - Regenerated `telemetry/registry/resolved.json` — all 4 OTel refs expanded correctly
 - `npm run telemetry:check` and `npm run telemetry:resolve` both pass
+- Still needs: refs for `gen_ai.tool.description`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result`, `gen_ai.tool.definitions`
