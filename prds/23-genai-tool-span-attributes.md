@@ -137,19 +137,16 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 - Verify tool spans contain `gen_ai.tool.call.result` (e.g., kubectl table output)
 - Verify tool spans contain `gen_ai.tool.description`
 
-### M2: Update Weaver schema *(partial — needs rework)*
+### M2: Update Weaver schema *(complete)*
 
 **Goal**: Attribute registry reflects all tool and LLM span attributes.
 
-**Done** (committed in `c055b01`):
 - [x] `registry.cluster_whisperer.tool` attribute group with refs to `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`
-- [x] `npm run telemetry:check` and `npm run telemetry:resolve` pass
-
-**Remaining**:
-- [ ] Add refs for `gen_ai.tool.description`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` to tool attribute group
-- [ ] Add `gen_ai.tool.definitions` ref (for LLM span attribute group or new group)
-- [ ] Regenerate `telemetry/registry/resolved.json`
-- [ ] Validate with `npm run telemetry:check`
+- [x] Add `gen_ai.tool.description` ref to tool attribute group (exists in OTel v1.37.0)
+- [x] Add `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` as custom `id:` definitions (not yet standalone attributes in OTel v1.37.0 registry)
+- [x] Add `gen_ai.tool.definitions` in new `registry.cluster_whisperer.llm` attribute group (custom `id:` definition)
+- [x] Regenerate `telemetry/registry/resolved.json`
+- [x] Validate with `npm run telemetry:check` and `npm run telemetry:resolve`
 
 ### M3: Add tool definitions to LLM spans
 
@@ -208,6 +205,13 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 ---
 
 ## Progress Log
+
+### 2026-02-10: M2 complete — Weaver schema fully updated with all tool + LLM span attributes
+- Added `gen_ai.tool.description` as OTel `ref:` (exists in v1.37.0 registry)
+- Added `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result` as custom `id:` definitions — these are in the OTel GenAI span spec but not yet as standalone registry attributes in v1.37.0
+- Created new `registry.cluster_whisperer.llm` attribute group with `gen_ai.tool.definitions` (custom `id:` definition for M3 LLM span work)
+- `npm run telemetry:check` and `npm run telemetry:resolve` both pass
+- Follows same pattern as `gen_ai.input.messages`/`gen_ai.output.messages` in root group — custom definitions for `gen_ai.*` attributes not yet in upstream registry
 
 ### 2026-02-10: M1 complete — all GenAI tool span attributes implemented and validated
 - Changed `withToolTracing()` signature from bare `string` to `ToolConfig` object (`{ name, description }`)
