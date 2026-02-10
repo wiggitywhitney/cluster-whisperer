@@ -47,10 +47,13 @@ import { withToolTracing } from "../../tracing/tool-tracing";
  * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlGetTool = tool(
-  withToolTracing("kubectl_get", async (input: KubectlGetInput) => {
-    const { output } = await kubectlGet(input);
-    return output;
-  }),
+  withToolTracing(
+    { name: "kubectl_get", description: kubectlGetDescription },
+    async (input: KubectlGetInput) => {
+      const { output } = await kubectlGet(input);
+      return output;
+    }
+  ),
   {
     name: "kubectl_get",
     description: kubectlGetDescription,
@@ -65,10 +68,13 @@ export const kubectlGetTool = tool(
  * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlDescribeTool = tool(
-  withToolTracing("kubectl_describe", async (input: KubectlDescribeInput) => {
-    const { output } = await kubectlDescribe(input);
-    return output;
-  }),
+  withToolTracing(
+    { name: "kubectl_describe", description: kubectlDescribeDescription },
+    async (input: KubectlDescribeInput) => {
+      const { output } = await kubectlDescribe(input);
+      return output;
+    }
+  ),
   {
     name: "kubectl_describe",
     description: kubectlDescribeDescription,
@@ -83,10 +89,13 @@ export const kubectlDescribeTool = tool(
  * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
  */
 export const kubectlLogsTool = tool(
-  withToolTracing("kubectl_logs", async (input: KubectlLogsInput) => {
-    const { output } = await kubectlLogs(input);
-    return output;
-  }),
+  withToolTracing(
+    { name: "kubectl_logs", description: kubectlLogsDescription },
+    async (input: KubectlLogsInput) => {
+      const { output } = await kubectlLogs(input);
+      return output;
+    }
+  ),
   {
     name: "kubectl_logs",
     description: kubectlLogsDescription,

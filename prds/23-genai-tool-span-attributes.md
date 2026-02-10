@@ -91,7 +91,7 @@ This tells the observer which tools the LLM had available during each reasoning 
 **Tool spans (gen_ai.tool.* on execute_tool spans):**
 1. **`src/tracing/tool-tracing.ts`** — Add all `gen_ai.*` attributes inside `withToolTracing()` after `withTool()` creates the span. Content attributes (`arguments`, `result`) gated behind `OTEL_CAPTURE_AI_PAYLOADS`. Accept `description` as a new parameter.
 2. **`src/tools/langchain/index.ts`** — Pass tool descriptions to `withToolTracing()` calls
-3. **`src/tools/mcp/index.ts`** — Pass tool descriptions to `withToolTracing()` calls
+   - Note: `src/tools/mcp/index.ts` does not use `withToolTracing()` — it wraps the LangGraph agent via `invokeInvestigator()`, not individual tools
 
 **LLM spans (gen_ai.tool.definitions on chat spans):**
 4. **Investigation needed** — The `chat.anthropic`/`anthropic.chat` spans are created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. We need to determine whether OpenLLMetry already sets `gen_ai.tool.definitions`, or if we need a custom SpanProcessor to inject it. Check the actual span attributes in Datadog/console output first.
@@ -120,19 +120,16 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 
 ## Milestones
 
-### M1: Add GenAI attributes to tool spans *(partial — needs rework)*
+### M1: Add GenAI attributes to tool spans *(complete)*
 
 **Goal**: Tool spans have both `gen_ai.*` and `traceloop.*` attributes, including tool input/output content.
 
-**Done** (committed in `15d671e`):
 - [x] `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id` set on active span
 - [x] Import `trace` from `@opentelemetry/api` and `randomUUID` from `crypto`
-
-**Remaining**:
-- [ ] Add `gen_ai.tool.description` — accept as new parameter to `withToolTracing()`, always set
-- [ ] Add `gen_ai.tool.call.arguments` — serialize tool input as JSON string, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
-- [ ] Add `gen_ai.tool.call.result` — serialize tool output as string, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
-- [ ] Update callers (`src/tools/langchain/index.ts`, `src/tools/mcp/index.ts`) to pass tool descriptions
+- [x] Add `gen_ai.tool.description` — `ToolConfig` requires `description`, always set on span
+- [x] Add `gen_ai.tool.call.arguments` — serializes tool input as JSON string, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
+- [x] Add `gen_ai.tool.call.result` — captures tool output after handler execution, content-gated behind `OTEL_CAPTURE_AI_PAYLOADS`
+- [x] Update callers (`src/tools/langchain/index.ts`) to pass tool descriptions via config object
 
 **Validation**:
 - Run CLI with console exporter: `OTEL_TRACING_ENABLED=true OTEL_CAPTURE_AI_PAYLOADS=true vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"`
@@ -211,6 +208,14 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 ---
 
 ## Progress Log
+
+### 2026-02-10: M1 complete — all GenAI tool span attributes implemented and validated
+- Changed `withToolTracing()` signature from bare `string` to `ToolConfig` object (`{ name, description }`)
+- Added `gen_ai.tool.description` (always set), `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result` (content-gated behind `isCaptureAiPayloads`)
+- Result attribute set after handler execution to capture actual output
+- Updated all 3 LangChain callers to pass descriptions via config object
+- Corrected PRD: `src/tools/mcp/index.ts` doesn't use `withToolTracing()` — only LangChain callers needed updating
+- Validated with console exporter: all 7 `gen_ai.*` attributes confirmed on tool spans (kubectl_get, kubectl_describe)
 
 ### 2026-02-10: Scope expanded — tool content attributes + tool definitions on LLM spans
 - **Decision**: Don't defer opt-in attributes. Implement `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result`, and `gen_ai.tool.description` on tool spans so Datadog LLM Observability shows full tool input/output content
