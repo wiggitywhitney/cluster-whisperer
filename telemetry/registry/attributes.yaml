@@ -22,6 +22,24 @@ groups:
         brief: The high-level operation type
         examples: ["investigate", "kubectl_get", "kubectl_describe", "kubectl_logs"]
 
+      - id: cluster_whisperer.invocation.mode
+        type:
+          members:
+            - id: cli
+              value: cli
+              brief: Invoked via CLI (node dist/index.js)
+              stability: development
+            - id: mcp
+              value: mcp
+              brief: Invoked via MCP server (e.g., from Claude Code)
+              stability: development
+        stability: development
+        brief: How the agent was invoked
+        note: >
+          No OTel semconv exists for invocation mode. The closest analogy is faas.trigger
+          (serverless trigger type) but that's scoped to FaaS. This custom attribute follows
+          OTel convention of namespacing vendor-specific attributes under the service name.
+
       - id: cluster_whisperer.user.question
         type: string
         stability: development
@@ -134,7 +152,10 @@ groups:
         type: string
         stability: development
         brief: The MCP tool name
-        note: MCP has no semconv yet; provides MCP-specific tool identification
+        note: >
+          OTel has MCP semantic conventions (development stability) as of 2025.
+          See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/
+          This custom attribute provides MCP-specific tool identification.
         examples: ["kubectl_get", "kubectl_describe", "kubectl_logs", "investigate"]
 
       # OTel GenAI semantic convention references

@@ -1,6 +1,6 @@
 # PRD #23: Add GenAI Semantic Conventions to Tool and LLM Spans
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-02-09
 **GitHub Issue**: [#23](https://github.com/wiggitywhitney/cluster-whisperer/issues/23)
 
@@ -190,7 +190,7 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 - [x] Tool output panel shows result (e.g., kubectl table output)
 - [x] LLM spans show available tool definitions in metadata (`gen_ai.tool.definitions`)
 
-### M5: Verify in Datadog LLM Observability — MCP mode
+### M5: Verify in Datadog LLM Observability — MCP mode *(complete)*
 
 **Goal**: Same fidelity as M4 when run via MCP (Claude Code).
 
@@ -202,12 +202,21 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 5. Verify tool spans appear with full content
 
 **Success criteria** (same as M4):
-- Tool spans visible with "Tool" badge, metadata, input, and output populated
-- LLM spans show tool definitions in metadata
+- [x] Tool spans visible with "Tool" badge, metadata, input, and output populated
+- [x] LLM spans show tool definitions in metadata
 
 ---
 
 ## Progress Log
+
+### 2026-02-10: M5 complete — MCP mode verified + invocation mode tracing added
+- Restarted Claude Code to pick up latest build with `gen_ai.*` attributes
+- Ran MCP investigate tool — all `gen_ai.*` attributes present on tool spans and LLM spans, matching CLI fidelity
+- Added `cluster_whisperer.invocation.mode` attribute (`cli`/`mcp`) to root spans for APM distinction
+- Renamed CLI root span: `cluster-whisperer.investigate` → `cluster-whisperer.cli.investigate`
+- Updated Weaver schema: added `cluster_whisperer.invocation.mode` as enum type, updated MCP semconv note
+- Investigated Datadog LLM Observability custom columns — custom attributes (including `gen_ai.request.*` extensions) do not populate in LLM Obs table; only standard `gen_ai.request.*` keys are mapped
+- Reverted over-engineered `ToolDefinitionsProcessor` invocation mode propagation — APM span names + tags are sufficient
 
 ### 2026-02-10: M4 complete — all attributes verified in Datadog LLM Observability (CLI mode)
 - Ran CLI with OTLP export to local Datadog Agent, full investigation question triggering all 3 tool types

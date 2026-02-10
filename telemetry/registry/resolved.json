@@ -43,7 +43,7 @@
             "investigate"
           ],
           "requirement_level": "recommended",
-          "note": "MCP has no semconv yet; provides MCP-specific tool identification",
+          "note": "OTel has MCP semantic conventions (development stability) as of 2025. See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/ This custom attribute provides MCP-specific tool identification.\n",
           "stability": "development"
         },
         {
@@ -264,6 +264,29 @@
       "type": "attribute_group",
       "brief": "Attributes for root investigation/tool spans",
       "attributes": [
+        {
+          "name": "cluster_whisperer.invocation.mode",
+          "type": {
+            "members": [
+              {
+                "id": "cli",
+                "value": "cli",
+                "brief": "Invoked via CLI (node dist/index.js)",
+                "stability": "development"
+              },
+              {
+                "id": "mcp",
+                "value": "mcp",
+                "brief": "Invoked via MCP server (e.g., from Claude Code)",
+                "stability": "development"
+              }
+            ]
+          },
+          "brief": "How the agent was invoked",
+          "requirement_level": "recommended",
+          "note": "No OTel semconv exists for invocation mode. The closest analogy is faas.trigger (serverless trigger type) but that's scoped to FaaS. This custom attribute follows OTel convention of namespacing vendor-specific attributes under the service name.\n",
+          "stability": "development"
+        },
         {
           "name": "cluster_whisperer.service.operation",
           "type": "string",
