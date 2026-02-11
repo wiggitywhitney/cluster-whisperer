@@ -29,21 +29,22 @@
  * - Async context propagation
  */
 
-import { withTool } from "./index";
+import { trace } from "@opentelemetry/api";
+import { randomUUID } from "crypto";
+import { withTool, isCaptureAiPayloads } from "./index";
 import { withStoredContext } from "./context-bridge";
 
 /**
- * Configuration for OpenLLMetry's withTool wrapper.
+ * Configuration for tool tracing.
  *
- * OpenLLMetry's DecoratorConfig interface accepts:
- * - name: The tool name (required)
- * - version: Optional version number
- * - associationProperties: Optional key-value pairs for correlation
- * - traceContent: Whether to capture input/output content
- * - inputParameters: Parameters to log (we avoid this for privacy)
+ * Extends beyond OpenLLMetry's DecoratorConfig to include OTel GenAI
+ * semantic convention fields. The name is used by both OpenLLMetry's
+ * withTool() and our gen_ai.tool.name attribute. The description maps
+ * to gen_ai.tool.description for Datadog's LLM Observability metadata panel.
  */
 interface ToolConfig {
   name: string;
+  description: string;
 }
 
 /**
@@ -53,21 +54,25 @@ interface ToolConfig {
  * auto-instrumented LLM spans. The wrapper:
  * - Creates a span for each tool invocation
  * - Automatically parents it under the active LLM span (if any)
+ * - Sets OTel GenAI semantic convention attributes for Datadog LLM Observability
  * - Propagates trace context to nested spans (like kubectl subprocess calls)
  *
- * @param toolName - The name of the tool (e.g., "kubectl_get")
+ * @param config - Tool configuration (name and description)
  * @param handler - The async function that executes the tool logic
  * @returns A wrapped handler that traces the execution
  *
  * @example
  * ```typescript
- * const tracedHandler = withToolTracing("kubectl_get", async (input) => {
- *   return executeKubectl(["get", input.resource]);
- * });
+ * const tracedHandler = withToolTracing(
+ *   { name: "kubectl_get", description: "List Kubernetes resources..." },
+ *   async (input) => {
+ *     return executeKubectl(["get", input.resource]);
+ *   }
+ * );
  * ```
  */
 export function withToolTracing<TInput, TResult>(
-  toolName: string,
+  config: ToolConfig,
   handler: (input: TInput) => Promise<TResult>
 ): (input: TInput) => Promise<TResult> {
   return async (input: TInput): Promise<TResult> => {
@@ -76,8 +81,42 @@ export function withToolTracing<TInput, TResult>(
     return withStoredContext(() => {
       // Use OpenLLMetry's withTool wrapper inside the restored context
       // This creates a properly-parented span and handles context propagation
-      return withTool({ name: toolName }, async () => {
-        return handler(input);
+      return withTool({ name: config.name }, async () => {
+        // Add OTel GenAI semantic convention attributes to the span that
+        // withTool() just created. This makes tool spans visible in Datadog's
+        // LLM Observability view, which requires gen_ai.* attributes.
+        // We keep both namespaces: traceloop.* (set by withTool) for OpenLLMetry
+        // ecosystem compatibility + gen_ai.* for OTel GenAI spec compliance.
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan) {
+          activeSpan.setAttribute("gen_ai.operation.name", "execute_tool");
+          activeSpan.setAttribute("gen_ai.tool.name", config.name);
+          activeSpan.setAttribute("gen_ai.tool.type", "function");
+          activeSpan.setAttribute("gen_ai.tool.call.id", randomUUID());
+          activeSpan.setAttribute("gen_ai.tool.description", config.description);
+
+          // Opt-in content attributes: tool input as JSON string
+          // Gated behind OTEL_CAPTURE_AI_PAYLOADS to prevent accidental data exposure
+          if (isCaptureAiPayloads) {
+            activeSpan.setAttribute(
+              "gen_ai.tool.call.arguments",
+              JSON.stringify(input)
+            );
+          }
+        }
+
+        const result = await handler(input);
+
+        // Opt-in content attribute: tool output as string
+        // Set after execution so we capture the actual result
+        if (activeSpan && isCaptureAiPayloads) {
+          activeSpan.setAttribute(
+            "gen_ai.tool.call.result",
+            typeof result === "string" ? result : JSON.stringify(result)
+          );
+        }
+
+        return result;
       });
     });
   };

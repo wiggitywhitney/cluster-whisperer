@@ -169,6 +169,7 @@ export async function withAgentTracing<T>(
   // Build attributes conditionally - only include content if trace content is enabled
   const attributes: Record<string, string> = {
     "cluster_whisperer.service.operation": "investigate",
+    "cluster_whisperer.invocation.mode": "cli",
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": "investigate",
     // GenAI semantic conventions v1.37+ — required for Datadog LLM Observability
@@ -190,7 +191,7 @@ export async function withAgentTracing<T>(
   }
 
   return tracer.startActiveSpan(
-    "cluster-whisperer.investigate",
+    "cluster-whisperer.cli.investigate",
     {
       kind: SpanKind.INTERNAL,
       attributes,
@@ -272,6 +273,7 @@ export async function withMcpRequestTracing(
   const attributes: Record<string, string> = {
     // OpenLLMetry conventions (for Traceloop ecosystem compatibility)
     "cluster_whisperer.service.operation": toolName,
+    "cluster_whisperer.invocation.mode": "mcp",
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": toolName,
     // MCP-specific identification (namespaced to avoid conflicts)
