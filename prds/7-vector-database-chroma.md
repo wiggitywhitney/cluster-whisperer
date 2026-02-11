@@ -35,13 +35,13 @@ Research is complete. Full findings documented in `docs/vector-db-research.md`. 
 **Client-server with a local Chroma process.** The TypeScript SDK always requires a running Chroma server (no in-process mode like Python). Run `chroma run --path ./data` locally or use Docker. Simple enough for a demo, mirrors production patterns.
 
 ### Chroma SDK Approach
-**Native Chroma TypeScript SDK** (not the LangChain wrapper). The LangChain.js + Chroma integration has reported bugs with newer Chroma versions. Direct SDK gives full control and is pedagogically clearer.
+**Native Chroma TypeScript SDK** (not the LangChain wrapper). The LangChain.js + Chroma integration has active bugs as of early 2026 (Chroma 1.x broke the wrapper, empty `where: {}` errors, forced default-embed dependency). Direct SDK gives full control and is pedagogically clearer. Re-evaluate at implementation time — the bugs may be fixed by then.
 
 ### Collection Structure
-**Single collection: `k8s-resources`** with cosine distance. Cosine is standard for text embeddings and ignores vector magnitude. The distance metric cannot be changed after collection creation. Use metadata filters to narrow queries by kind, apiGroup, scope, etc.
+**Two collections** with cosine distance: one for capability descriptions (type-level semantic data), one for resource instances (runtime metadata). Cosine is standard for text embeddings and ignores vector magnitude. The distance metric cannot be changed after collection creation. Use metadata filters to narrow queries within each collection.
 
 ### Embedding Model
-**OpenAI `text-embedding-3-small`** as the default. Best quality-to-cost ratio ($0.02/1M tokens), well-tested with Chroma, and we already manage API keys via vals. The embedding model choice lives behind the interface so it can be swapped independently of the vector DB.
+**Voyage AI `voyage-4`**. $0.06/1M tokens with 200M tokens free — effectively free at our data volumes. Voyage is Anthropic's official embedding partner. The embedding model choice lives behind the interface so it can be swapped independently of the vector DB.
 
 ### Distance Metric
 **Cosine.** Standard for text embeddings. Must be set at collection creation time and cannot be changed later.
@@ -75,12 +75,12 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
 
 - [ ] **M2**: Chroma Setup and Vector DB Interface
   - Install Chroma packages (`chromadb`)
-  - Install embedding packages (OpenAI `text-embedding-3-small`)
+  - Install embedding packages (Voyage AI `voyage-4`)
   - Define vector DB interface (store, search, delete, initialize collection)
   - Implement Chroma backend behind the interface
   - Configure Chroma connection (localhost:8000 for dev)
   - Configure embedding model behind the interface
-  - Create collection with cosine distance metric
+  - Create two collections with cosine distance metric (capabilities + resource instances)
   - Manual test: can store and retrieve test documents through the interface
   - Create `docs/vector-database.md` explaining vector DB concepts
 
@@ -114,21 +114,37 @@ interface VectorStore {
 
 The Chroma backend implements this interface. A future Qdrant backend would implement the same interface. PRDs #25 and #26 write to this interface, not to Chroma directly.
 
-### Document Schema
+### Document Schemas
 
-Each document in the collection:
+**Capabilities collection** (populated by PRD #25):
 
 ```typescript
 {
-  id: "apps/v1/Deployment",              // API group/version/kind
-  document: "Deployment (apps/v1) - ...", // Natural language description for embedding
+  id: "devopstoolkit.live/v1beta1/SQL",   // group/version/kind
+  document: "SQL (devopstoolkit.live/v1beta1) — A managed database solution...",
   metadata: {
+    kind: "SQL",
+    apiVersion: "devopstoolkit.live/v1beta1",
+    apiGroup: "devopstoolkit.live",
+    scope: "Namespaced",
+    isCRD: true,
+    complexity: "low",
+  }
+}
+```
+
+**Resource instances collection** (populated by PRD #26):
+
+```typescript
+{
+  id: "default/apps/v1/Deployment/nginx", // namespace/group/version/kind/name
+  document: "Deployment nginx | namespace: default | apiVersion: apps/v1 | labels: app=nginx",
+  metadata: {
+    namespace: "default",
+    name: "nginx",
     kind: "Deployment",
     apiVersion: "apps/v1",
     apiGroup: "apps",
-    scope: "Namespaced",                  // or "Cluster"
-    isCRD: false,
-    source: "capability-inference",       // or "resource-sync" — which pipeline wrote this
   }
 }
 ```
@@ -147,7 +163,7 @@ Two complementary tools for the agent:
 
 ## Dependencies
 
-- Embedding model access (OpenAI API key, managed via vals)
+- Embedding model access (Voyage AI API key, managed via vals)
 - Chroma server running locally (dev) or in-cluster (demo)
 
 ## Out of Scope
