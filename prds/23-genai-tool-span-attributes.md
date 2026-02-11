@@ -13,7 +13,7 @@ Tool call spans (`kubectl_get.tool`, `kubectl_describe.tool`, `kubectl_logs.tool
 Our tool spans currently only have OpenLLMetry's `traceloop.*` attributes (set by `withTool()`), not the `gen_ai.*` attributes that Datadog expects for tool execution spans. This regressed when PRD-11 M3 replaced manual `gen_ai.*` attribute setting with OpenLLMetry's `withTool()` wrapper, which hasn't adopted the OTel GenAI semantic conventions for tool spans yet.
 
 **Before PRD-11 M3** (visible in LLM Observability):
-```
+```text
 Tool span attributes:
   gen_ai.operation.name: "execute_tool"
   gen_ai.tool.name: "kubectl_get"
@@ -22,7 +22,7 @@ Tool span attributes:
 ```
 
 **After PRD-11 M3** (invisible in LLM Observability):
-```
+```text
 Tool span attributes:
   traceloop.span.kind: "tool"
   traceloop.entity.name: "kubectl_get"
@@ -46,7 +46,7 @@ Add OTel GenAI semantic convention attributes to the existing tool spans created
 The approach: after `withTool()` creates the span, retrieve it from the active context and set the `gen_ai.*` attributes on it. This gives us both sets of attributes (OpenLLMetry's `traceloop.*` for ecosystem compatibility + OTel's `gen_ai.*` for Datadog LLM Observability).
 
 **Target span attributes (both namespaces):**
-```
+```text
 # OTel GenAI semantic conventions (NEW — for Datadog LLM Observability)
 gen_ai.operation.name: "execute_tool"
 gen_ai.tool.name: "kubectl_get"
@@ -79,7 +79,7 @@ Note: Datadog's LLM Observability view only reads `gen_ai.*` attributes. The `tr
 
 In addition to tool span attributes, LLM/chat spans should include `gen_ai.tool.definitions` — a JSON array describing the available tools. Datadog maps this to `meta.tool_definitions` in the LLM Observability view.
 
-```
+```text
 # On chat.anthropic / anthropic.chat spans:
 gen_ai.tool.definitions: '[{"name":"kubectl_get","description":"...","parameters":{...}}, ...]'
 ```
@@ -208,6 +208,12 @@ We will implement all attributes — Required, Recommended, and Opt-In. The opt-
 ---
 
 ## Progress Log
+
+### 2026-02-11: Decision — keep randomUUID() for gen_ai.tool.call.id
+- **Decision**: Do not thread Anthropic's `tool_use` ID through to `gen_ai.tool.call.id`. Keep `randomUUID()`.
+- **Rationale**: The OTel spec intends `gen_ai.tool.call.id` to match the LLM's `tool_use` block ID for cross-span correlation. However, our ReAct agent calls one tool at a time per loop iteration — parent-child span relationships already provide unambiguous correlation without matching IDs. The plumbing cost is nontrivial: LangGraph's `ToolMessage` carries `tool_call_id`, but threading it to `withToolTracing()` requires changing `ToolConfig`, updating LangChain tool handler extraction, and working out how LangGraph exposes it at handler execution time.
+- **Revisit when**: Parallel tool calling is added (LLM invokes multiple tools in one turn), where matching IDs would disambiguate which request maps to which execution span.
+- **Source**: CodeRabbit review on PR #24 flagged this as minor, acknowledged acceptable for POC.
 
 ### 2026-02-10: M5 complete — MCP mode verified + invocation mode tracing added
 - Restarted Claude Code to pick up latest build with `gen_ai.*` attributes

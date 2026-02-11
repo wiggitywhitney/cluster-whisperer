@@ -51,6 +51,7 @@ function getToolDefinitionsJson(): string {
     const { zodToJsonSchema } = require("zod-to-json-schema");
     const core = require("../tools/core");
 
+    // Keep in sync with tool definitions in src/tools/core/
     const tools = [
       {
         name: "kubectl_get",
@@ -103,7 +104,12 @@ export class ToolDefinitionsProcessor implements SpanProcessor {
     const spanName = (span as unknown as ReadableSpan).name;
 
     if (spanName === "anthropic.chat") {
-      span.setAttribute("gen_ai.tool.definitions", getToolDefinitionsJson());
+      try {
+        span.setAttribute("gen_ai.tool.definitions", getToolDefinitionsJson());
+      } catch (error) {
+        // Don't let definition-building errors disrupt the tracing pipeline
+        console.warn("[OTel] Failed to set tool definitions on span:", error);
+      }
     }
   }
 
