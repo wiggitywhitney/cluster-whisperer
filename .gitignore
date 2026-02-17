@@ -6,6 +6,9 @@ dist/
 .env
 .env.local
 
+# Chroma local storage
+data/
+
 # OS
 .DS_Store
 

@@ -1,6 +1,6 @@
 # PRD #7: Vector Database Integration (Chroma)
 
-**Status**: In Progress (M1 Complete)
+**Status**: In Progress (M2 Complete)
 **Created**: 2026-01-24
 **GitHub Issue**: [#7](https://github.com/wiggitywhitney/cluster-whisperer/issues/7)
 
@@ -56,12 +56,12 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
 
 ## Success Criteria
 
-- [ ] Chroma running and accessible from the agent
-- [ ] Vector DB interface defined that other PRDs can write to
-- [ ] Chroma backend implements the interface
+- [x] Chroma running and accessible from the agent
+- [x] Vector DB interface defined that other PRDs can write to
+- [x] Chroma backend implements the interface
 - [ ] Agent has a semantic search tool that queries the vector DB
 - [ ] Agent has a filter-based query tool for structured lookups
-- [ ] Documentation explains vector DB concepts and our implementation
+- [x] Documentation explains vector DB concepts and our implementation
 
 ## Milestones
 
@@ -73,7 +73,7 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
   - Decide on PRD split (controller as separate PRDs)
   - **Completed**: Research documented, decisions made, PRD split into #7, #25, #26
 
-- [ ] **M2**: Chroma Setup and Vector DB Interface
+- [x] **M2**: Chroma Setup and Vector DB Interface
   - Install Chroma packages (`chromadb`)
   - Install embedding packages (Voyage AI `voyage-4`)
   - Define vector DB interface (store, search, delete, initialize collection)
@@ -83,6 +83,7 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
   - Create two collections with cosine distance metric (capabilities + resource instances)
   - Manual test: can store and retrieve test documents through the interface
   - Create `docs/vector-database.md` explaining vector DB concepts
+  - **Completed**: Interface defined in `src/vectorstore/types.ts`, Chroma backend in `src/vectorstore/chroma-backend.ts`, Voyage AI embeddings in `src/vectorstore/embeddings.ts`. End-to-end test passed: stored 3 docs, semantic search ranked correctly (SQL #1 for "database", Ingress #1 for "network traffic").
 
 - [ ] **M3**: Search Tools for the Agent
   - Create semantic search tool (natural language query → vector similarity search)
@@ -155,11 +156,17 @@ Two complementary tools for the agent:
 1. **Semantic search** — "find resources related to databases" → vector similarity
 2. **Filter query** — "find all CRDs in the crossplane.io group" → metadata filtering
 
-### Decisions Deferred to Implementation
+### Decisions Resolved During M2
 
-- Exact interface shape (will be refined when implementing M2)
-- How the Chroma server is started for development (manual `chroma run` vs Docker vs script)
+- **Interface shape**: Finalized as shown above. `VectorDocument` has `id`, `text`, and `metadata` fields. `SearchResult` extends this with a `score` (cosine distance). `EmbeddingFunction` is a separate interface with a single `embed(texts)` method, injected into the backend at construction.
+- **Chroma server startup**: Manual `chroma run --path ./data` or Docker. Documented in `docs/vector-database.md`.
+- **Pre-computed embeddings**: ChromaBackend embeds text via our `EmbeddingFunction` and passes raw vectors to Chroma (not using Chroma's embedding function interface). This keeps the abstraction clean — a Qdrant backend would do the same.
+- **Upsert behavior**: `store()` uses Chroma's `upsert` (not `add`) so re-running sync pipelines updates existing documents instead of failing on duplicates.
+
+### Decisions Deferred to M3
+
 - Whether to add keyword search alongside vector search (Chroma has built-in full-text search)
+- How search results are formatted for LLM consumption
 
 ## Dependencies
 
@@ -182,8 +189,12 @@ Two complementary tools for the agent:
 
 **2026-02-11**: Decided to build our own lightweight pipeline (Option C from assessment) rather than using Viktor's stack directly. Viktor's stack targets Qdrant; we need Chroma first. We'll install Viktor's stack later for the Qdrant path of the KubeCon demo.
 
+**2026-02-17**: M2 implementation decisions: (1) Pre-computed embeddings — ChromaBackend calls our EmbeddingFunction and passes raw vectors to Chroma rather than implementing Chroma's EmbeddingFunction interface. Cleaner abstraction, backend-agnostic. (2) Upsert over add — store() uses Chroma upsert so sync pipelines can re-run idempotently. (3) `qs` npm override — voyageai SDK depends on vulnerable qs@6.11.2; overridden to 6.14.1 in package.json. (4) Chroma SDK v3 uses host/port/ssl constructor args (not deprecated `path` arg).
+
 ---
 
 ## Progress Log
 
 **2026-02-11**: M1 complete. Research documented in `docs/vector-db-research.md`. Viktor's architecture analyzed in `docs/viktors-pipeline-assessment.md`. PRD split decided: #7 (this PRD), #25 (capability inference), #26 (resource sync). Open decisions from research doc addressed; remaining decisions deferred to implementation.
+
+**2026-02-17**: M2 complete. Installed `chromadb@3.3.0` and `voyageai@0.1.0`. Implemented vector store module in `src/vectorstore/`: `types.ts` (VectorStore + EmbeddingFunction interfaces), `embeddings.ts` (VoyageEmbedding using voyage-4), `chroma-backend.ts` (ChromaBackend with pre-computed embeddings, upsert, cosine distance), `index.ts` (exports + collection constants). Added `VOYAGE_API_KEY` to `.vals.yaml`. Created `docs/vector-database.md`. End-to-end test passed: semantic search correctly ranked SQL #1 for "database" queries and Ingress #1 for "network traffic" queries.
