@@ -10,3 +10,11 @@ This session is a live demo of exactly that: an AI agent that a coding assistant
 LangGraph handles the Kubernetes cluster investigation tools. Then the vector database makes the cluster's capabilities searchable by natural language query. Finally, the traces help platform engineers understand how developers are using the agent: every LLM call, every tool execution, every reasoning step visible in an observability backend.
 
 This talk will show you why custom AI agents are wildly useful as a platform interface, and how to start building one at your organization.
+
+
+
+Benefit to the Ecosystem:
+
+Platform engineering and AI are converging quickly, but the community's guidance has not caught up. The CNCF Platforms White Paper and Platform Engineering Maturity Model do not yet address AI agents as platform interfaces. This talk fills that gap by showing one concrete, buildable path for integrating AI into an existing Internal Developer Platform. It will give the audience a broader sense of how emerging AI tooling (models, agents, vector databases, observability, and MCP servers) can complement platform-building technologies and influence system design.
+
+This demo touches on many projects in the CNCF landscape, including Kubernetes, Crossplane, OpenTelemetry, and Jaeger.
