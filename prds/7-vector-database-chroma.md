@@ -1,6 +1,6 @@
 # PRD #7: Vector Database Integration (Chroma)
 
-**Status**: In Progress (M3 Complete — M4 Blocked on PRD #25)
+**Status**: In Progress (M1–M3 Complete — M4 redistributed to PRD #25/26)
 **Created**: 2026-01-24
 **GitHub Issue**: [#7](https://github.com/wiggitywhitney/cluster-whisperer/issues/7)
 
@@ -102,11 +102,11 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
   - [x] Manual test: agent uses `vector_search` with keyword and metadata filter (no embedding call)
   - **Completed**: Unified `vector_search` tool in `src/tools/core/vector-search.ts` with all three composable dimensions. `keywordSearch()` added to VectorStore interface and ChromaBackend using Chroma `collection.get()` with `$contains`. Smart dispatch: has `query` → `search()` with embeddings, only `keyword`/filters → `keywordSearch()` with no embedding call. Deleted separate `vector-filter.ts`. All 7 dimension combinations tested through agent. Graceful degradation verified (Chroma down → kubectl fallback).
 
-- [ ] **M4**: Integration and Polish
-  - End-to-end test with data loaded by PRD #25 (capability inference)
-  - Tune retrieval parameters (top-k, similarity threshold)
-  - Test the "semantic bridge" pattern: semantic search finds types → filter query finds instances
-  - Update documentation with usage patterns
+- [~] **M4**: ~~Integration and Polish~~ — Redistributed to downstream PRDs
+  - ~~End-to-end test with data loaded by PRD #25~~ → moved to PRD #25 M5
+  - ~~Tune retrieval parameters (top-k, similarity threshold)~~ → moved to PRD #25 M3
+  - ~~Test the "semantic bridge" pattern~~ → already in PRD #26 M4
+  - ~~Update documentation with usage patterns~~ → moved to PRD #25 M5
 
 ## Technical Approach
 
@@ -228,3 +228,5 @@ At least one dimension required. All three compose freely in a single call. The 
 **2026-02-18**: M3 initial implementation and redesign. First built two separate tools (vector_search + vector_filter) following the 3-layer pattern (core → LangChain wrapper → agent). Tested successfully with seeded data — agent correctly chose vector_search for conceptual queries, got SQL ranked #1 for "database". Then redesigned: merged into a single unified `vector_search` tool with semantic query + keyword search + metadata filters as composable dimensions. Added keyword search (Chroma `where_document`, no embedding call). Suppressed Chroma SDK warnings. Created `scripts/seed-test-data.ts`. Previous test results invalidated by redesign — retesting required.
 
 **2026-02-18**: M3 complete. Implemented unified `vector_search` tool with all three composable dimensions per PRD spec. Added `keywordSearch()` to VectorStore interface (optional keyword for filter-only path) and ChromaBackend (uses `collection.get()` with `$contains`). Deleted separate `vector-filter.ts`. Smart dispatch: has `query` → `collection.query()` with embeddings, only `keyword`/filters → `collection.get()` (free). Comprehensive agent testing: all 7 dimension combinations verified (semantic, keyword, filter, query+keyword, query+filter, keyword+filter, all three). Graceful degradation confirmed — Chroma down → agent seamlessly falls back to kubectl tools.
+
+**2026-02-18**: M4 redistributed to downstream PRDs. All M4 tasks were integration work blocked on PRD #25 data. Moved: "Tune retrieval parameters" → PRD #25 M3, "End-to-end test with PRD #25 data" and "Update documentation with usage patterns" → PRD #25 M5, "Test semantic bridge pattern" → already in PRD #26 M4. PRD #7 scope is complete with M1–M3 delivering the vector DB interface, Chroma backend, and unified search tool.
