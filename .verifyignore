@@ -1,3 +1,0 @@
-# Intentional console.log usage (CLI output, not debug logging)
-src/index.ts
-src/tracing/index.ts
