@@ -47,11 +47,16 @@ export function formatSearchResults(
   const header = `Found ${results.length} result${results.length === 1 ? "" : "s"} in "${collection}" collection:\n`;
 
   const formatted = results.map((result, index) => {
-    const similarity = describeSimilarity(result.score);
+    // Score of -1 means keyword/filter match (no vector comparison).
+    // Show "keyword match" instead of a meaningless distance number.
+    const scoreLabel =
+      result.score < 0
+        ? "keyword match"
+        : `distance: ${result.score.toFixed(2)} — ${describeSimilarity(result.score)}`;
     const metadataLine = formatMetadata(result.metadata);
 
     const lines = [
-      `${index + 1}. ${result.id} (distance: ${result.score.toFixed(2)} — ${similarity})`,
+      `${index + 1}. ${result.id} (${scoreLabel})`,
       `   ${result.text}`,
     ];
 

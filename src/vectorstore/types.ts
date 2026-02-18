@@ -126,6 +126,18 @@ export interface SearchOptions {
    * them as nested objects per the Chroma docs.
    */
   where?: Record<string, unknown>;
+  /**
+   * Document content filter for substring matching.
+   *
+   * Example: { "$contains": "backup" } only returns documents whose text
+   * contains the word "backup". This filters on the stored document text,
+   * not on metadata.
+   *
+   * Used by the keyword search dimension — no embedding API call needed.
+   * Can be combined with semantic search (query + whereDocument) for
+   * ranked results within substring-matched documents.
+   */
+  whereDocument?: Record<string, unknown>;
 }
 
 /**
@@ -182,6 +194,31 @@ export interface VectorStore {
   search(
     collection: string,
     query: string,
+    options?: SearchOptions
+  ): Promise<SearchResult[]>;
+
+  /**
+   * Searches a collection by keyword substring matching without embeddings.
+   *
+   * Uses the vector database's document content filter (Chroma's where_document
+   * with $contains) to find documents containing the keyword. No embedding API
+   * call is made — this is fast and free.
+   *
+   * If keyword is omitted, returns documents matching only metadata filters
+   * from the options.where parameter. This supports the "filters only" path
+   * where the agent specifies kind/apiGroup/namespace without a query or keyword.
+   *
+   * Results have no similarity score (score is -1) since there's no vector
+   * comparison. Use search() instead when you need semantic ranking.
+   *
+   * @param collection - Which collection to search
+   * @param keyword - Optional substring to match against document text
+   * @param options - Optional: limit results, filter by metadata
+   * @returns Matching documents (unranked, score = -1)
+   */
+  keywordSearch(
+    collection: string,
+    keyword?: string,
     options?: SearchOptions
   ): Promise<SearchResult[]>;
 

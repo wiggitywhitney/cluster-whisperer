@@ -23,7 +23,12 @@
  * This keeps our EmbeddingFunction interface clean and backend-agnostic.
  */
 
-import { ChromaClient, type Collection, type Where } from "chromadb";
+import {
+  ChromaClient,
+  type Collection,
+  type Where,
+  type WhereDocument,
+} from "chromadb";
 import type {
   VectorStore,
   VectorDocument,
@@ -190,6 +195,12 @@ export class ChromaBackend implements VectorStore {
       // Cast to Chroma's Where type — our SearchOptions.where accepts the
       // same shape (key-value pairs for exact match, or $and/$or operators)
       ...(options?.where ? { where: options.where as Where } : {}),
+      // whereDocument filters on document text content (e.g., { "$contains": "backup" }).
+      // When combined with queryEmbeddings, Chroma applies the substring filter first,
+      // then ranks the filtered results by vector similarity.
+      ...(options?.whereDocument
+        ? { whereDocument: options.whereDocument as WhereDocument }
+        : {}),
     });
 
     // Convert Chroma's column-oriented format to SearchResult objects.
@@ -207,6 +218,53 @@ export class ChromaBackend implements VectorStore {
       text: documents[i] ?? "",
       metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
       score: distances[i] ?? 0,
+    }));
+  }
+
+  /**
+   * Searches a collection by keyword substring matching — no embedding API call.
+   *
+   * Uses Chroma's collection.get() with whereDocument for substring matching.
+   * This is the "free" search path — no Voyage AI call, no vector comparison.
+   * Results are unranked (no similarity score) since there's no vector query.
+   *
+   * When to use this vs search():
+   * - keywordSearch("backup") → finds docs containing "backup" (exact substring)
+   * - search("data protection") → finds docs about backup concepts (semantic)
+   *
+   * The unified vector_search tool decides which method to call based on
+   * which parameters the LLM provides.
+   */
+  async keywordSearch(
+    collection: string,
+    keyword?: string,
+    options?: SearchOptions
+  ): Promise<SearchResult[]> {
+    const chromaCollection = this.getCollection(collection);
+
+    const results = await chromaCollection.get({
+      include: ["documents", "metadatas"],
+      limit: options?.nResults ?? 10,
+      // Only add whereDocument if a keyword is provided.
+      // Without a keyword, this becomes a pure metadata filter query.
+      ...(keyword
+        ? { whereDocument: { $contains: keyword } as WhereDocument }
+        : {}),
+      ...(options?.where ? { where: options.where as Where } : {}),
+    });
+
+    // Convert Chroma's get() response to SearchResult objects.
+    // get() returns flat arrays (not nested like query()) since there's
+    // no multi-query support. Score is -1 to indicate "no distance score."
+    const ids = results.ids ?? [];
+    const documents = results.documents ?? [];
+    const metadatas = results.metadatas ?? [];
+
+    return ids.map((id, i) => ({
+      id,
+      text: documents[i] ?? "",
+      metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
+      score: -1,
     }));
   }
 

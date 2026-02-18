@@ -18,10 +18,10 @@
  * Each tool is wrapped with withToolTracing() to create parent spans for
  * observability. This creates the hierarchy: execute_tool kubectl_get → kubectl get pods
  *
- * Vector tools lifecycle:
- * Unlike kubectl tools (stateless, each spawns a subprocess), vector tools
- * need a shared VectorStore instance. The createVectorTools() factory creates
- * tools that close over the VectorStore and lazily initialize collections
+ * Vector tool lifecycle:
+ * Unlike kubectl tools (stateless, each spawns a subprocess), the vector tool
+ * needs a shared VectorStore instance. The createVectorTools() factory creates
+ * a tool that closes over the VectorStore and lazily initializes collections
  * on first use. This means Chroma doesn't need to be running until the agent
  * actually needs vector search.
  */
@@ -40,14 +40,10 @@ import {
   vectorSearch,
   vectorSearchSchema,
   vectorSearchDescription,
-  vectorFilter,
-  vectorFilterSchema,
-  vectorFilterDescription,
   type KubectlGetInput,
   type KubectlDescribeInput,
   type KubectlLogsInput,
   type VectorSearchInput,
-  type VectorFilterInput,
 } from "../core";
 import { withToolTracing } from "../../tracing/tool-tracing";
 import type { VectorStore } from "../../vectorstore";
@@ -130,12 +126,12 @@ export const kubectlLogsTool = tool(
 export const kubectlTools = [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool];
 
 /**
- * Creates vector search tools bound to a VectorStore instance.
+ * Creates the unified vector search tool bound to a VectorStore instance.
  *
  * Why a factory function?
- * Vector tools need a shared, initialized VectorStore — unlike kubectl tools
- * which are stateless. This factory creates tools that close over the store
- * and lazily initialize collections on first use.
+ * The vector tool needs a shared, initialized VectorStore — unlike kubectl tools
+ * which are stateless. This factory creates a tool that closes over the store
+ * and lazily initializes collections on first use.
  *
  * Lazy initialization means:
  * - Chroma doesn't need to be running at agent startup
@@ -144,7 +140,7 @@ export const kubectlTools = [kubectlGetTool, kubectlDescribeTool, kubectlLogsToo
  *   instead of crashing the agent
  *
  * @param vectorStore - A VectorStore instance (e.g., new ChromaBackend(embedder))
- * @returns Array of LangChain tools for vector search and filter queries
+ * @returns Array containing the single unified vector_search tool
  */
 export function createVectorTools(vectorStore: VectorStore) {
   let initialized = false;
@@ -216,19 +212,5 @@ export function createVectorTools(vectorStore: VectorStore) {
     }
   );
 
-  const vectorFilterTool = tool(
-    withToolTracing(
-      { name: "vector_filter", description: vectorFilterDescription },
-      withGracefulDegradation(async (input: VectorFilterInput) => {
-        return vectorFilter(vectorStore, input);
-      })
-    ),
-    {
-      name: "vector_filter",
-      description: vectorFilterDescription,
-      schema: vectorFilterSchema,
-    }
-  );
-
-  return [vectorSearchTool, vectorFilterTool];
+  return [vectorSearchTool];
 }
