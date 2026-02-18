@@ -12,6 +12,8 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "mcp": "node dist/mcp-server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "telemetry:check": "weaver registry check -r telemetry/registry",
     "telemetry:resolve": "weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json"
   },
@@ -42,7 +44,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
   },
   "overrides": {
     "zod": "3.25.67",

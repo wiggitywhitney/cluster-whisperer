@@ -1,6 +1,6 @@
 # PRD #25: Capability Inference Pipeline
 
-**Status**: Not Started
+**Status**: In Progress
 **Created**: 2026-02-11
 **GitHub Issue**: [#25](https://github.com/wiggitywhitney/cluster-whisperer/issues/25)
 
@@ -49,7 +49,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
 
 ## Milestones
 
-- [ ] **M1**: CRD Discovery
+- [x] **M1**: CRD Discovery
   - Discover all CRDs and API resources in the cluster
   - Extract schema information for each (via `kubectl explain --recursive` or K8s API)
   - Filter out low-value resources (Events, Leases, EndpointSlices, subresources)
@@ -138,8 +138,8 @@ The prompt template should:
 ### Decisions Deferred to Implementation
 
 - Exact prompt template wording (will iterate during M2)
-- Whether to use `kubectl explain` via subprocess or the Kubernetes API directly
-- Whether to run inference sequentially or in parallel (sequential is simpler, parallel is faster)
+- ~~Whether to use `kubectl explain` via subprocess or the Kubernetes API directly~~ → Decided: subprocess (see Design Decisions)
+- ~~Whether to run inference sequentially or in parallel (sequential is simpler, parallel is faster)~~ → Decided: sequential (see Design Decisions)
 - How to handle resources where `kubectl explain` returns minimal information
 - Whether the runner is a standalone CLI, an npm script, or integrated into the MCP server startup
 
@@ -160,10 +160,23 @@ The prompt template should:
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-02-18 | kubectl explain via subprocess (not K8s API) | Reuses existing `executeKubectl` helper with OTel tracing and shell injection safety. Consistent with project architecture. |
+| 2026-02-18 | Sequential schema extraction (not parallel) | Simpler implementation. Real-world performance is ~3 seconds total for a cluster — no need for concurrency complexity. |
+| 2026-02-18 | Dependency injection for testability | `DiscoveryOptions.kubectl` parameter allows mocking at the system boundary. Enables fast, offline unit tests alongside integration tests. |
+| 2026-02-18 | Name-based resource filtering | Conservative exclusion list (events, leases, endpointslices, endpoints, componentstatuses). Also excludes subresources (name contains `/`) and resources without `get` verb. |
+| 2026-02-18 | vitest as test framework | Fast, TypeScript-native, zero-config. Added `test` and `test:watch` scripts to package.json. |
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-02-18: M1 Complete — CRD Discovery
+- Created `src/pipeline/` directory with types, discovery logic, and barrel exports
+- `parseApiResources()` parses `kubectl api-resources -o wide` fixed-width table output
+- `filterResources()` removes subresources, high-churn system resources, and resources without `get` verb
+- `discoverResources()` orchestrates: discover → filter → extract schemas via `kubectl explain --recursive`
+- `DiscoveredResource` type includes fully qualified name, apiVersion, group, kind, isCRD flag, and schema text
+- 33 unit tests (mocked kubectl) + 6 integration tests (live cluster) — all passing
+- Set up vitest test framework as project-wide dev dependency
