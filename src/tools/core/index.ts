@@ -28,3 +28,19 @@ export {
   kubectlLogsDescription,
   type KubectlLogsInput,
 } from "./kubectl-logs";
+
+export {
+  vectorSearch,
+  vectorSearchSchema,
+  vectorSearchDescription,
+  type VectorSearchInput,
+} from "./vector-search";
+
+export {
+  vectorFilter,
+  vectorFilterSchema,
+  vectorFilterDescription,
+  type VectorFilterInput,
+} from "./vector-filter";
+
+export { formatSearchResults } from "./format-results";

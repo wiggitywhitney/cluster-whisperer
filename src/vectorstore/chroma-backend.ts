@@ -105,18 +105,24 @@ export class ChromaBackend implements VectorStore {
    * We pass embeddingFunction: null to tell Chroma we'll provide pre-computed
    * embeddings. Without this, Chroma tries to use a default embedding function
    * which requires the @chroma-core/default-embed package.
+   *
+   * The Chroma SDK logs warnings like "No embedding function configuration found"
+   * when embeddingFunction is null. These are harmless — we always pass raw
+   * vectors to query() and upsert(). We suppress the warnings to keep output clean.
    */
   async initialize(
     collection: string,
     options: CollectionOptions
   ): Promise<void> {
-    const chromaCollection = await this.client.getOrCreateCollection({
-      name: collection,
-      configuration: {
-        hnsw: { space: options.distanceMetric },
-      },
-      embeddingFunction: null,
-    });
+    const chromaCollection = await suppressChromaWarnings(() =>
+      this.client.getOrCreateCollection({
+        name: collection,
+        configuration: {
+          hnsw: { space: options.distanceMetric },
+        },
+        embeddingFunction: null,
+      })
+    );
 
     this.collections.set(collection, chromaCollection);
   }
@@ -230,5 +236,32 @@ export class ChromaBackend implements VectorStore {
       );
     }
     return collection;
+  }
+}
+
+/**
+ * Suppresses Chroma SDK warnings during an async operation.
+ *
+ * Why suppress?
+ * The Chroma SDK v3 logs "No embedding function configuration found" warnings
+ * when a collection is created with embeddingFunction: null. This is expected
+ * in our architecture — we use pre-computed embeddings from Voyage AI and
+ * always pass raw vectors to query() and upsert(). The warnings are harmless
+ * but confuse users into thinking something is broken.
+ *
+ * The SDK has no log level config or pre-computed embeddings mode.
+ * Tracked upstream: https://github.com/chroma-core/chroma/issues/5400
+ */
+async function suppressChromaWarnings<T>(fn: () => Promise<T>): Promise<T> {
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    const msg = String(args[0]);
+    if (msg.includes("No embedding function configuration found")) return;
+    originalWarn.apply(console, args);
+  };
+  try {
+    return await fn();
+  } finally {
+    console.warn = originalWarn;
   }
 }
