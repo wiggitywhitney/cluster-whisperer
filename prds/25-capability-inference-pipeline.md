@@ -167,6 +167,9 @@ The prompt template should:
 | 2026-02-18 | Dependency injection for testability | `DiscoveryOptions.kubectl` parameter allows mocking at the system boundary. Enables fast, offline unit tests alongside integration tests. |
 | 2026-02-18 | Name-based resource filtering | Conservative exclusion list (events, leases, endpointslices, endpoints, componentstatuses). Also excludes subresources (name contains `/`) and resources without `get` verb. |
 | 2026-02-18 | vitest as test framework | Fast, TypeScript-native, zero-config. Added `test` and `test:watch` scripts to package.json. |
+| 2026-02-18 | Haiku for batch inference (not Sonnet) | M2 processes dozens of resources sequentially. Haiku is faster, cheaper, and sufficient for schema analysis. Sonnet reserved for investigator agent where reasoning depth matters. |
+| 2026-02-18 | Zod + withStructuredOutput() for LLM responses | Guarantees valid JSON matching schema via Anthropic's tool_use under the hood. Zod already a dependency. Eliminates manual JSON parsing and regex. |
+| 2026-02-18 | Prompt template as separate .md file | Matches investigator.md pattern in `prompts/` directory. Easy to iterate on prompt wording without touching code. |
 
 ---
 
@@ -180,3 +183,9 @@ The prompt template should:
 - `DiscoveredResource` type includes fully qualified name, apiVersion, group, kind, isCRD flag, and schema text
 - 33 unit tests (mocked kubectl) + 6 integration tests (live cluster) — all passing
 - Set up vitest test framework as project-wide dev dependency
+
+### 2026-02-18: M2 Design + Test Cluster Setup
+- Agreed on M2 design decisions: Haiku model, Zod structured output, .md prompt template
+- Installed Crossplane v2.2.0 in target cluster
+- Installed 8 AWS database Upbound providers (v1.23.2): RDS, DynamoDB, ElastiCache, DocumentDB, Neptune, Redshift, MemoryDB, Keyspaces
+- Cluster now has 106 CRDs total, 76 database-related — realistic test data for inference pipeline

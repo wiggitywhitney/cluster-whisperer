@@ -27,6 +27,7 @@ Keep production dependencies minimal:
 
 ## Secrets Management
 
-This project uses vals for secrets. See `.vals.yaml` for available secrets and `~/Documents/Repositories/claude-config/guides/vals-usage.md` for vals commands.
+This project uses vals for secrets. See `.vals.yaml` for available secrets.
+Vals commands: @~/Documents/Repositories/claude-config/guides/vals-usage.md
 
 <!-- Git workflow, CodeRabbit reviews enforced globally via ~/.claude/CLAUDE.md -->
