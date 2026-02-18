@@ -1,6 +1,6 @@
 # PRD #7: Vector Database Integration (Chroma)
 
-**Status**: In Progress (M3 In Progress — Redesign)
+**Status**: In Progress (M3 Complete — M4 Blocked on PRD #25)
 **Created**: 2026-01-24
 **GitHub Issue**: [#7](https://github.com/wiggitywhitney/cluster-whisperer/issues/7)
 
@@ -59,7 +59,7 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
 - [x] Chroma running and accessible from the agent
 - [x] Vector DB interface defined that other PRDs can write to
 - [x] Chroma backend implements the interface
-- [ ] Agent has a unified search tool with semantic, keyword, and metadata filter capabilities
+- [x] Agent has a unified search tool with semantic, keyword, and metadata filter capabilities
 - [x] Documentation explains vector DB concepts and our implementation
 
 ## Milestones
@@ -84,22 +84,23 @@ Viktor uses Qdrant with a plugin architecture that isolates vector DB calls to ~
   - Create `docs/vector-database.md` explaining vector DB concepts
   - **Completed**: Interface defined in `src/vectorstore/types.ts`, Chroma backend in `src/vectorstore/chroma-backend.ts`, Voyage AI embeddings in `src/vectorstore/embeddings.ts`. End-to-end test passed: stored 3 docs, semantic search ranked correctly (SQL #1 for "database", Ingress #1 for "network traffic").
 
-- [ ] **M3**: Search Tool for the Agent
+- [x] **M3**: Search Tool for the Agent
   - [x] Format search results for LLM consumption (`src/tools/core/format-results.ts`)
   - [x] Create seed script for loading test data (`scripts/seed-test-data.ts`)
   - [x] Suppress Chroma SDK "No embedding function" warnings (upstream: https://github.com/chroma-core/chroma/issues/5400)
-  - [ ] Create unified `vector_search` tool with three composable search dimensions:
+  - [x] Create unified `vector_search` tool with three composable search dimensions:
     - Semantic search (`query`): natural language → vector similarity via embeddings
     - Keyword search (`keyword`): substring matching via Chroma `where_document` — no embedding call
     - Metadata filters (`kind`, `apiGroup`, `namespace`): exact-match on structured fields
-  - [ ] Add `keywordSearch()` method to VectorStore interface and ChromaBackend
-  - [ ] Smart Chroma method selection in the backend:
+  - [x] Add `keywordSearch()` method to VectorStore interface and ChromaBackend
+  - [x] Smart Chroma method selection in the backend:
     - Has `query` → `collection.query()` with embeddings (+ optional `where_document` and `where`)
     - Only `keyword`/filters → `collection.get()` with `where_document`/`where` (no embedding call)
-  - [ ] Validation: at least one of `query`, `keyword`, or a metadata filter is required
-  - [ ] Integrate unified tool with existing agent via LangChain wrapper
-  - [ ] Manual test: agent uses `vector_search` with semantic query and gets correct results
-  - [ ] Manual test: agent uses `vector_search` with keyword and metadata filter (no embedding call)
+  - [x] Validation: at least one of `query`, `keyword`, or a metadata filter is required
+  - [x] Integrate unified tool with existing agent via LangChain wrapper
+  - [x] Manual test: agent uses `vector_search` with semantic query and gets correct results
+  - [x] Manual test: agent uses `vector_search` with keyword and metadata filter (no embedding call)
+  - **Completed**: Unified `vector_search` tool in `src/tools/core/vector-search.ts` with all three composable dimensions. `keywordSearch()` added to VectorStore interface and ChromaBackend using Chroma `collection.get()` with `$contains`. Smart dispatch: has `query` → `search()` with embeddings, only `keyword`/filters → `keywordSearch()` with no embedding call. Deleted separate `vector-filter.ts`. All 7 dimension combinations tested through agent. Graceful degradation verified (Chroma down → kubectl fallback).
 
 - [ ] **M4**: Integration and Polish
   - End-to-end test with data loaded by PRD #25 (capability inference)
@@ -118,7 +119,7 @@ interface VectorStore {
   initialize(collection: string, options: CollectionOptions): Promise<void>;
   store(collection: string, documents: VectorDocument[]): Promise<void>;
   search(collection: string, query: string, options?: SearchOptions): Promise<SearchResult[]>;
-  keywordSearch(collection: string, keyword: string, options?: SearchOptions): Promise<SearchResult[]>;
+  keywordSearch(collection: string, keyword?: string, options?: SearchOptions): Promise<SearchResult[]>;
   delete(collection: string, ids: string[]): Promise<void>;
 }
 ```
@@ -225,3 +226,5 @@ At least one dimension required. All three compose freely in a single call. The 
 **2026-02-17**: M2 complete. Installed `chromadb@3.3.0` and `voyageai@0.1.0`. Implemented vector store module in `src/vectorstore/`: `types.ts` (VectorStore + EmbeddingFunction interfaces), `embeddings.ts` (VoyageEmbedding using voyage-4), `chroma-backend.ts` (ChromaBackend with pre-computed embeddings, upsert, cosine distance), `index.ts` (exports + collection constants). Added `VOYAGE_API_KEY` to `.vals.yaml`. Created `docs/vector-database.md`. End-to-end test passed: semantic search correctly ranked SQL #1 for "database" queries and Ingress #1 for "network traffic" queries.
 
 **2026-02-18**: M3 initial implementation and redesign. First built two separate tools (vector_search + vector_filter) following the 3-layer pattern (core → LangChain wrapper → agent). Tested successfully with seeded data — agent correctly chose vector_search for conceptual queries, got SQL ranked #1 for "database". Then redesigned: merged into a single unified `vector_search` tool with semantic query + keyword search + metadata filters as composable dimensions. Added keyword search (Chroma `where_document`, no embedding call). Suppressed Chroma SDK warnings. Created `scripts/seed-test-data.ts`. Previous test results invalidated by redesign — retesting required.
+
+**2026-02-18**: M3 complete. Implemented unified `vector_search` tool with all three composable dimensions per PRD spec. Added `keywordSearch()` to VectorStore interface (optional keyword for filter-only path) and ChromaBackend (uses `collection.get()` with `$contains`). Deleted separate `vector-filter.ts`. Smart dispatch: has `query` → `collection.query()` with embeddings, only `keyword`/filters → `collection.get()` (free). Comprehensive agent testing: all 7 dimension combinations verified (semantic, keyword, filter, query+keyword, query+filter, keyword+filter, all three). Graceful degradation confirmed — Chroma down → agent seamlessly falls back to kubectl tools.
