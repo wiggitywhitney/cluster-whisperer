@@ -49,6 +49,15 @@ import type {
 const DEFAULT_CHROMA_URL = "http://localhost:8000";
 
 /**
+ * Maximum documents per embed+upsert batch.
+ *
+ * Keeps each Voyage AI embed() call and Chroma upsert() within API limits.
+ * At our current data volumes (a few hundred CRDs) this rarely kicks in,
+ * but it prevents failures if PRD #25 or #26 loads larger datasets.
+ */
+const UPSERT_BATCH_SIZE = 100;
+
+/**
  * Chroma implementation of the VectorStore interface.
  *
  * Usage:
@@ -153,17 +162,21 @@ export class ChromaBackend implements VectorStore {
 
     if (documents.length === 0) return;
 
-    // Embed all document texts in a single batch
-    const texts = documents.map((doc) => doc.text);
-    const embeddings = await this.embedder.embed(texts);
+    // Process documents in chunks to stay within Voyage AI's tokens-per-request
+    // limit and Chroma's max batch size. Each chunk is embedded and upserted
+    // independently, so partial progress is preserved on large runs.
+    for (let i = 0; i < documents.length; i += UPSERT_BATCH_SIZE) {
+      const batch = documents.slice(i, i + UPSERT_BATCH_SIZE);
+      const texts = batch.map((doc) => doc.text);
+      const embeddings = await this.embedder.embed(texts);
 
-    // Upsert into Chroma — creates new or updates existing documents
-    await chromaCollection.upsert({
-      ids: documents.map((doc) => doc.id),
-      embeddings,
-      documents: texts,
-      metadatas: documents.map((doc) => doc.metadata),
-    });
+      await chromaCollection.upsert({
+        ids: batch.map((doc) => doc.id),
+        embeddings,
+        documents: texts,
+        metadatas: batch.map((doc) => doc.metadata),
+      });
+    }
   }
 
   /**
@@ -242,14 +255,24 @@ export class ChromaBackend implements VectorStore {
   ): Promise<SearchResult[]> {
     const chromaCollection = this.getCollection(collection);
 
+    // Build document filter: prefer the explicit keyword parameter, but also
+    // honor options.whereDocument so callers can pass raw Chroma document filters.
+    // When both are present, combine with $and.
+    const keywordFilter = keyword
+      ? ({ $contains: keyword } as WhereDocument)
+      : undefined;
+    const optionsFilter = options?.whereDocument as WhereDocument | undefined;
+    let documentFilter: WhereDocument | undefined;
+    if (keywordFilter && optionsFilter) {
+      documentFilter = { $and: [keywordFilter, optionsFilter] } as unknown as WhereDocument;
+    } else {
+      documentFilter = keywordFilter ?? optionsFilter;
+    }
+
     const results = await chromaCollection.get({
       include: ["documents", "metadatas"],
       limit: options?.nResults ?? 10,
-      // Only add whereDocument if a keyword is provided.
-      // Without a keyword, this becomes a pure metadata filter query.
-      ...(keyword
-        ? { whereDocument: { $contains: keyword } as WhereDocument }
-        : {}),
+      ...(documentFilter ? { whereDocument: documentFilter } : {}),
       ...(options?.where ? { where: options.where as Where } : {}),
     });
 
@@ -310,16 +333,33 @@ export class ChromaBackend implements VectorStore {
  * The SDK has no log level config or pre-computed embeddings mode.
  * Tracked upstream: https://github.com/chroma-core/chroma/issues/5400
  */
+/**
+ * Reference counter for concurrent suppressChromaWarnings calls.
+ *
+ * Multiple concurrent initialize() calls (e.g., Promise.all) would each
+ * save/restore console.warn independently, causing the second restore to
+ * put back the patched function instead of the original. A reference counter
+ * ensures we only patch on the first call and restore on the last.
+ */
+let suppressCount = 0;
+const originalWarnRef: { fn: typeof console.warn } = { fn: console.warn };
+
 async function suppressChromaWarnings<T>(fn: () => Promise<T>): Promise<T> {
-  const originalWarn = console.warn;
-  console.warn = (...args: unknown[]) => {
-    const msg = String(args[0]);
-    if (msg.includes("No embedding function configuration found")) return;
-    originalWarn.apply(console, args);
-  };
+  if (suppressCount === 0) {
+    originalWarnRef.fn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      const msg = String(args[0]);
+      if (msg.includes("No embedding function configuration found")) return;
+      originalWarnRef.fn.apply(console, args);
+    };
+  }
+  suppressCount++;
   try {
     return await fn();
   } finally {
-    console.warn = originalWarn;
+    suppressCount--;
+    if (suppressCount === 0) {
+      console.warn = originalWarnRef.fn;
+    }
   }
 }

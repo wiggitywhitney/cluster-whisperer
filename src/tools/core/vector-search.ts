@@ -133,40 +133,45 @@ export async function vectorSearch(
     return "At least one search dimension is required: query (semantic), keyword (substring), or a metadata filter (kind, apiGroup, namespace).";
   }
 
-  // Build metadata filter from structured inputs
-  const where = buildWhereFilter(input);
+  try {
+    // Build metadata filter from structured inputs
+    const where = buildWhereFilter(input);
 
-  // Build whereDocument from keyword input
-  const whereDocument = input.keyword
-    ? { $contains: input.keyword }
-    : undefined;
+    // Build whereDocument from keyword input
+    const whereDocument = input.keyword
+      ? { $contains: input.keyword }
+      : undefined;
 
-  const searchOptions: SearchOptions = {
-    nResults: input.nResults ?? 5,
-    ...(where ? { where } : {}),
-    ...(whereDocument ? { whereDocument } : {}),
-  };
+    const searchOptions: SearchOptions = {
+      nResults: input.nResults ?? 5,
+      ...(where ? { where } : {}),
+      ...(whereDocument ? { whereDocument } : {}),
+    };
 
-  // Smart dispatch: use semantic search if query is provided (expensive, ranked),
-  // otherwise use keyword/filter search (free, unranked)
-  if (input.query) {
-    // Has semantic query → collection.query() with embeddings
-    // If keyword is also provided, whereDocument narrows results before ranking
-    const results = await vectorStore.search(
-      input.collection,
-      input.query,
-      searchOptions
-    );
-    return formatSearchResults(results, input.collection);
-  } else {
-    // Only keyword and/or filters → collection.get() with no embedding call.
-    // keyword may be undefined (filter-only case) — keywordSearch handles both.
-    const results = await vectorStore.keywordSearch(
-      input.collection,
-      input.keyword,
-      searchOptions
-    );
-    return formatSearchResults(results, input.collection);
+    // Smart dispatch: use semantic search if query is provided (expensive, ranked),
+    // otherwise use keyword/filter search (free, unranked)
+    if (input.query) {
+      // Has semantic query → collection.query() with embeddings
+      // If keyword is also provided, whereDocument narrows results before ranking
+      const results = await vectorStore.search(
+        input.collection,
+        input.query,
+        searchOptions
+      );
+      return formatSearchResults(results, input.collection);
+    } else {
+      // Only keyword and/or filters → collection.get() with no embedding call.
+      // keyword may be undefined (filter-only case) — keywordSearch handles both.
+      const results = await vectorStore.keywordSearch(
+        input.collection,
+        input.keyword,
+        searchOptions
+      );
+      return formatSearchResults(results, input.collection);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Vector search failed: ${message}. Consider using kubectl tools instead.`;
   }
 }
 

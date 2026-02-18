@@ -109,8 +109,10 @@ function createVectorToolsSafe() {
     const embedder = new VoyageEmbedding();
     const vectorStore = new ChromaBackend(embedder);
     return createVectorTools(vectorStore);
-  } catch {
-    // VoyageEmbedding requires VOYAGE_API_KEY. If not set, skip vector tools.
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Expected when VOYAGE_API_KEY is not set. Log so it's visible but not alarming.
+    console.debug(`Vector tools disabled: ${message}`); // eslint-disable-line no-console
     return [];
   }
 }

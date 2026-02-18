@@ -87,6 +87,12 @@ export class VoyageEmbedding implements EmbeddingFunction {
       throw new Error("Voyage AI returned no embedding data");
     }
 
+    if (response.data.length !== texts.length) {
+      throw new Error(
+        `Voyage AI returned ${response.data.length} embeddings for ${texts.length} inputs`
+      );
+    }
+
     // Sort by index to ensure order matches input order
     const sorted = [...response.data].sort(
       (a, b) => (a.index ?? 0) - (b.index ?? 0)

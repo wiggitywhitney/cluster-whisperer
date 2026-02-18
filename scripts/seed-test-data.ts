@@ -48,6 +48,12 @@ const testDocuments: VectorDocument[] = [
 ];
 
 async function main() {
+  if (!process.env.VOYAGE_API_KEY) {
+    throw new Error(
+      "VOYAGE_API_KEY is not set. Run with: vals exec -f .vals.yaml -- npx tsx scripts/seed-test-data.ts"
+    );
+  }
+
   console.log("Initializing vector store...");
   const embedder = new VoyageEmbedding();
   const store = new ChromaBackend(embedder);

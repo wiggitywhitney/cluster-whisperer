@@ -119,6 +119,8 @@ The embedding model is the decision people agonize over most, but research consi
 
 ### Recommendation
 
+> **Superseded by Decision 3**: Final choice is Voyage AI `voyage-4`. See the Decisions section below.
+
 **Start with OpenAI `text-embedding-3-small`** for these reasons:
 - Best retrieval quality for the cost ($0.02/1M tokens)
 - Well-tested with Chroma

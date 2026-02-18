@@ -69,19 +69,14 @@ export interface VectorDocument {
  * Extends VectorDocument with a similarity score so the caller can
  * decide how relevant each result is.
  */
-export interface SearchResult {
-  /** Unique identifier of the matched document */
-  id: string;
-  /** The original text content */
-  text: string;
-  /** Structured metadata from the original document */
-  metadata: Record<string, string | number | boolean>;
+export interface SearchResult extends VectorDocument {
   /**
    * How similar this result is to the query.
    *
    * With cosine distance: 0.0 = identical, 2.0 = opposite.
    * Lower scores mean more similar results.
    * Chroma returns distances, not similarity scores.
+   * Set to -1 for keyword/filter-only results (no vector comparison).
    */
   score: number;
 }

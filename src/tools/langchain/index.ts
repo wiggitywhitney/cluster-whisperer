@@ -184,7 +184,9 @@ export function createVectorTools(vectorStore: VectorStore) {
         if (
           message.includes("ECONNREFUSED") ||
           message.includes("fetch failed") ||
-          message.includes("ENOTFOUND")
+          message.includes("ENOTFOUND") ||
+          message.includes("ETIMEDOUT") ||
+          message.includes("ECONNRESET")
         ) {
           return (
             "Vector database is not available. The Chroma server may not be running. " +

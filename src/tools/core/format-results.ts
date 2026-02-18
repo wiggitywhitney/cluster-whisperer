@@ -71,6 +71,14 @@ export function formatSearchResults(
 }
 
 /**
+ * Cosine distance thresholds for similarity labels.
+ * Tuning deferred to PRD #25 M3 when real data is available.
+ */
+const VERY_SIMILAR_THRESHOLD = 0.3;
+const SIMILAR_THRESHOLD = 0.6;
+const SOMEWHAT_RELATED_THRESHOLD = 1.0;
+
+/**
  * Converts a cosine distance score into a human-readable similarity label.
  *
  * Cosine distance ranges:
@@ -81,9 +89,9 @@ export function formatSearchResults(
  * - 1.0–2.0 = dissimilar to opposite
  */
 function describeSimilarity(score: number): string {
-  if (score < 0.3) return "very similar";
-  if (score < 0.6) return "similar";
-  if (score < 1.0) return "somewhat related";
+  if (score < VERY_SIMILAR_THRESHOLD) return "very similar";
+  if (score < SIMILAR_THRESHOLD) return "similar";
+  if (score < SOMEWHAT_RELATED_THRESHOLD) return "somewhat related";
   return "weak match";
 }
 
