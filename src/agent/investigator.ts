@@ -27,7 +27,8 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
-import { kubectlTools } from "../tools/langchain";
+import { kubectlTools, createVectorTools } from "../tools/langchain";
+import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -95,6 +96,28 @@ function getSystemPrompt(): string {
 }
 
 /**
+ * Creates vector tools if the Voyage API key is available.
+ *
+ * Returns an empty array if VOYAGE_API_KEY is not set, so the agent
+ * still works with kubectl tools for cluster investigation. This is
+ * extracted as a separate function so the tools array in createReactAgent
+ * is built in a single spread expression — avoiding TypeScript narrowing
+ * issues with let/reassign.
+ */
+function createVectorToolsSafe() {
+  try {
+    const embedder = new VoyageEmbedding();
+    const vectorStore = new ChromaBackend(embedder);
+    return createVectorTools(vectorStore);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Expected when VOYAGE_API_KEY is not set. Log so it's visible but not alarming.
+    console.debug(`Vector tools disabled: ${message}`); // eslint-disable-line no-console
+    return [];
+  }
+}
+
+/**
  * Cached agent instance - created lazily on first use.
  *
  * Why lazy creation?
@@ -154,9 +177,16 @@ export function getInvestigatorAgent() {
       },
     });
 
+    // Create vector search tools with lazy-initialized Chroma backend.
+    // The VoyageEmbedding and ChromaBackend are instantiated here but don't
+    // connect to Chroma until the first vector tool call (lazy initialization).
+    // If VOYAGE_API_KEY is not set, VoyageEmbedding throws — so we catch that
+    // and skip vector tools, keeping the agent functional with kubectl only.
+    const vectorTools = createVectorToolsSafe();
+
     cachedAgent = createReactAgent({
       llm: model,
-      tools: kubectlTools,
+      tools: [...kubectlTools, ...vectorTools],
       stateModifier: getSystemPrompt(),
     });
   }

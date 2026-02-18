@@ -68,6 +68,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Store metadata for filtering (kind, apiGroup, complexity, providers)
   - Verify semantic search works: "database" → finds database-related CRDs
   - Verify filter search works: "all low-complexity resources" → filters by metadata
+  - Tune retrieval parameters (top-k, similarity threshold) with real capability data
 
 - [ ] **M4**: CLI Tool / Runner
   - Wrap the pipeline as a runnable tool (CLI command, npm script, or startup hook)
@@ -79,6 +80,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Load capabilities from the demo cluster (with many database CRDs installed)
   - Test the full flow: user asks "how do I deploy a database?" → agent searches capabilities → finds the right CRD → recommends it
   - Document the pipeline setup and usage
+  - Update vector database documentation (`docs/vector-database.md`) with real usage patterns
 
 ## Technical Approach
 

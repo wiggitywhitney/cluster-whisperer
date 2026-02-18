@@ -1,0 +1,365 @@
+/**
+ * chroma-backend.ts - Chroma implementation of the VectorStore interface
+ *
+ * What this file does:
+ * Implements the VectorStore interface using Chroma as the backend. This is the
+ * only file in the project that imports from "chromadb" — everything else codes
+ * against the VectorStore interface in types.ts.
+ *
+ * Why isolate Chroma to one file?
+ * The KubeCon demo shows both Chroma and Qdrant. A future Qdrant backend would
+ * implement the same VectorStore interface in a qdrant-backend.ts file. The
+ * pipelines (PRDs #25 and #26) and search tools (M3) never change.
+ *
+ * How it works:
+ * 1. initialize() creates a Chroma collection with cosine distance
+ * 2. store() embeds document text via our EmbeddingFunction, then stores
+ *    the vectors + metadata in Chroma
+ * 3. search() embeds the query, runs vector similarity search in Chroma,
+ *    and returns results sorted by distance
+ * 4. delete() removes documents by ID
+ *
+ * We pass pre-computed embeddings to Chroma (not a Chroma embedding function).
+ * This keeps our EmbeddingFunction interface clean and backend-agnostic.
+ */
+
+import {
+  ChromaClient,
+  type Collection,
+  type Where,
+  type WhereDocument,
+} from "chromadb";
+import type {
+  VectorStore,
+  VectorDocument,
+  SearchResult,
+  CollectionOptions,
+  SearchOptions,
+  EmbeddingFunction,
+} from "./types";
+
+/**
+ * Default Chroma server URL.
+ *
+ * The TypeScript SDK always requires a running Chroma server (no in-process
+ * mode like Python). Run `chroma run --path ./data` locally or use Docker.
+ *
+ * Override with the CHROMA_URL environment variable for non-default setups.
+ */
+const DEFAULT_CHROMA_URL = "http://localhost:8000";
+
+/**
+ * Maximum documents per embed+upsert batch.
+ *
+ * Keeps each Voyage AI embed() call and Chroma upsert() within API limits.
+ * At our current data volumes (a few hundred CRDs) this rarely kicks in,
+ * but it prevents failures if PRD #25 or #26 loads larger datasets.
+ */
+const UPSERT_BATCH_SIZE = 100;
+
+/**
+ * Chroma implementation of the VectorStore interface.
+ *
+ * Usage:
+ *   const embedder = new VoyageEmbedding();
+ *   const store = new ChromaBackend(embedder);
+ *
+ *   await store.initialize("capabilities", { distanceMetric: "cosine" });
+ *   await store.store("capabilities", [{ id: "...", text: "...", metadata: {} }]);
+ *   const results = await store.search("capabilities", "managed database");
+ */
+export class ChromaBackend implements VectorStore {
+  private readonly client: ChromaClient;
+  private readonly embedder: EmbeddingFunction;
+
+  /**
+   * Cache of initialized collections.
+   *
+   * Why cache?
+   * Each store() and search() call needs the collection object. Without caching,
+   * we'd call Chroma's getOrCreateCollection on every operation, which is an
+   * unnecessary network round-trip. The cache maps collection name → Collection.
+   */
+  private readonly collections: Map<string, Collection> = new Map();
+
+  /**
+   * Creates a new Chroma backend.
+   *
+   * @param embedder - The embedding function to use for converting text to vectors.
+   *                   Injected at construction so the embedding model can be swapped
+   *                   independently of the vector database.
+   * @param options - Optional configuration
+   * @param options.chromaUrl - Chroma server URL. Defaults to CHROMA_URL env var
+   *                           or http://localhost:8000.
+   */
+  constructor(
+    embedder: EmbeddingFunction,
+    options?: { chromaUrl?: string }
+  ) {
+    this.embedder = embedder;
+    const url = options?.chromaUrl ?? process.env.CHROMA_URL ?? DEFAULT_CHROMA_URL;
+
+    // Parse the URL into host and port for the Chroma v3 SDK.
+    // The 'path' constructor argument is deprecated in favor of host/port/ssl.
+    const parsed = new URL(url);
+    this.client = new ChromaClient({
+      host: parsed.hostname,
+      port: parseInt(parsed.port || (parsed.protocol === "https:" ? "443" : "8000"), 10),
+      ssl: parsed.protocol === "https:",
+    });
+  }
+
+  /**
+   * Creates a collection if it doesn't exist, or gets the existing one.
+   *
+   * Uses Chroma's getOrCreateCollection for idempotency — safe to call
+   * multiple times with the same name. The distance metric is set at creation
+   * time and cannot be changed later.
+   *
+   * We pass embeddingFunction: null to tell Chroma we'll provide pre-computed
+   * embeddings. Without this, Chroma tries to use a default embedding function
+   * which requires the @chroma-core/default-embed package.
+   *
+   * The Chroma SDK logs warnings like "No embedding function configuration found"
+   * when embeddingFunction is null. These are harmless — we always pass raw
+   * vectors to query() and upsert(). We suppress the warnings to keep output clean.
+   */
+  async initialize(
+    collection: string,
+    options: CollectionOptions
+  ): Promise<void> {
+    const chromaCollection = await suppressChromaWarnings(() =>
+      this.client.getOrCreateCollection({
+        name: collection,
+        configuration: {
+          hnsw: { space: options.distanceMetric },
+        },
+        embeddingFunction: null,
+      })
+    );
+
+    this.collections.set(collection, chromaCollection);
+  }
+
+  /**
+   * Stores documents in a Chroma collection.
+   *
+   * The process:
+   * 1. Extract text from all documents
+   * 2. Embed the text using our EmbeddingFunction (Voyage AI)
+   * 3. Send IDs, embeddings, documents, and metadata to Chroma via upsert
+   *
+   * Why upsert instead of add?
+   * If a document with the same ID already exists, upsert updates it.
+   * add() would throw an error on duplicate IDs. Since sync pipelines
+   * (PRDs #25 and #26) re-run periodically, upsert is the right behavior.
+   */
+  async store(
+    collection: string,
+    documents: VectorDocument[]
+  ): Promise<void> {
+    const chromaCollection = this.getCollection(collection);
+
+    if (documents.length === 0) return;
+
+    // Process documents in chunks to stay within Voyage AI's tokens-per-request
+    // limit and Chroma's max batch size. Each chunk is embedded and upserted
+    // independently, so partial progress is preserved on large runs.
+    for (let i = 0; i < documents.length; i += UPSERT_BATCH_SIZE) {
+      const batch = documents.slice(i, i + UPSERT_BATCH_SIZE);
+      const texts = batch.map((doc) => doc.text);
+      const embeddings = await this.embedder.embed(texts);
+
+      await chromaCollection.upsert({
+        ids: batch.map((doc) => doc.id),
+        embeddings,
+        documents: texts,
+        metadatas: batch.map((doc) => doc.metadata),
+      });
+    }
+  }
+
+  /**
+   * Searches a collection using natural language.
+   *
+   * The process:
+   * 1. Embed the query text into a vector
+   * 2. Send the vector to Chroma for similarity search
+   * 3. Convert Chroma's column-oriented results into SearchResult objects
+   *
+   * Chroma returns results sorted by distance (closest first).
+   * With cosine distance: 0.0 = identical, 2.0 = completely opposite.
+   */
+  async search(
+    collection: string,
+    query: string,
+    options?: SearchOptions
+  ): Promise<SearchResult[]> {
+    const chromaCollection = this.getCollection(collection);
+
+    // Embed the query text
+    const queryEmbeddings = await this.embedder.embed([query]);
+
+    // Build query parameters
+    const results = await chromaCollection.query({
+      queryEmbeddings,
+      nResults: options?.nResults ?? 10,
+      include: ["documents", "metadatas", "distances"],
+      // Cast to Chroma's Where type — our SearchOptions.where accepts the
+      // same shape (key-value pairs for exact match, or $and/$or operators)
+      ...(options?.where ? { where: options.where as Where } : {}),
+      // whereDocument filters on document text content (e.g., { "$contains": "backup" }).
+      // When combined with queryEmbeddings, Chroma applies the substring filter first,
+      // then ranks the filtered results by vector similarity.
+      ...(options?.whereDocument
+        ? { whereDocument: options.whereDocument as WhereDocument }
+        : {}),
+    });
+
+    // Convert Chroma's column-oriented format to SearchResult objects.
+    //
+    // Chroma returns nested arrays because query() supports multiple
+    // queries at once. We always send one query, so we use index [0]
+    // to get the results for our single query.
+    const ids = results.ids[0] ?? [];
+    const documents = results.documents[0] ?? [];
+    const metadatas = results.metadatas[0] ?? [];
+    const distances = results.distances[0] ?? [];
+
+    return ids.map((id, i) => ({
+      id,
+      text: documents[i] ?? "",
+      metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
+      score: distances[i] ?? 0,
+    }));
+  }
+
+  /**
+   * Searches a collection by keyword substring matching — no embedding API call.
+   *
+   * Uses Chroma's collection.get() with whereDocument for substring matching.
+   * This is the "free" search path — no Voyage AI call, no vector comparison.
+   * Results are unranked (no similarity score) since there's no vector query.
+   *
+   * When to use this vs search():
+   * - keywordSearch("backup") → finds docs containing "backup" (exact substring)
+   * - search("data protection") → finds docs about backup concepts (semantic)
+   *
+   * The unified vector_search tool decides which method to call based on
+   * which parameters the LLM provides.
+   */
+  async keywordSearch(
+    collection: string,
+    keyword?: string,
+    options?: SearchOptions
+  ): Promise<SearchResult[]> {
+    const chromaCollection = this.getCollection(collection);
+
+    // Build document filter: prefer the explicit keyword parameter, but also
+    // honor options.whereDocument so callers can pass raw Chroma document filters.
+    // When both are present, combine with $and.
+    const keywordFilter = keyword
+      ? ({ $contains: keyword } as WhereDocument)
+      : undefined;
+    const optionsFilter = options?.whereDocument as WhereDocument | undefined;
+    let documentFilter: WhereDocument | undefined;
+    if (keywordFilter && optionsFilter) {
+      documentFilter = { $and: [keywordFilter, optionsFilter] } as unknown as WhereDocument;
+    } else {
+      documentFilter = keywordFilter ?? optionsFilter;
+    }
+
+    const results = await chromaCollection.get({
+      include: ["documents", "metadatas"],
+      limit: options?.nResults ?? 10,
+      ...(documentFilter ? { whereDocument: documentFilter } : {}),
+      ...(options?.where ? { where: options.where as Where } : {}),
+    });
+
+    // Convert Chroma's get() response to SearchResult objects.
+    // get() returns flat arrays (not nested like query()) since there's
+    // no multi-query support. Score is -1 to indicate "no distance score."
+    const ids = results.ids ?? [];
+    const documents = results.documents ?? [];
+    const metadatas = results.metadatas ?? [];
+
+    return ids.map((id, i) => ({
+      id,
+      text: documents[i] ?? "",
+      metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
+      score: -1,
+    }));
+  }
+
+  /**
+   * Deletes documents from a collection by ID.
+   */
+  async delete(collection: string, ids: string[]): Promise<void> {
+    const chromaCollection = this.getCollection(collection);
+    await chromaCollection.delete({ ids });
+  }
+
+  /**
+   * Gets a cached collection, throwing if it hasn't been initialized.
+   *
+   * Why not auto-initialize?
+   * Initialization requires configuration (distance metric). If we auto-
+   * initialized with defaults, we might create a collection with the wrong
+   * metric, and distance metrics can't be changed after creation.
+   * Explicit initialization prevents this class of bugs.
+   */
+  private getCollection(name: string): Collection {
+    const collection = this.collections.get(name);
+    if (!collection) {
+      throw new Error(
+        `Collection "${name}" has not been initialized. ` +
+          `Call initialize("${name}", { distanceMetric: "cosine" }) first.`
+      );
+    }
+    return collection;
+  }
+}
+
+/**
+ * Suppresses Chroma SDK warnings during an async operation.
+ *
+ * Why suppress?
+ * The Chroma SDK v3 logs "No embedding function configuration found" warnings
+ * when a collection is created with embeddingFunction: null. This is expected
+ * in our architecture — we use pre-computed embeddings from Voyage AI and
+ * always pass raw vectors to query() and upsert(). The warnings are harmless
+ * but confuse users into thinking something is broken.
+ *
+ * The SDK has no log level config or pre-computed embeddings mode.
+ * Tracked upstream: https://github.com/chroma-core/chroma/issues/5400
+ */
+/**
+ * Reference counter for concurrent suppressChromaWarnings calls.
+ *
+ * Multiple concurrent initialize() calls (e.g., Promise.all) would each
+ * save/restore console.warn independently, causing the second restore to
+ * put back the patched function instead of the original. A reference counter
+ * ensures we only patch on the first call and restore on the last.
+ */
+let suppressCount = 0;
+const originalWarnRef: { fn: typeof console.warn } = { fn: console.warn };
+
+async function suppressChromaWarnings<T>(fn: () => Promise<T>): Promise<T> {
+  if (suppressCount === 0) {
+    originalWarnRef.fn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      const msg = String(args[0]);
+      if (msg.includes("No embedding function configuration found")) return;
+      originalWarnRef.fn.apply(console, args);
+    };
+  }
+  suppressCount++;
+  try {
+    return await fn();
+  } finally {
+    suppressCount--;
+    if (suppressCount === 0) {
+      console.warn = originalWarnRef.fn;
+    }
+  }
+}

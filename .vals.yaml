@@ -15,3 +15,7 @@ GITHUB_TOKEN: ref+gcpsecrets://demoo-ooclock/github-token
 # Used by Datadog Agent helm install and for direct API access
 DD_API_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-dev
 DD_APP_KEY: ref+gcpsecrets://demoo-ooclock/datadog-commit-story-app
+
+# Voyage AI embedding model API key (PRD #7)
+# Used by VoyageEmbedding to convert text to vectors for semantic search
+VOYAGE_API_KEY: ref+gcpsecrets://demoo-ooclock/voyage-api-key
