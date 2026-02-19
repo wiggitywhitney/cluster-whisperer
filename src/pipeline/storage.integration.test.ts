@@ -235,7 +235,7 @@ describe.skipIf(!!skipReason)("storage and search (integration)", () => {
       where: { complexity: "low" },
     });
 
-    // Should only return low-complexity resources (SQL and ConfigMap)
+    // Should return exclusively low-complexity resources (SQL and ConfigMap)
     expect(results.length).toBeGreaterThan(0);
     const complexities = results.map((r) => r.metadata.complexity);
     expect(complexities.every((c) => c === "low")).toBe(true);
@@ -266,7 +266,7 @@ describe.skipIf(!!skipReason)("storage and search (integration)", () => {
   // -------------------------------------------------------------------------
 
   it("combines semantic search with metadata filter", async () => {
-    // Search for "managed cloud service" but only high-complexity resources
+    // Search for "managed cloud service" but restrict to high-complexity resources
     const results = await vectorStore.search(
       TEST_COLLECTION,
       "managed cloud service",
@@ -276,7 +276,7 @@ describe.skipIf(!!skipReason)("storage and search (integration)", () => {
       }
     );
 
-    // Should only return the S3 bucket (the only high-complexity resource)
+    // Should return the S3 bucket (the sole high-complexity resource)
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].id).toBe("buckets.s3.aws.upbound.io");
   }, 15_000);

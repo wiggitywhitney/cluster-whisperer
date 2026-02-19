@@ -49,7 +49,7 @@ export interface SyncOptions {
   /**
    * Progress callback for the entire pipeline.
    * Passed to all three stages so progress flows to a single output.
-   * Defaults to console.log.
+   * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
 }
@@ -83,7 +83,7 @@ export interface SyncResult {
 export async function syncCapabilities(
   options: SyncOptions
 ): Promise<SyncResult> {
-  const onProgress = options.onProgress ?? console.log;
+  const onProgress = options.onProgress ?? console.log; // eslint-disable-line no-console
 
   // M1: Discover resources from the cluster
   const discovered = await discoverResources({

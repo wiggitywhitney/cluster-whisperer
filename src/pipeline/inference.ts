@@ -246,7 +246,7 @@ export async function inferCapabilities(
   resources: DiscoveredResource[],
   options?: InferenceOptions
 ): Promise<ResourceCapability[]> {
-  const onProgress = options?.onProgress ?? console.log;
+  const onProgress = options?.onProgress ?? console.log; // eslint-disable-line no-console
   const results: ResourceCapability[] = [];
 
   for (let i = 0; i < resources.length; i++) {

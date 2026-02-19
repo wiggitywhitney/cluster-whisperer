@@ -20,7 +20,7 @@ import type {
 
 /**
  * Creates a DiscoveredResource with sensible defaults.
- * Override only the fields relevant to each test case.
+ * Override the specific fields relevant to each test case.
  */
 function makeResource(
   overrides: Partial<DiscoveredResource> = {}
@@ -40,7 +40,7 @@ function makeResource(
 
 /**
  * Creates a mock LLM capability result with sensible defaults.
- * Override only the fields relevant to each test case.
+ * Override the specific fields relevant to each test case.
  */
 function makeLlmResult(
   overrides: Partial<LlmCapabilityResult> = {}

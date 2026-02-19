@@ -33,7 +33,7 @@ import type { VectorStore } from "../vectorstore";
 
 /**
  * Creates a DiscoveredResource with sensible defaults.
- * Override only the fields relevant to each test case.
+ * Override the specific fields relevant to each test case.
  */
 function makeResource(
   overrides: Partial<DiscoveredResource> = {}
@@ -52,7 +52,7 @@ function makeResource(
 
 /**
  * Creates a ResourceCapability with sensible defaults.
- * Override only the fields relevant to each test case.
+ * Override the specific fields relevant to each test case.
  */
 function makeCapability(
   overrides: Partial<ResourceCapability> = {}

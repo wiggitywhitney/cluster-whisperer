@@ -204,7 +204,7 @@ export async function discoverResources(
   options?: DiscoveryOptions
 ): Promise<DiscoveredResource[]> {
   const kubectl = options?.kubectl ?? defaultKubectl;
-  const onProgress = options?.onProgress ?? console.log;
+  const onProgress = options?.onProgress ?? console.log; // eslint-disable-line no-console
 
   // Step 1: Discover all resource types
   onProgress("Discovering API resources...");

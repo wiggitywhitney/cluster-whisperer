@@ -2,7 +2,7 @@
  * runner.integration.test.ts - Integration tests for the sync pipeline runner (M4)
  *
  * Tests the full sync pipeline end-to-end: discover -> infer -> store -> search.
- * Uses mock kubectl (to control cost — only 3 resources) but real Haiku for
+ * Uses mock kubectl (to control cost — just 3 resources) but real Haiku for
  * inference, and real Chroma + Voyage AI for storage and search.
  *
  * This validates that the runner correctly wires the three pipeline stages
@@ -221,7 +221,7 @@ describe.skipIf(!!skipReason)("syncCapabilities (integration)", () => {
       onProgress: (msg) => {
         progressMessages.push(msg);
         // Show progress during test for visibility
-        console.log(`  [sync] ${msg}`);
+        console.log(`  [sync] ${msg}`); // eslint-disable-line no-console
       },
     });
 

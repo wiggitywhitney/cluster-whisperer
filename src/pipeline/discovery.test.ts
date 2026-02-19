@@ -241,7 +241,7 @@ describe("parseApiResources", () => {
     expect(result[2].namespaced).toBe(false);
   });
 
-  it("returns empty array for header-only input", () => {
+  it("returns empty array for header-with-no-data input", () => {
     expect(parseApiResources(HEADER)).toEqual([]);
   });
 
@@ -306,7 +306,7 @@ describe("buildFullyQualifiedName", () => {
 describe("filterResources", () => {
   /**
    * Helper to create a ParsedApiResource with sensible defaults.
-   * Override only the fields relevant to each test case.
+   * Override the specific fields relevant to each test case.
    */
   function resource(overrides: Partial<ParsedApiResource>): ParsedApiResource {
     return {

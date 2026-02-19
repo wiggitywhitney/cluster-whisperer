@@ -272,7 +272,7 @@ async function main() {
         chromaUrl: options.chromaUrl,
       });
 
-      console.log("\nStarting capability sync...\n");
+      console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
 
       const result = await syncCapabilities({
         vectorStore,

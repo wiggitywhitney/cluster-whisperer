@@ -17,7 +17,7 @@ import type { VectorStore, VectorDocument } from "../vectorstore";
 
 /**
  * Creates a ResourceCapability with sensible defaults.
- * Override only the fields relevant to each test case.
+ * Override the specific fields relevant to each test case.
  */
 function makeCapability(
   overrides: Partial<ResourceCapability> = {}

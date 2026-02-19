@@ -64,7 +64,7 @@ export async function storeCapabilities(
   vectorStore: VectorStore,
   options?: StorageOptions
 ): Promise<void> {
-  const onProgress = options?.onProgress ?? console.log;
+  const onProgress = options?.onProgress ?? console.log; // eslint-disable-line no-console
 
   // Initialize the collection (idempotent — safe to call on every run)
   await vectorStore.initialize(CAPABILITIES_COLLECTION, {

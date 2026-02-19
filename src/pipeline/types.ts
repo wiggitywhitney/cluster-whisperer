@@ -62,7 +62,7 @@ export interface DiscoveryOptions {
   /**
    * Progress callback for long-running operations.
    * Called during schema extraction with messages like "Extracting schemas... (3 of 47)"
-   * Defaults to console.log.
+   * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
 }
@@ -141,7 +141,7 @@ export interface StorageOptions {
   /**
    * Progress callback for long-running operations.
    * Called with messages like "Storing capabilities (3 of 47)"
-   * Defaults to console.log.
+   * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
 }
@@ -170,7 +170,7 @@ export interface InferenceOptions {
   /**
    * Progress callback for long-running operations.
    * Called with messages like "Inferring capabilities (3 of 47): sqls.devopstoolkit.live"
-   * Defaults to console.log.
+   * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
 }
