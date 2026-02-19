@@ -1,6 +1,6 @@
 # PRD #26: Resource Instance Sync
 
-**Status**: Not Started
+**Status**: In Progress
 **Created**: 2026-02-11
 **GitHub Issue**: [#26](https://github.com/wiggitywhitney/cluster-whisperer/issues/26)
 
@@ -53,7 +53,7 @@ Our version will be lighter-weight. See `docs/viktors-pipeline-assessment.md` fo
 
 ## Milestones
 
-- [ ] **M1**: Resource Instance Discovery
+- [x] **M1**: Resource Instance Discovery
   - Enumerate resource types to sync (configurable list or discover all)
   - For each resource type, list instances via kubectl or K8s API
   - Extract metadata per instance: namespace, name, kind, apiVersion, labels, key annotations
@@ -86,7 +86,7 @@ Each document represents a single running resource instance:
 
 ```typescript
 {
-  id: "default/apps/v1/Deployment/nginx",  // namespace/group/version/kind/name
+  id: "default/apps/v1/Deployment/nginx",  // namespace/apiVersion/Kind/name
   document: "Deployment nginx | namespace: default | apiVersion: apps/v1 | labels: app=nginx",
   metadata: {
     namespace: "default",
@@ -116,11 +116,7 @@ Each document represents a single running resource instance:
 
 ### Decisions Deferred to Implementation
 
-- Whether to sync all resource types or a curated list
-- Whether to use `kubectl` subprocess or the Kubernetes JavaScript client
-- Whether to implement real-time watching (informers) or batch-only sync
 - How to handle large clusters (pagination, batching)
-- Whether instances go in the same collection as capabilities or a separate one
 
 ## Dependencies
 
@@ -138,10 +134,37 @@ Each document represents a single running resource instance:
 
 ## Design Decisions
 
-*Decisions will be logged here as they're made during implementation.*
+### DD-1: kubectl subprocess over Kubernetes JavaScript client
+**Decision**: Use `kubectl get <type> -A -o json` via the existing `executeKubectl` utility rather than adding the `@kubernetes/client-node` library.
+**Rationale**: The project already uses kubectl subprocess execution with shell-injection protection (`spawnSync` with args array). Adding a K8s client library would introduce a new dependency and a different interaction pattern. kubectl JSON output provides all the metadata we need.
+
+### DD-2: Reuse PRD #25 parsing functions
+**Decision**: Import `parseApiResources`, `filterResources`, and `extractGroup` from `discovery.ts` rather than reimplementing.
+**Rationale**: Both pipelines need to enumerate and filter resource types. The capability pipeline already has well-tested parsing logic for `kubectl api-resources -o wide` output. Instance discovery adds a `list` verb requirement on top of the existing filters.
+
+### DD-3: Separate instances collection
+**Decision**: Store instances in a dedicated `instances` collection, separate from the `capabilities` collection.
+**Rationale**: Capabilities describe resource *types* (one doc per kind), instances describe *running objects* (many docs per kind). Separate collections allow independent sync cycles and clear semantic separation. `INSTANCES_COLLECTION` constant was already defined in `vectorstore/index.ts`.
+
+### DD-4: Batch-only sync (no informers)
+**Decision**: Implement batch sync only (`kubectl get` per type) without real-time Kubernetes watching/informers.
+**Rationale**: Informers require a long-running controller process and add significant complexity. Batch sync is sufficient for the POC — the agent can re-sync on demand. Real-time watching is explicitly out of scope per the PRD.
+
+### DD-5: Instance ID format
+**Decision**: Use `namespace/apiVersion/Kind/name` as the canonical instance ID (e.g., `default/apps/v1/Deployment/nginx`). Cluster-scoped resources use `_cluster` as namespace.
+**Rationale**: Including the full apiVersion (not just group) ensures uniqueness even if a resource exists across multiple API versions. The format is human-readable and naturally hierarchical.
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+### 2026-02-19: M1 Resource Instance Discovery complete
+- Added `ResourceInstance` and `InstanceDiscoveryOptions` types to `src/pipeline/types.ts`
+- Created `src/pipeline/instance-discovery.ts` with discovery orchestrator and pure helper functions
+- Created `src/pipeline/instance-discovery.test.ts` with 25 unit tests (all passing)
+- Reuses PRD #25's `parseApiResources`, `filterResources`, `extractGroup` — no code duplication
+- Supports optional `resourceTypes` filter to narrow sync scope
+- Uses `-A` flag for namespaced resources, omits for cluster-scoped
+- Filters annotations to description-like only (`description` or `*/description`)
+- Handles kubectl failures per-type gracefully (warns and continues)
+- Full test suite: 109 passed, 21 skipped (integration tests requiring infrastructure)
