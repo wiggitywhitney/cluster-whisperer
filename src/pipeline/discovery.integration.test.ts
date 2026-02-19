@@ -42,11 +42,6 @@ function shouldSkip(): string | false {
 const skipReason = shouldSkip();
 
 describe.skipIf(!!skipReason)("discovery (integration)", () => {
-  if (skipReason) {
-    it.skip(`skipped: ${skipReason}`, () => {});
-    return;
-  }
-
   let resources: Awaited<ReturnType<typeof discoverResources>>;
   const progressMessages: string[] = [];
 

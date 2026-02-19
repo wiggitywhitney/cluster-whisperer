@@ -7,7 +7,7 @@
  *
  * 1. Semantic search (query) — natural language → vector similarity via embeddings
  * 2. Keyword search (keyword) — substring matching via Chroma where_document, no embedding call
- * 3. Metadata filters (kind, apiGroup, namespace) — exact-match on structured fields
+ * 3. Metadata filters (kind, apiGroup, namespace, complexity) — exact-match on structured fields
  *
  * Why one tool instead of separate tools?
  * Separate tools cause the LLM to make wasteful multi-call patterns (search then
@@ -135,7 +135,8 @@ export async function vectorSearch(
   // Validate that at least one search dimension is provided.
   // This check lives here (not in Zod .refine()) because LangChain's tool()
   // requires a plain ZodObject schema — ZodEffects from .refine() isn't supported.
-  if (!input.query && !input.keyword && !input.kind && !input.apiGroup && !input.namespace && !input.complexity) {
+  const hasSearchDimension = !!(input.query || input.keyword || input.kind || input.apiGroup || input.namespace || input.complexity);
+  if (!hasSearchDimension) {
     return "At least one search dimension is required: query (semantic), keyword (substring), or a metadata filter (kind, apiGroup, namespace, complexity).";
   }
 

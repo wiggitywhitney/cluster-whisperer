@@ -16,7 +16,7 @@
  * These tests are slower (~30-60 seconds) and cost real API credits.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { syncCapabilities } from "./runner";
 import {
   ChromaBackend,
@@ -177,12 +177,12 @@ const TEST_COLLECTION = `test-sync-runner-${Date.now()}`;
 const storedIds: string[] = [];
 
 describe.skipIf(!!skipReason)("syncCapabilities (integration)", () => {
-  if (skipReason) {
-    it.skip(`skipped: ${skipReason}`, () => {});
-    return;
-  }
-
   let vectorStore: VectorStore;
+
+  beforeAll(async () => {
+    const embedder = new VoyageEmbedding();
+    vectorStore = new ChromaBackend(embedder);
+  });
 
   afterAll(async () => {
     // Clean up test data
@@ -196,11 +196,6 @@ describe.skipIf(!!skipReason)("syncCapabilities (integration)", () => {
   });
 
   it("runs the full pipeline: discover -> infer -> store -> search", async () => {
-    // Create real vector store
-    const embedder = new VoyageEmbedding();
-    const chromaBackend = new ChromaBackend(embedder);
-    vectorStore = chromaBackend;
-
     // Initialize the test collection
     await vectorStore.initialize(TEST_COLLECTION, { distanceMetric: "cosine" });
 
@@ -215,7 +210,7 @@ describe.skipIf(!!skipReason)("syncCapabilities (integration)", () => {
     const progressMessages: string[] = [];
 
     const result = await syncCapabilities({
-      vectorStore: chromaBackend,
+      vectorStore,
       discoveryOptions: { kubectl: mockKubectl },
       // Use default Haiku model (real LLM calls)
       onProgress: (msg) => {

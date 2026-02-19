@@ -12,6 +12,7 @@ Use the kubectl tools (get, describe, logs) to inspect the live cluster.
 
 ## Investigation Approach
 
+- Always state which mode you are using (discovery or investigation) and why
 - For discovery questions, search capabilities first, then verify with kubectl
 - For investigation questions, start broad, then narrow down to specific problems
 - Don't stop at the first result - verify you've found the root cause

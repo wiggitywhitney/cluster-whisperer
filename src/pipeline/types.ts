@@ -111,44 +111,14 @@ export interface ResourceCapability {
 /**
  * The subset of ResourceCapability fields that come from the LLM.
  *
- * Used as the return type of the structured output call. The remaining
- * fields (resourceName, apiVersion, group, kind) are copied from the
- * DiscoveredResource input — no need for the LLM to repeat them.
+ * Derived from ResourceCapability via Omit so the two types stay structurally
+ * coupled. The remaining fields (resourceName, apiVersion, group, kind) are
+ * copied from the DiscoveredResource input — no need for the LLM to repeat them.
  */
-export interface LlmCapabilityResult {
-  capabilities: string[];
-  providers: string[];
-  complexity: "low" | "medium" | "high";
-  description: string;
-  useCase: string;
-  confidence: number;
-}
-
-// ---------------------------------------------------------------------------
-// M3: Storage types
-// ---------------------------------------------------------------------------
-
-/**
- * Options for the storage pipeline functions.
- * Accepts injectable dependencies for testing.
- *
- * The VectorStore is injected rather than imported directly so that:
- * - Unit tests can use a mock (no Chroma server needed)
- * - Integration tests can use a real ChromaBackend
- * - The storage code stays backend-agnostic
- */
-export interface StorageOptions {
-  /**
-   * Progress callback for long-running operations.
-   * Called with messages like "Storing capabilities (3 of 47)"
-   * Defaults to stdout.
-   */
-  onProgress?: (message: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// M2: Inference types
-// ---------------------------------------------------------------------------
+export type LlmCapabilityResult = Omit<
+  ResourceCapability,
+  "resourceName" | "apiVersion" | "group" | "kind"
+>;
 
 /**
  * Options for the inference pipeline functions.
@@ -170,6 +140,28 @@ export interface InferenceOptions {
   /**
    * Progress callback for long-running operations.
    * Called with messages like "Inferring capabilities (3 of 47): sqls.devopstoolkit.live"
+   * Defaults to stdout.
+   */
+  onProgress?: (message: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// M3: Storage types
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for the storage pipeline functions.
+ * Accepts injectable dependencies for testing.
+ *
+ * The VectorStore is injected rather than imported directly so that:
+ * - Unit tests can use a mock (no Chroma server needed)
+ * - Integration tests can use a real ChromaBackend
+ * - The storage code stays backend-agnostic
+ */
+export interface StorageOptions {
+  /**
+   * Progress callback for long-running operations.
+   * Called with messages like "Storing capabilities (3 of 47)"
    * Defaults to stdout.
    */
   onProgress?: (message: string) => void;

@@ -100,13 +100,10 @@ function getPromptTemplate(): string {
     try {
       cachedPrompt = fs.readFileSync(promptPath, "utf8");
     } catch {
-      console.error(
-        `Error: Could not load prompt template from ${promptPath}`
+      throw new Error(
+        `Could not load prompt template from ${promptPath}. ` +
+          `Make sure prompts/capability-inference.md exists in the project root.`
       );
-      console.error(
-        "Make sure prompts/capability-inference.md exists in the project root."
-      );
-      process.exit(1);
     }
   }
   return cachedPrompt;

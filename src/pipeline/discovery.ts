@@ -290,9 +290,9 @@ function getCrdNames(
 
   try {
     const parsed = JSON.parse(result.output);
-    const names = (parsed.items || []).map(
-      (item: { metadata: { name: string } }) => item.metadata.name
-    );
+    const names = (parsed.items || [])
+      .filter((item: { metadata?: { name?: string } }) => item?.metadata?.name)
+      .map((item: { metadata: { name: string } }) => item.metadata.name);
     return new Set(names);
   } catch {
     return new Set();

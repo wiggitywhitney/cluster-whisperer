@@ -15,9 +15,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { capabilityToDocument, storeCapabilities } from "./storage";
-import { vectorSearch } from "../tools/core/vector-search";
 import type { ResourceCapability } from "./types";
-import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
+import {
+  ChromaBackend,
+  VoyageEmbedding,
+  CAPABILITIES_COLLECTION,
+} from "../vectorstore";
 import type { VectorStore } from "../vectorstore";
 
 // ---------------------------------------------------------------------------
@@ -145,11 +148,6 @@ const ALL_CAPABILITIES = [
 const TEST_COLLECTION = `test-capabilities-${Date.now()}`;
 
 describe.skipIf(!!skipReason)("storage and search (integration)", () => {
-  if (skipReason) {
-    it.skip(`skipped: ${skipReason}`, () => {});
-    return;
-  }
-
   let vectorStore: VectorStore;
   let chromaBackend: ChromaBackend;
 
@@ -304,24 +302,24 @@ describe.skipIf(!!skipReason)("storage and search (integration)", () => {
   // storeCapabilities orchestrator
   // -------------------------------------------------------------------------
 
-  it("stores capabilities and reports progress", async () => {
-    const storeTestCollection = `test-store-${Date.now()}`;
+  it("stores capabilities and reports progress via orchestrator", async () => {
     const progressMessages: string[] = [];
 
-    // Use the actual storeCapabilities function with our real vector store
-    // but override the collection name by initializing separately
-    await vectorStore.initialize(storeTestCollection, {
-      distanceMetric: "cosine",
-    });
-
-    const documents = [DATABASE_CAPABILITY, CONFIGMAP_CAPABILITY].map(
-      capabilityToDocument
+    // Call the real storeCapabilities orchestrator with progress tracking.
+    // It writes to CAPABILITIES_COLLECTION (hardcoded), so we read from there.
+    await storeCapabilities(
+      [DATABASE_CAPABILITY, CONFIGMAP_CAPABILITY],
+      vectorStore,
+      { onProgress: (msg) => progressMessages.push(msg) }
     );
-    await vectorStore.store(storeTestCollection, documents);
 
-    // Verify documents were stored by searching
+    // Verify progress was reported
+    expect(progressMessages.length).toBeGreaterThan(0);
+    expect(progressMessages.some((m) => m.includes("Storing"))).toBe(true);
+
+    // Verify documents were stored by searching the capabilities collection
     const results = await vectorStore.search(
-      storeTestCollection,
+      CAPABILITIES_COLLECTION,
       "database",
       { nResults: 5 }
     );
@@ -330,7 +328,7 @@ describe.skipIf(!!skipReason)("storage and search (integration)", () => {
 
     // Clean up
     try {
-      await vectorStore.delete(storeTestCollection, [
+      await vectorStore.delete(CAPABILITIES_COLLECTION, [
         DATABASE_CAPABILITY.resourceName,
         CONFIGMAP_CAPABILITY.resourceName,
       ]);

@@ -274,14 +274,28 @@ async function main() {
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
 
-      const result = await syncCapabilities({
-        vectorStore,
-        dryRun: options.dryRun,
-      });
+      try {
+        const result = await syncCapabilities({
+          vectorStore,
+          dryRun: options.dryRun,
+        });
 
-      // Exit with non-zero code if nothing was discovered (likely a cluster issue)
-      if (result.discovered === 0) {
-        console.error("\nNo resources discovered. Is kubectl connected to a cluster?");
+        // Exit with non-zero code if nothing was discovered (likely a cluster issue)
+        if (result.discovered === 0) {
+          console.error("\nNo resources discovered. Is kubectl connected to a cluster?");
+          process.exit(1);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("ECONNREFUSED") || message.includes("fetch")) {
+          console.error(`\nChroma connection failed: ${message}`);
+          console.error("Is Chroma running? Check --chroma-url or CHROMA_URL.");
+        } else if (message.includes("API key") || message.includes("401") || message.includes("authentication")) {
+          console.error(`\nAPI key error: ${message}`);
+          console.error("Check ANTHROPIC_API_KEY and VOYAGE_API_KEY environment variables.");
+        } else {
+          console.error(`\nSync failed: ${message}`);
+        }
         process.exit(1);
       }
     });
