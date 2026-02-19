@@ -8,6 +8,7 @@ dist/
 
 # Chroma local storage
 data/
+chroma-data/
 
 # OS
 .DS_Store
