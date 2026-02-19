@@ -4,8 +4,16 @@
  *
  * What this file does:
  * This is the main entry point when you run the cluster-whisperer command.
- * It takes a natural language question, sends it to the agent, and streams
- * the investigation process to the terminal so you can see what's happening.
+ * It supports two modes:
+ *
+ * 1. Ask a question (default):
+ *    cluster-whisperer "what pods are running?"
+ *    Sends the question to the investigator agent and streams the response.
+ *
+ * 2. Sync capabilities:
+ *    cluster-whisperer sync
+ *    Scans the cluster's CRDs, infers what each one does via LLM, and stores
+ *    the descriptions in the vector database for semantic search.
  *
  * The shebang (#!/usr/bin/env node):
  * This line tells the OS to run this file with Node.js.
@@ -21,25 +29,18 @@ import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
 import { getInvestigatorAgent, truncate } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
+import { syncCapabilities } from "./pipeline";
+import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
+
+// ---------------------------------------------------------------------------
+// Environment validation
+// ---------------------------------------------------------------------------
 
 /**
- * Validates that the environment is properly configured before running the agent.
- *
- * Why validate upfront?
- * It's better to fail fast with a clear message than to get a cryptic error
- * deep in the LangChain stack. These checks catch the most common setup issues.
+ * Validates that kubectl is available.
+ * Both the investigate and sync commands need kubectl.
  */
-function validateEnvironment(): void {
-  // Check for Anthropic API key - required for the LLM
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
-    console.error("");
-    console.error("Export your API key:");
-    console.error("  export ANTHROPIC_API_KEY=your-key-here");
-    process.exit(1);
-  }
-
-  // Check that kubectl is available
+function validateKubectl(): void {
   try {
     execSync("kubectl version --client", {
       encoding: "utf-8",
@@ -55,7 +56,53 @@ function validateEnvironment(): void {
 }
 
 /**
- * Main function - sets up the CLI and runs the agent
+ * Validates that the Anthropic API key is set.
+ * Both the investigate agent and the sync inference pipeline need it.
+ */
+function validateAnthropicKey(): void {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
+    console.error("");
+    console.error("Export your API key:");
+    console.error("  export ANTHROPIC_API_KEY=your-key-here");
+    process.exit(1);
+  }
+}
+
+/**
+ * Validates that the Voyage AI API key is set.
+ * Only the sync command needs this (for embedding capability descriptions).
+ */
+function validateVoyageKey(): void {
+  if (!process.env.VOYAGE_API_KEY) {
+    console.error("Error: VOYAGE_API_KEY environment variable is not set.");
+    console.error("");
+    console.error("Export your API key:");
+    console.error("  export VOYAGE_API_KEY=your-key-here");
+    process.exit(1);
+  }
+}
+
+/**
+ * Validates environment for the investigate command.
+ */
+function validateInvestigateEnvironment(): void {
+  validateAnthropicKey();
+  validateKubectl();
+}
+
+/**
+ * Validates environment for the sync command.
+ * Needs everything investigate needs, plus Voyage AI for embeddings.
+ */
+function validateSyncEnvironment(): void {
+  validateAnthropicKey();
+  validateVoyageKey();
+  validateKubectl();
+}
+
+/**
+ * Main function - sets up the CLI with investigate (default) and sync subcommands
  */
 async function main() {
   const program = new Command();
@@ -67,11 +114,15 @@ async function main() {
     )
     .version("0.1.0");
 
+  // -------------------------------------------------------------------------
+  // Default command: ask a question
+  // -------------------------------------------------------------------------
+
   program
     .argument("<question>", "Natural language question about your cluster")
     .action(async (question: string) => {
       // Validate environment before doing anything else
-      validateEnvironment();
+      validateInvestigateEnvironment();
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -196,6 +247,43 @@ async function main() {
           console.log();
         }
       });
+    });
+
+  // -------------------------------------------------------------------------
+  // Sync subcommand: populate vector DB with capability descriptions
+  // -------------------------------------------------------------------------
+
+  program
+    .command("sync")
+    .description(
+      "Scan cluster CRDs and sync capability descriptions to the vector database"
+    )
+    .option("--dry-run", "Discover and infer capabilities without storing them")
+    .option(
+      "--chroma-url <url>",
+      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    )
+    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+      validateSyncEnvironment();
+
+      // Create the vector store with Voyage AI embeddings
+      const embedder = new VoyageEmbedding();
+      const vectorStore = new ChromaBackend(embedder, {
+        chromaUrl: options.chromaUrl,
+      });
+
+      console.log("\nStarting capability sync...\n");
+
+      const result = await syncCapabilities({
+        vectorStore,
+        dryRun: options.dryRun,
+      });
+
+      // Exit with non-zero code if nothing was discovered (likely a cluster issue)
+      if (result.discovered === 0) {
+        console.error("\nNo resources discovered. Is kubectl connected to a cluster?");
+        process.exit(1);
+      }
     });
 
   await program.parseAsync(process.argv);

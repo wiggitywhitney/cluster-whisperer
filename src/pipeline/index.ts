@@ -38,3 +38,7 @@ export { inferCapability, inferCapabilities, LlmCapabilitySchema } from "./infer
 
 // M3: Vector Storage
 export { capabilityToDocument, storeCapabilities } from "./storage";
+
+// M4: Pipeline Runner
+export { syncCapabilities } from "./runner";
+export type { SyncOptions, SyncResult } from "./runner";

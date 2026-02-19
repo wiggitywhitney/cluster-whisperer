@@ -70,9 +70,9 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Verify filter search works: "all low-complexity resources" → filters by metadata
   - Tune retrieval parameters (top-k, similarity threshold) with real capability data
 
-- [ ] **M4**: CLI Tool / Runner
+- [x] **M4**: CLI Tool / Runner
   - Wrap the pipeline as a runnable tool (CLI command, npm script, or startup hook)
-  - Support scanning all resources or a specific subset
+  - ~~Support scanning all resources or a specific subset~~ (subset scanning deferred — not needed for KubeCon demo)
   - Log progress (N of M resources scanned)
   - Handle incremental updates (re-scan only changed/new CRDs, or full rescan)
 
@@ -141,7 +141,7 @@ The prompt template should:
 - ~~Whether to use `kubectl explain` via subprocess or the Kubernetes API directly~~ → Decided: subprocess (see Design Decisions)
 - ~~Whether to run inference sequentially or in parallel (sequential is simpler, parallel is faster)~~ → Decided: sequential (see Design Decisions)
 - How to handle resources where `kubectl explain` returns minimal information
-- Whether the runner is a standalone CLI, an npm script, or integrated into the MCP server startup
+- ~~Whether the runner is a standalone CLI, an npm script, or integrated into the MCP server startup~~ → Decided: `sync` subcommand of existing CLI (see Design Decisions)
 
 ## Dependencies
 
@@ -174,6 +174,10 @@ The prompt template should:
 | 2026-02-19 | Embedding text: Kind+group header, then capabilities, providers, complexity, description, useCase | Maximizes semantic match quality. Integration tests confirm "database" → SQL CRD as top result, "traffic routing" → Ingress, "object storage backup" → S3 Bucket. |
 | 2026-02-19 | Providers stored as comma-separated string in metadata | Chroma metadata values must be primitives (no arrays). Provider names also appear in embedding text for semantic matching. |
 | 2026-02-19 | Added `complexity` filter to `vector_search` tool | PRD M3 requires "all low-complexity resources" filtering. Added to the existing tool schema alongside kind, apiGroup, namespace. |
+| 2026-02-19 | `sync` subcommand of existing CLI (not separate binary or npm script) | Follows existing commander pattern in `src/index.ts`. Single unified CLI surface. "sync" name chosen over "infer"/"scan"/"seed" — implies aligning vector DB with cluster state, reads naturally for re-runs. |
+| 2026-02-19 | Full rescan with upsert (not incremental diff) | Simplest correct implementation. VectorStore.store() uses upsert, so re-runs are safe. Incremental diff adds complexity for marginal benefit on ~100 resources. |
+| 2026-02-19 | Subset scanning deferred | `--kinds`/`--groups` filters not needed for KubeCon demo. Full scan is the primary use case. Can be added later if needed. |
+| 2026-02-19 | VectorStore as required parameter to runner | CLI creates dependencies (ChromaBackend + VoyageEmbedding) and passes them in. Runner stays testable via DI, matching M1/M2/M3 pattern. |
 
 ---
 
@@ -214,3 +218,15 @@ The prompt template should:
 - 22 unit tests (mocked VectorStore) + 10 integration tests (real Chroma + Voyage AI) — all passing
 - Integration tests confirm: "database" → SQL CRD top result, "traffic routing" → Ingress found, `complexity:"low"` filter works, combined semantic+filter works, keyword "postgresql" → SQL CRD found
 - Full test suite: 91 tests passing (33 M1 unit + 6 M1 integration + 11 M2 unit + 9 M2 integration + 22 M3 unit + 10 M3 integration)
+
+### 2026-02-19: M4 Complete — CLI Tool / Runner
+- Created `src/pipeline/runner.ts` with `syncCapabilities()` — orchestrates discover → infer → store
+- `SyncOptions` interface accepts injectable VectorStore, forwarded DiscoveryOptions/InferenceOptions, dryRun flag
+- `SyncResult` returns counts: discovered, inferred, stored
+- Runner passes single `onProgress` callback through all three stages for unified progress output
+- Added `sync` subcommand to `src/index.ts` with `--dry-run` and `--chroma-url` options
+- Split environment validation into composable functions: `validateKubectl()`, `validateAnthropicKey()`, `validateVoyageKey()`
+- Updated `src/pipeline/index.ts` barrel exports with runner, SyncOptions, SyncResult
+- 12 unit tests (mocked pipeline stages via vi.mock) + 2 integration tests (mock kubectl, real Haiku + Chroma + Voyage)
+- Full unit test suite: 78 tests passing (33 M1 + 11 M2 + 22 M3 + 12 M4)
+- Deferred: subset scanning (`--kinds`/`--groups`), incremental diff (using full rescan with upsert instead)
