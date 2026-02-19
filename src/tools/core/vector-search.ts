@@ -71,6 +71,12 @@ export const vectorSearchSchema = z.object({
     .describe(
       "Filter by namespace (mainly useful for the 'instances' collection)"
     ),
+  complexity: z
+    .enum(["low", "medium", "high"])
+    .optional()
+    .describe(
+      "Filter by resource complexity (mainly useful for the 'capabilities' collection). 'low' = few fields, 'medium' = several fields, 'high' = many nested fields."
+    ),
   nResults: z
     .number()
     .optional()
@@ -92,7 +98,7 @@ export const vectorSearchDescription = `Search the vector database to discover K
 
 2. **Keyword search** (keyword): Exact substring match on document text. Example: keyword "backup" finds docs mentioning "backup". Fast and free — no embedding call.
 
-3. **Metadata filters** (kind, apiGroup, namespace): Exact match on structured fields. Example: kind "Deployment" finds only Deployments.
+3. **Metadata filters** (kind, apiGroup, namespace, complexity): Exact match on structured fields. Example: kind "Deployment" finds only Deployments. complexity "low" finds simple resources.
 
 At least one dimension is required. All three compose freely:
 - query alone → semantic discovery ("what resources handle databases?")
@@ -129,8 +135,8 @@ export async function vectorSearch(
   // Validate that at least one search dimension is provided.
   // This check lives here (not in Zod .refine()) because LangChain's tool()
   // requires a plain ZodObject schema — ZodEffects from .refine() isn't supported.
-  if (!input.query && !input.keyword && !input.kind && !input.apiGroup && !input.namespace) {
-    return "At least one search dimension is required: query (semantic), keyword (substring), or a metadata filter (kind, apiGroup, namespace).";
+  if (!input.query && !input.keyword && !input.kind && !input.apiGroup && !input.namespace && !input.complexity) {
+    return "At least one search dimension is required: query (semantic), keyword (substring), or a metadata filter (kind, apiGroup, namespace, complexity).";
   }
 
   try {
@@ -197,6 +203,9 @@ function buildWhereFilter(
   }
   if (input.namespace) {
     conditions.push({ namespace: input.namespace });
+  }
+  if (input.complexity) {
+    conditions.push({ complexity: input.complexity });
   }
 
   if (conditions.length === 0) return undefined;

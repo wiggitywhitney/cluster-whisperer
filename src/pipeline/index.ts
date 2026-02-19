@@ -21,6 +21,7 @@ export type {
   ResourceCapability,
   LlmCapabilityResult,
   InferenceOptions,
+  StorageOptions,
 } from "./types";
 
 // M1: CRD Discovery
@@ -34,3 +35,6 @@ export {
 
 // M2: LLM Inference
 export { inferCapability, inferCapabilities, LlmCapabilitySchema } from "./inference";
+
+// M3: Vector Storage
+export { capabilityToDocument, storeCapabilities } from "./storage";

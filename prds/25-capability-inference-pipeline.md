@@ -40,11 +40,11 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
 
 ## Success Criteria
 
-- [ ] Pipeline discovers CRDs and API resources from a live cluster
+- [x] Pipeline discovers CRDs and API resources from a live cluster
 - [x] LLM analyzes each resource schema and produces structured capability descriptions
-- [ ] Capability descriptions are stored in the vector database via PRD #7's interface
-- [ ] Agent can semantically search capabilities (e.g., "database" finds `sqls.devopstoolkit.live`)
-- [ ] Pipeline is vector-DB-agnostic (works with Chroma now, Qdrant later)
+- [x] Capability descriptions are stored in the vector database via PRD #7's interface
+- [x] Agent can semantically search capabilities (e.g., "database" finds `sqls.devopstoolkit.live`)
+- [x] Pipeline is vector-DB-agnostic (works with Chroma now, Qdrant later)
 - [ ] Documentation explains how the inference pipeline works
 
 ## Milestones
@@ -62,7 +62,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Handle LLM errors and validation of responses
   - Output: structured capability descriptions for each resource
 
-- [ ] **M3**: Storage and Search
+- [x] **M3**: Storage and Search
   - Store capability descriptions in the vector DB via PRD #7's interface
   - Construct embedding text from capability fields (name + capabilities + description + useCase)
   - Store metadata for filtering (kind, apiGroup, complexity, providers)
@@ -171,6 +171,9 @@ The prompt template should:
 | 2026-02-18 | Zod + withStructuredOutput() for LLM responses | Guarantees valid JSON matching schema via Anthropic's tool_use under the hood. Zod already a dependency. Eliminates manual JSON parsing and regex. |
 | 2026-02-18 | Prompt template as separate .md file | Matches investigator.md pattern in `prompts/` directory. Easy to iterate on prompt wording without touching code. |
 | 2026-02-18 | Assembly complexity in prompt (inspired by Viktor's dot-ai) | Viktor's prompt distinguishes standalone/coordinated/orchestrated resources. Adopted this for our complexity assessment — a Crossplane Composition is "low config, standalone" while a raw RDS Instance is "high config, coordinated." Also added 3 examples (database, storage, core K8s) vs 1, matching Viktor's pattern of diverse reference points. |
+| 2026-02-19 | Embedding text: Kind+group header, then capabilities, providers, complexity, description, useCase | Maximizes semantic match quality. Integration tests confirm "database" → SQL CRD as top result, "traffic routing" → Ingress, "object storage backup" → S3 Bucket. |
+| 2026-02-19 | Providers stored as comma-separated string in metadata | Chroma metadata values must be primitives (no arrays). Provider names also appear in embedding text for semantic matching. |
+| 2026-02-19 | Added `complexity` filter to `vector_search` tool | PRD M3 requires "all low-complexity resources" filtering. Added to the existing tool schema alongside kind, apiGroup, namespace. |
 
 ---
 
@@ -201,3 +204,13 @@ The prompt template should:
 - 11 unit tests (mocked model) + 9 integration tests (real Haiku API) — all passing
 - Integration tests confirm: SQL CRD → database/postgresql capabilities, ConfigMap → configuration capabilities with empty providers
 - Full test suite: 59 tests passing (33 M1 unit + 6 M1 integration + 11 M2 unit + 9 M2 integration)
+
+### 2026-02-19: M3 Complete — Storage and Search
+- Created `src/pipeline/storage.ts` with `capabilityToDocument()` (pure mapping) and `storeCapabilities()` (orchestrator)
+- `capabilityToDocument()` builds embedding text: Kind+group header → capabilities → providers+complexity → description → useCase
+- Metadata stored as flat key-value pairs: kind, apiGroup, apiVersion, complexity, providers (comma-separated), confidence, resourceName
+- Added `StorageOptions` interface to `src/pipeline/types.ts` with DI pattern matching M1/M2
+- Added `complexity` filter to `vector_search` tool (`src/tools/core/vector-search.ts`) for "all low-complexity resources" queries
+- 22 unit tests (mocked VectorStore) + 10 integration tests (real Chroma + Voyage AI) — all passing
+- Integration tests confirm: "database" → SQL CRD top result, "traffic routing" → Ingress found, `complexity:"low"` filter works, combined semantic+filter works, keyword "postgresql" → SQL CRD found
+- Full test suite: 91 tests passing (33 M1 unit + 6 M1 integration + 11 M2 unit + 9 M2 integration + 22 M3 unit + 10 M3 integration)

@@ -124,6 +124,32 @@ export interface LlmCapabilityResult {
   confidence: number;
 }
 
+// ---------------------------------------------------------------------------
+// M3: Storage types
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for the storage pipeline functions.
+ * Accepts injectable dependencies for testing.
+ *
+ * The VectorStore is injected rather than imported directly so that:
+ * - Unit tests can use a mock (no Chroma server needed)
+ * - Integration tests can use a real ChromaBackend
+ * - The storage code stays backend-agnostic
+ */
+export interface StorageOptions {
+  /**
+   * Progress callback for long-running operations.
+   * Called with messages like "Storing capabilities (3 of 47)"
+   * Defaults to console.log.
+   */
+  onProgress?: (message: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// M2: Inference types
+// ---------------------------------------------------------------------------
+
 /**
  * Options for the inference pipeline functions.
  * Accepts injectable dependencies for testing.
