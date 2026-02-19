@@ -170,6 +170,7 @@ The prompt template should:
 | 2026-02-18 | Haiku for batch inference (not Sonnet) | M2 processes dozens of resources sequentially. Haiku is faster, cheaper, and sufficient for schema analysis. Sonnet reserved for investigator agent where reasoning depth matters. |
 | 2026-02-18 | Zod + withStructuredOutput() for LLM responses | Guarantees valid JSON matching schema via Anthropic's tool_use under the hood. Zod already a dependency. Eliminates manual JSON parsing and regex. |
 | 2026-02-18 | Prompt template as separate .md file | Matches investigator.md pattern in `prompts/` directory. Easy to iterate on prompt wording without touching code. |
+| 2026-02-18 | Assembly complexity in prompt (inspired by Viktor's dot-ai) | Viktor's prompt distinguishes standalone/coordinated/orchestrated resources. Adopted this for our complexity assessment — a Crossplane Composition is "low config, standalone" while a raw RDS Instance is "high config, coordinated." Also added 3 examples (database, storage, core K8s) vs 1, matching Viktor's pattern of diverse reference points. |
 
 ---
 
