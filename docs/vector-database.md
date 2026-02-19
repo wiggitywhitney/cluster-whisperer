@@ -66,13 +66,13 @@ We use two separate collections (like two separate tables):
 
 ### 1. Capabilities Collection
 
-**What it stores:** One document per Kubernetes resource *type* (e.g., Deployment, SQLClaim).
+**What it stores:** One document per Kubernetes resource *type* (e.g., Deployment, Instance.rds.aws.upbound.io).
 
-**What's in each document:** An AI-generated description of what the resource does, its capabilities, and when to use it.
+**What's in each document:** An AI-generated description of what the resource does, its capabilities, providers, complexity, and when to use it. See `docs/capability-inference-pipeline.md` for the full data structure.
 
-**When it's searched:** "How do I deploy a database?" → semantic search finds SQLClaim because its description mentions database management.
+**When it's searched:** "How do I deploy a database?" → semantic search finds `instances.rds.aws.upbound.io` because its description mentions managed database, MySQL, PostgreSQL.
 
-**Populated by:** PRD #25 (Capability Inference Pipeline)
+**Populated by:** The `sync` command (`npx tsx src/index.ts sync`). See `docs/capability-inference-pipeline.md` for setup and usage.
 
 ### 2. Instances Collection
 
@@ -144,3 +144,63 @@ vals exec -i -f .vals.yaml -- node dist/your-script.js
 |----------|---------|-------------|
 | `VOYAGE_API_KEY` | (required) | Voyage AI API key for embeddings |
 | `CHROMA_URL` | `http://localhost:8000` | Chroma server URL |
+
+## Real Usage Patterns
+
+These examples show how the agent searches capabilities after running `sync` on a cluster with Crossplane AWS providers.
+
+### Semantic Search — Find by Meaning
+
+The agent asks: "what resources handle databases?"
+
+```text
+vector_search(collection: "capabilities", query: "managed database")
+```
+
+Returns ranked results by semantic similarity:
+1. `instances.rds.aws.upbound.io` (distance: 0.35) — MySQL, PostgreSQL, MariaDB, Oracle, SQL Server
+2. `clusterinstances.rds.aws.upbound.io` (distance: 0.35) — Aurora cluster instances
+3. `clusters.docdb.aws.upbound.io` (distance: 0.38) — MongoDB-compatible DocumentDB
+4. `clusters.neptune.aws.upbound.io` (distance: 0.40) — Graph database
+
+The query "managed database" found RDS, DocumentDB, and Neptune resources — none of which have "database" in their Kubernetes resource name.
+
+### Keyword Search — Find by Exact Term
+
+The agent knows a specific term to look for:
+
+```text
+vector_search(collection: "capabilities", keyword: "postgresql")
+```
+
+Returns documents whose text contains the substring "postgresql" — fast, no embedding API call needed. Finds RDS instances and cluster instances that support PostgreSQL.
+
+### Metadata Filter — Find by Structure
+
+The agent wants simple resources only:
+
+```text
+vector_search(collection: "capabilities", complexity: "low")
+```
+
+Returns ConfigMap, Secret, Service, Namespace, and other resources rated as low complexity by the LLM. Useful for recommending starting points to new users.
+
+### Combined — Semantic + Filter
+
+The agent wants database resources that are simple to configure:
+
+```text
+vector_search(collection: "capabilities", query: "database", complexity: "low")
+```
+
+Combines semantic similarity (finds database-related resources) with exact metadata filtering (only low complexity). This narrows results to approachable database options.
+
+### Discovery → Investigation Flow
+
+The typical agent workflow combines vector search with kubectl:
+
+1. **Search capabilities**: `vector_search(query: "database")` → finds CRD types
+2. **Check what's deployed**: `kubectl_get(resource: "instances.rds.aws.upbound.io", namespace: "all")` → finds running instances
+3. **Inspect details**: `kubectl_describe(resource: "instances.rds.aws.upbound.io", name: "my-db")` → gets current state
+
+This is the "semantic bridge" — vector search finds *what types exist*, then kubectl inspects *what's actually running*.

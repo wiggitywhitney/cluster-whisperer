@@ -1,6 +1,6 @@
 # PRD #25: Capability Inference Pipeline
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-02-11
 **GitHub Issue**: [#25](https://github.com/wiggitywhitney/cluster-whisperer/issues/25)
 
@@ -45,7 +45,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
 - [x] Capability descriptions are stored in the vector database via PRD #7's interface
 - [x] Agent can semantically search capabilities (e.g., "database" finds `sqls.devopstoolkit.live`)
 - [x] Pipeline is vector-DB-agnostic (works with Chroma now, Qdrant later)
-- [ ] Documentation explains how the inference pipeline works
+- [x] Documentation explains how the inference pipeline works
 
 ## Milestones
 
@@ -76,7 +76,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Log progress (N of M resources scanned)
   - Handle incremental updates (re-scan only changed/new CRDs, or full rescan)
 
-- [ ] **M5**: End-to-End Demo Validation
+- [x] **M5**: End-to-End Demo Validation
   - Load capabilities from the demo cluster (with many database CRDs installed)
   - Test the full flow: user asks "how do I deploy a database?" → agent searches capabilities → finds the right CRD → recommends it
   - Document the pipeline setup and usage
@@ -178,6 +178,7 @@ The prompt template should:
 | 2026-02-19 | Full rescan with upsert (not incremental diff) | Simplest correct implementation. VectorStore.store() uses upsert, so re-runs are safe. Incremental diff adds complexity for marginal benefit on ~100 resources. |
 | 2026-02-19 | Subset scanning deferred | `--kinds`/`--groups` filters not needed for KubeCon demo. Full scan is the primary use case. Can be added later if needed. |
 | 2026-02-19 | VectorStore as required parameter to runner | CLI creates dependencies (ChromaBackend + VoyageEmbedding) and passes them in. Runner stays testable via DI, matching M1/M2/M3 pattern. |
+| 2026-02-19 | Investigator prompt needs explicit vector search guidance | Without prompt guidance, the agent defaulted to generic K8s knowledge instead of searching capabilities. Added "Two Modes of Operation" section: discovery questions → vector_search first, investigation questions → kubectl tools. |
 
 ---
 
@@ -230,3 +231,15 @@ The prompt template should:
 - 12 unit tests (mocked pipeline stages via vi.mock) + 2 integration tests (mock kubectl, real Haiku + Chroma + Voyage)
 - Full unit test suite: 78 tests passing (33 M1 + 11 M2 + 22 M3 + 12 M4)
 - Deferred: subset scanning (`--kinds`/`--groups`), incremental diff (using full rescan with upsert instead)
+
+### 2026-02-19: M5 Complete — End-to-End Demo Validation
+- Ran full sync against demo cluster: 153 resources discovered, 153 inferred, 153 stored (Crossplane + 8 AWS database providers, 166 total API resources, 13 filtered)
+- Validated full agent flow via MCP and CLI:
+  - "How do I deploy a database?" → agent searched capabilities → found RDS, DocumentDB, Neptune, Keyspaces → recommended Crossplane approach with specific CRD names
+  - "What are the simplest resources?" → agent used complexity filter → found ConfigMap, Secret, Service, Namespace
+  - "Search capabilities for managed database" → semantic search returned ranked results with correct distances
+- Updated `prompts/investigator.md` with "Two Modes of Operation" section — agent now uses vector search for discovery questions and kubectl for investigation questions
+- Created `docs/capability-inference-pipeline.md` covering setup, sync command, data structures, embedding text format, metadata fields, and architecture
+- Updated `docs/vector-database.md` with real usage patterns: semantic search examples, keyword search, metadata filters, combined queries, and the discovery→investigation flow
+- Full test suite: 105 tests passing (78 unit + 27 integration)
+- All success criteria met, all milestones complete
