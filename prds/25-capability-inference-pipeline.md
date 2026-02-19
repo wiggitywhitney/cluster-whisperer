@@ -41,7 +41,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
 ## Success Criteria
 
 - [ ] Pipeline discovers CRDs and API resources from a live cluster
-- [ ] LLM analyzes each resource schema and produces structured capability descriptions
+- [x] LLM analyzes each resource schema and produces structured capability descriptions
 - [ ] Capability descriptions are stored in the vector database via PRD #7's interface
 - [ ] Agent can semantically search capabilities (e.g., "database" finds `sqls.devopstoolkit.live`)
 - [ ] Pipeline is vector-DB-agnostic (works with Chroma now, Qdrant later)
@@ -55,7 +55,7 @@ Our version will be lighter-weight — a CLI tool or startup script rather than 
   - Filter out low-value resources (Events, Leases, EndpointSlices, subresources)
   - Output: a list of resources with their schema text, ready for LLM analysis
 
-- [ ] **M2**: LLM Inference Pipeline
+- [x] **M2**: LLM Inference Pipeline
   - Design the prompt template for capability inference
   - Send resource schemas to the LLM, parse structured JSON responses
   - Define the `ResourceCapability` data structure (capabilities, providers, complexity, description, useCase)
@@ -137,7 +137,7 @@ The prompt template should:
 
 ### Decisions Deferred to Implementation
 
-- Exact prompt template wording (will iterate during M2)
+- ~~Exact prompt template wording (will iterate during M2)~~ → Decided: see `prompts/capability-inference.md`
 - ~~Whether to use `kubectl explain` via subprocess or the Kubernetes API directly~~ → Decided: subprocess (see Design Decisions)
 - ~~Whether to run inference sequentially or in parallel (sequential is simpler, parallel is faster)~~ → Decided: sequential (see Design Decisions)
 - How to handle resources where `kubectl explain` returns minimal information
@@ -189,3 +189,14 @@ The prompt template should:
 - Installed Crossplane v2.2.0 in target cluster
 - Installed 8 AWS database Upbound providers (v1.23.2): RDS, DynamoDB, ElastiCache, DocumentDB, Neptune, Redshift, MemoryDB, Keyspaces
 - Cluster now has 106 CRDs total, 76 database-related — realistic test data for inference pipeline
+
+### 2026-02-18: M2 Complete — LLM Inference Pipeline
+- Created `prompts/capability-inference.md` with structured instructions and example output
+- Added `ResourceCapability`, `LlmCapabilityResult`, and `InferenceOptions` types to `src/pipeline/types.ts`
+- Implemented `inferCapability()` (single resource) and `inferCapabilities()` (batch with skip-on-failure) in `src/pipeline/inference.ts`
+- Zod schema `LlmCapabilitySchema` with `.describe()` annotations powers `withStructuredOutput()` — guaranteed valid JSON
+- LLM returns 6 inferred fields (capabilities, providers, complexity, description, useCase, confidence); resource metadata (name, apiVersion, group, kind) copied from `DiscoveredResource`
+- Same DI pattern as M1: `InferenceOptions.model` injectable for testing, defaults to Haiku
+- 11 unit tests (mocked model) + 9 integration tests (real Haiku API) — all passing
+- Integration tests confirm: SQL CRD → database/postgresql capabilities, ConfigMap → configuration capabilities with empty providers
+- Full test suite: 59 tests passing (33 M1 unit + 6 M1 integration + 11 M2 unit + 9 M2 integration)

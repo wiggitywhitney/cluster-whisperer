@@ -7,7 +7,9 @@
  * Usage:
  *   import {
  *     discoverResources,
+ *     inferCapabilities,
  *     type DiscoveredResource,
+ *     type ResourceCapability,
  *   } from "./pipeline";
  */
 
@@ -16,6 +18,9 @@ export type {
   ParsedApiResource,
   DiscoveredResource,
   DiscoveryOptions,
+  ResourceCapability,
+  LlmCapabilityResult,
+  InferenceOptions,
 } from "./types";
 
 // M1: CRD Discovery
@@ -26,3 +31,6 @@ export {
   extractGroup,
   buildFullyQualifiedName,
 } from "./discovery";
+
+// M2: LLM Inference
+export { inferCapability, inferCapabilities, LlmCapabilitySchema } from "./inference";
