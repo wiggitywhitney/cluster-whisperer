@@ -67,7 +67,7 @@ Our version will be lighter-weight. See `docs/viktors-pipeline-assessment.md` fo
   - Verify search works: "nginx" → finds nginx deployments/pods/services
   - Verify filter works: "all Deployments in namespace default" → filters by metadata
 
-- [ ] **M3**: Sync Runner
+- [x] **M3**: Sync Runner
   - Wrap as a runnable tool (CLI command, npm script, or startup hook)
   - Support full sync (load everything) and incremental sync (only changed resources)
   - Handle deletes (resources removed from cluster should be removed from vector DB)
@@ -158,6 +158,10 @@ Each document represents a single running resource instance:
 **Decision**: Store labels as a comma-separated `key=value` string (e.g., `"app=nginx,tier=frontend"`) rather than nested objects.
 **Rationale**: Chroma metadata values must be `string | number | boolean` — no nested objects allowed. Comma-separated strings follow the same pattern used for `providers` in the capabilities collection. Labels are also included in the embedding text for semantic search, so individual label filtering via metadata is not needed for the POC.
 
+### DD-7: Full sync only (no incremental flag)
+**Decision**: Implement a single sync mode rather than separate full/incremental modes. Every sync discovers all instances, deletes stale documents, and upserts all current instances.
+**Rationale**: `vectorStore.store()` uses upsert semantics, so re-storing unchanged instances is harmless. Stale cleanup (diff DB state against cluster state, delete removed docs) runs on every sync. An `--incremental` flag would add API surface with no behavioral difference — both modes would execute identically. The flag can be added later if there's a real performance need (e.g., skipping embedding API calls for unchanged documents).
+
 ---
 
 ## Progress Log
@@ -183,3 +187,14 @@ Each document represents a single running resource instance:
 - Labels flattened to comma-separated `key=value` strings (DD-6) — Chroma requires flat metadata
 - Integration tests verify semantic search ("nginx" → finds Deployment + Service) and metadata filtering (kind, namespace, combined)
 - Full test suite: 133 passed, 31 skipped (integration tests requiring infrastructure)
+
+### 2026-02-20: M3 Sync Runner complete
+- Created `src/pipeline/instance-runner.ts` with `syncInstances()` orchestrator and `SyncInstancesOptions`/`SyncInstancesResult` types
+- Created `src/pipeline/instance-runner.test.ts` with 16 unit tests (all passing)
+- Orchestrates: discover instances → delete stale documents → store instances
+- Stale cleanup: queries existing DB document IDs via `keywordSearch`, diffs against discovered instance IDs, deletes removed entries via `vectorStore.delete()`
+- Added `sync-instances` CLI subcommand to `src/index.ts` with `--dry-run` and `--chroma-url` flags
+- Instance sync validates only `VOYAGE_API_KEY` + kubectl (no `ANTHROPIC_API_KEY` needed — no LLM inference step)
+- Exported all PRD #26 types and functions from `src/pipeline/index.ts`
+- Design decision DD-7: single sync mode only, no incremental flag (YAGNI — both modes would behave identically)
+- Full test suite: 149 passed, 31 skipped (integration tests requiring infrastructure)
