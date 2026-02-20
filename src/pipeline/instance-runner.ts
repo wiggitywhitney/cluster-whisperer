@@ -106,6 +106,13 @@ export async function syncInstances(
   let deleted = 0;
 
   if (!options.dryRun) {
+    // Initialize the collection before stale cleanup — on a first-ever sync,
+    // the collection doesn't exist yet and deleteStaleDocuments needs to query it.
+    // This is idempotent; storeInstances also calls initialize internally.
+    await options.vectorStore.initialize(INSTANCES_COLLECTION, {
+      distanceMetric: "cosine",
+    });
+
     // Delete stale documents before storing new ones
     deleted = await deleteStaleDocuments(
       options.vectorStore,

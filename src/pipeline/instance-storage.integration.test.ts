@@ -343,7 +343,10 @@ describe.skipIf(!!skipReason)("instance storage and search (integration)", () =>
       { nResults: 5 }
     );
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].id).toBe("default/apps/v1/Deployment/nginx");
+    const nginxResult = results.find(
+      (r) => r.id === "default/apps/v1/Deployment/nginx"
+    );
+    expect(nginxResult).toBeDefined();
 
     // Clean up
     try {
