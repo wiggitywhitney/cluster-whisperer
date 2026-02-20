@@ -105,7 +105,14 @@ export function parseInstanceList(
   apiVersion: string,
   namespaced: boolean
 ): ResourceInstance[] {
-  const parsed = JSON.parse(json);
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse ${kind} (${apiVersion}) instances: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
   const items: Array<{
     metadata?: {
       name?: string;

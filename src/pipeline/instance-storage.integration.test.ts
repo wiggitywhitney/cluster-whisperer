@@ -321,13 +321,21 @@ describe.skipIf(!!skipReason)("instance storage and search (integration)", () =>
   it("stores instances and reports progress via orchestrator", async () => {
     const progressMessages: string[] = [];
 
-    // Use a separate collection for orchestrator test
-    const orchestratorCollection = `test-instances-orchestrator-${Date.now()}`;
+    // Use unique IDs to avoid collisions with other integration test suites
+    // that also write to INSTANCES_COLLECTION (e.g., instance-runner tests)
+    const testNginx = {
+      ...NGINX_DEPLOYMENT,
+      id: `${NGINX_DEPLOYMENT.id}-orchestrator`,
+      name: "nginx-orchestrator",
+    };
+    const testRedis = {
+      ...REDIS_DEPLOYMENT,
+      id: `${REDIS_DEPLOYMENT.id}-orchestrator`,
+      name: "redis-cache-orchestrator",
+    };
 
-    // Temporarily override INSTANCES_COLLECTION by calling storeInstances
-    // directly — it uses the hardcoded collection constant
     await storeInstances(
-      [NGINX_DEPLOYMENT, REDIS_DEPLOYMENT],
+      [testNginx, testRedis],
       vectorStore,
       { onProgress: (msg) => progressMessages.push(msg) }
     );
@@ -339,20 +347,18 @@ describe.skipIf(!!skipReason)("instance storage and search (integration)", () =>
     // Verify documents were stored by searching the instances collection
     const results = await vectorStore.search(
       INSTANCES_COLLECTION,
-      "nginx",
+      "nginx-orchestrator",
       { nResults: 5 }
     );
     expect(results.length).toBeGreaterThan(0);
-    const nginxResult = results.find(
-      (r) => r.id === "default/apps/v1/Deployment/nginx"
-    );
+    const nginxResult = results.find((r) => r.id === testNginx.id);
     expect(nginxResult).toBeDefined();
 
     // Clean up
     try {
       await vectorStore.delete(INSTANCES_COLLECTION, [
-        NGINX_DEPLOYMENT.id,
-        REDIS_DEPLOYMENT.id,
+        testNginx.id,
+        testRedis.id,
       ]);
     } catch {
       // Best-effort cleanup

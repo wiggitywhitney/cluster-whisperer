@@ -368,6 +368,30 @@ describe("syncInstances", () => {
       expect(deleteMsg).toBeDefined();
     });
 
+    it("warns when existing document count hits MAX_EXISTING_DOCS limit", async () => {
+      mockedDiscover.mockResolvedValue([makeInstance()]);
+      const mockVectorStore = createMockVectorStore();
+      // Return exactly 10,000 documents to trigger the truncation warning
+      const maxDocs = Array.from({ length: 10_000 }, (_, i) => ({
+        id: `doc-${i}`,
+        text: "",
+        metadata: {},
+        score: -1,
+      }));
+      mockVectorStore.keywordSearch.mockResolvedValue(maxDocs);
+      const progressMessages: string[] = [];
+
+      await syncInstances({
+        vectorStore: mockVectorStore,
+        onProgress: (msg) => progressMessages.push(msg),
+      });
+
+      const warningMsg = progressMessages.find((m) =>
+        m.includes("MAX_EXISTING_DOCS") && m.includes("incomplete")
+      );
+      expect(warningMsg).toBeDefined();
+    });
+
     it("queries existing documents from the instances collection", async () => {
       mockedDiscover.mockResolvedValue([makeInstance()]);
       const mockVectorStore = createMockVectorStore();

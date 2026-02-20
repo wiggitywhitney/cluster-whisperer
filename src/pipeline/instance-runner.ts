@@ -169,6 +169,12 @@ async function deleteStaleDocuments(
     { nResults: MAX_EXISTING_DOCS }
   );
 
+  if (existing.length === MAX_EXISTING_DOCS) {
+    onProgress(
+      `Warning: reached MAX_EXISTING_DOCS (${MAX_EXISTING_DOCS}); stale cleanup may be incomplete.`
+    );
+  }
+
   const currentIdSet = new Set(currentIds);
   const staleIds = existing
     .map((doc) => doc.id)

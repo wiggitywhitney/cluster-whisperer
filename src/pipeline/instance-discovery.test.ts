@@ -137,6 +137,12 @@ describe("parseInstanceList", () => {
     });
   });
 
+  it("throws a descriptive error for malformed JSON", () => {
+    expect(() =>
+      parseInstanceList("not valid json{", "Deployment", "apps/v1", true)
+    ).toThrow(/Failed to parse Deployment \(apps\/v1\) instances/);
+  });
+
   it("parses a cluster-scoped instance with _cluster namespace", () => {
     const obj = makeK8sObject({
       name: "kube-system",
