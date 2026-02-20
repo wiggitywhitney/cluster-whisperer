@@ -1,7 +1,8 @@
 # PRD #26: Resource Instance Sync
 
-**Status**: In Progress
+**Status**: Complete
 **Created**: 2026-02-11
+**Completed**: 2026-02-20
 **GitHub Issue**: [#26](https://github.com/wiggitywhitney/cluster-whisperer/issues/26)
 
 ---
@@ -45,11 +46,11 @@ Our version will be lighter-weight. See `docs/viktors-pipeline-assessment.md` fo
 
 ## Success Criteria
 
-- [ ] Sync mechanism discovers resource instances from a live cluster
-- [ ] Instance metadata is stored in the vector database via PRD #7's interface
-- [ ] Agent can search instances by semantic query or metadata filters
-- [ ] Sync is vector-DB-agnostic (works with Chroma now, Qdrant later)
-- [ ] Documentation explains how the sync mechanism works
+- [x] Sync mechanism discovers resource instances from a live cluster
+- [x] Instance metadata is stored in the vector database via PRD #7's interface
+- [x] Agent can search instances by semantic query or metadata filters
+- [x] Sync is vector-DB-agnostic (works with Chroma now, Qdrant later)
+- [x] Documentation explains how the sync mechanism works
 
 ## Milestones
 
@@ -73,7 +74,7 @@ Our version will be lighter-weight. See `docs/viktors-pipeline-assessment.md` fo
   - Handle deletes (resources removed from cluster should be removed from vector DB)
   - Log progress
 
-- [ ] **M4**: End-to-End Validation
+- [x] **M4**: End-to-End Validation
   - Test the "semantic bridge" pattern with PRD #25: capabilities search → instance filter
   - Test with the demo cluster scenario
   - Document the sync setup and usage
@@ -198,3 +199,12 @@ Each document represents a single running resource instance:
 - Exported all PRD #26 types and functions from `src/pipeline/index.ts`
 - Design decision DD-7: single sync mode only, no incremental flag (YAGNI — both modes would behave identically)
 - Full test suite: 149 passed, 31 skipped (integration tests requiring infrastructure)
+
+### 2026-02-20: M4 End-to-End Validation complete
+- Created `src/pipeline/semantic-bridge.integration.test.ts` with 5 integration tests validating the two-step semantic bridge pattern (capabilities search → instance filter)
+- Created `src/pipeline/instance-runner.integration.test.ts` with 3 integration tests (full pipeline, dry-run, stale cleanup)
+- Integration tests discovered and fixed a real bug: `deleteStaleDocuments()` queried the instances collection before initialization on first-ever sync. Fix: explicit `vectorStore.initialize()` before stale cleanup in `instance-runner.ts`
+- Created `docs/resource-instance-sync.md` documenting the pipeline: problem, solution, prerequisites, CLI usage, sync steps, data structure, embedding format, metadata schema, semantic bridge pattern, architecture, and comparison with capability inference
+- Fixed position-dependent assertion in `instance-storage.integration.test.ts` (used `results.find()` instead of `results[0]` for resilience to parallel test execution)
+- Full test suite: 188 passed, 39 skipped (integration tests requiring infrastructure)
+- All milestones (M1–M4) and all success criteria complete
