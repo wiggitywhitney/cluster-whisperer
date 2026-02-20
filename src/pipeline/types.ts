@@ -1,10 +1,16 @@
 /**
- * types.ts - Shared data types for the capability inference pipeline
+ * types.ts - Shared data types for the capability and instance pipelines
  *
  * These types flow through the pipeline milestones:
+ *
+ * Capability Inference (PRD #25):
  * - M1 (Discovery) produces DiscoveredResource[]
  * - M2 (Inference) consumes DiscoveredResource[], produces ResourceCapability[]
  * - M3 (Storage) consumes ResourceCapability[], stores in vector DB
+ *
+ * Resource Instance Sync (PRD #26):
+ * - M1 (Discovery) produces ResourceInstance[]
+ * - M2 (Storage) consumes ResourceInstance[], stores in vector DB
  */
 
 /**
@@ -65,6 +71,72 @@ export interface DiscoveryOptions {
    * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// PRD #26: Resource Instance Sync types
+// ---------------------------------------------------------------------------
+
+/**
+ * A single running resource instance discovered from the cluster.
+ *
+ * Represents an actual deployed object (e.g., a specific nginx Deployment)
+ * as opposed to a resource *type* (e.g., the Deployment kind itself).
+ * This is the output of PRD #26's M1 discovery and the input to M2 storage.
+ *
+ * The metadata here is intentionally lightweight — spec, status, and
+ * managedFields are NOT synced. The agent fetches those on-demand via
+ * kubectl tools when it needs details about a specific instance.
+ */
+export interface ResourceInstance {
+  /**
+   * Canonical identifier for this instance.
+   * Format: "namespace/apiVersion/Kind/name"
+   * Example: "default/apps/v1/Deployment/nginx"
+   * For cluster-scoped resources: "_cluster/v1/Namespace/kube-system"
+   */
+  id: string;
+  /** Namespace the instance lives in, or "_cluster" for cluster-scoped resources */
+  namespace: string;
+  /** Instance name from metadata.name */
+  name: string;
+  /** Resource kind (e.g., "Deployment", "Service", "SQL") */
+  kind: string;
+  /** Full API version (e.g., "apps/v1", "v1") */
+  apiVersion: string;
+  /** API group (e.g., "apps", "" for core resources) */
+  apiGroup: string;
+  /** All labels from metadata.labels */
+  labels: Record<string, string>;
+  /** Filtered annotations — only description-like annotations are kept */
+  annotations: Record<string, string>;
+  /** ISO timestamp from metadata.creationTimestamp */
+  createdAt: string;
+}
+
+/**
+ * Options for the discoverInstances function.
+ * Accepts injectable dependencies for testing, following the same
+ * pattern as DiscoveryOptions for capability inference.
+ */
+export interface InstanceDiscoveryOptions {
+  /**
+   * Injectable kubectl executor for testing.
+   * Defaults to the real executeKubectl from utils/kubectl.
+   */
+  kubectl?: (args: string[]) => { output: string; isError: boolean };
+  /**
+   * Progress callback for long-running operations.
+   * Called with messages like "Listing instances (3 of 47): deployments.apps"
+   * Defaults to stdout.
+   */
+  onProgress?: (message: string) => void;
+  /**
+   * Optional: only sync instances of these resource types.
+   * Uses plural resource names (e.g., ["deployments", "services", "sqls"]).
+   * When omitted, discovers and syncs all resource types.
+   */
+  resourceTypes?: string[];
 }
 
 // ---------------------------------------------------------------------------

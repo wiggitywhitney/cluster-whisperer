@@ -30,6 +30,7 @@ import { execSync } from "child_process";
 import { getInvestigatorAgent, truncate } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import { syncCapabilities } from "./pipeline";
+import { syncInstances } from "./pipeline/instance-runner";
 import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,16 @@ function validateInvestigateEnvironment(): void {
  */
 function validateSyncEnvironment(): void {
   validateAnthropicKey();
+  validateVoyageKey();
+  validateKubectl();
+}
+
+/**
+ * Validates environment for the sync-instances command.
+ * Needs Voyage AI for embeddings and kubectl for cluster access.
+ * Does NOT need Anthropic — instance sync has no LLM inference step.
+ */
+function validateInstanceSyncEnvironment(): void {
   validateVoyageKey();
   validateKubectl();
 }
@@ -293,6 +304,57 @@ async function main() {
         } else if (message.includes("API key") || message.includes("401") || message.includes("authentication")) {
           console.error(`\nAPI key error: ${message}`);
           console.error("Check ANTHROPIC_API_KEY and VOYAGE_API_KEY environment variables.");
+        } else {
+          console.error(`\nSync failed: ${message}`);
+        }
+        process.exit(1);
+      }
+    });
+
+  // -------------------------------------------------------------------------
+  // Sync-instances subcommand: populate vector DB with resource instance metadata
+  // -------------------------------------------------------------------------
+
+  program
+    .command("sync-instances")
+    .description(
+      "Sync resource instance metadata from the cluster to the vector database"
+    )
+    .option("--dry-run", "Discover instances without storing them")
+    .option(
+      "--chroma-url <url>",
+      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    )
+    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+      validateInstanceSyncEnvironment();
+
+      // Create the vector store with Voyage AI embeddings
+      const embedder = new VoyageEmbedding();
+      const vectorStore = new ChromaBackend(embedder, {
+        chromaUrl: options.chromaUrl,
+      });
+
+      console.log("\nStarting instance sync...\n"); // eslint-disable-line no-console
+
+      try {
+        const result = await syncInstances({
+          vectorStore,
+          dryRun: options.dryRun,
+        });
+
+        // Exit with non-zero code if nothing was discovered (likely a cluster issue)
+        if (result.discovered === 0) {
+          console.error("\nNo instances discovered. Is kubectl connected to a cluster?");
+          process.exit(1);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("ECONNREFUSED") || message.includes("fetch")) {
+          console.error(`\nChroma connection failed: ${message}`);
+          console.error("Is Chroma running? Check --chroma-url or CHROMA_URL.");
+        } else if (message.includes("API key") || message.includes("401") || message.includes("authentication")) {
+          console.error(`\nAPI key error: ${message}`);
+          console.error("Check VOYAGE_API_KEY environment variable.");
         } else {
           console.error(`\nSync failed: ${message}`);
         }

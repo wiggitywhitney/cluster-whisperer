@@ -42,3 +42,16 @@ export { capabilityToDocument, storeCapabilities } from "./storage";
 // M4: Pipeline Runner
 export { syncCapabilities } from "./runner";
 export type { SyncOptions, SyncResult } from "./runner";
+
+// PRD #26: Resource Instance Sync
+export type {
+  ResourceInstance,
+  InstanceDiscoveryOptions,
+} from "./types";
+export { discoverInstances } from "./instance-discovery";
+export { instanceToDocument, storeInstances } from "./instance-storage";
+export { syncInstances } from "./instance-runner";
+export type {
+  SyncInstancesOptions,
+  SyncInstancesResult,
+} from "./instance-runner";
