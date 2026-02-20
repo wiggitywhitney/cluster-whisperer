@@ -60,7 +60,7 @@ Our version will be lighter-weight. See `docs/viktors-pipeline-assessment.md` fo
   - Filter out high-churn / low-value resources (Events, Leases, EndpointSlices)
   - Output: a list of resource instances with metadata, ready for storage
 
-- [ ] **M2**: Storage and Search
+- [x] **M2**: Storage and Search
   - Construct embedding text per instance (kind + name + namespace + labels + annotations)
   - Store instance metadata in the vector DB via PRD #7's interface
   - Store metadata for filtering (namespace, kind, apiGroup, labels)
@@ -87,14 +87,14 @@ Each document represents a single running resource instance:
 ```typescript
 {
   id: "default/apps/v1/Deployment/nginx",  // namespace/apiVersion/Kind/name
-  document: "Deployment nginx | namespace: default | apiVersion: apps/v1 | labels: app=nginx",
+  text: "Deployment nginx | namespace: default | apiVersion: apps/v1 | labels: app=nginx",
   metadata: {
     namespace: "default",
     name: "nginx",
     kind: "Deployment",
     apiVersion: "apps/v1",
     apiGroup: "apps",
-    labels: { app: "nginx" },
+    labels: "app=nginx",       // comma-separated key=value (flat string for Chroma)
     source: "resource-sync",
   }
 }
@@ -154,6 +154,10 @@ Each document represents a single running resource instance:
 **Decision**: Use `namespace/apiVersion/Kind/name` as the canonical instance ID (e.g., `default/apps/v1/Deployment/nginx`). Cluster-scoped resources use `_cluster` as namespace.
 **Rationale**: Including the full apiVersion (not just group) ensures uniqueness even if a resource exists across multiple API versions. The format is human-readable and naturally hierarchical.
 
+### DD-6: Labels as comma-separated flat strings in metadata
+**Decision**: Store labels as a comma-separated `key=value` string (e.g., `"app=nginx,tier=frontend"`) rather than nested objects.
+**Rationale**: Chroma metadata values must be `string | number | boolean` — no nested objects allowed. Comma-separated strings follow the same pattern used for `providers` in the capabilities collection. Labels are also included in the embedding text for semantic search, so individual label filtering via metadata is not needed for the POC.
+
 ---
 
 ## Progress Log
@@ -168,3 +172,14 @@ Each document represents a single running resource instance:
 - Filters annotations to description-like only (`description` or `*/description`)
 - Handles kubectl failures per-type gracefully (warns and continues)
 - Full test suite: 109 passed, 21 skipped (integration tests requiring infrastructure)
+
+### 2026-02-20: M2 Storage and Search complete
+- Created `src/pipeline/instance-storage.ts` with `instanceToDocument()` and `storeInstances()` orchestrator
+- Created `src/pipeline/instance-storage.test.ts` with 24 unit tests (all passing)
+- Created `src/pipeline/instance-storage.integration.test.ts` with 10 integration tests for search and filter verification
+- Follows PRD #25's `storage.ts` pattern: pure conversion function + async orchestrator
+- Embedding text: pipe-delimited sections (kind+name | namespace | apiVersion | labels | annotations)
+- Metadata: flat fields (namespace, name, kind, apiVersion, apiGroup, labels as comma-separated, source)
+- Labels flattened to comma-separated `key=value` strings (DD-6) — Chroma requires flat metadata
+- Integration tests verify semantic search ("nginx" → finds Deployment + Service) and metadata filtering (kind, namespace, combined)
+- Full test suite: 133 passed, 31 skipped (integration tests requiring infrastructure)
