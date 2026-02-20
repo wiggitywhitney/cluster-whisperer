@@ -52,6 +52,7 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 
 - **CLI Agent** - Ask questions directly from the terminal with visible reasoning
 - **MCP Server** - Use kubectl tools from Claude Code, Cursor, or any MCP-compatible client
+- **Knowledge Pipeline** - Pre-index cluster capabilities and running instances into a vector database for semantic search
 - **OpenTelemetry Tracing** - Full observability with traces exportable to Datadog, Jaeger, etc.
 - **Extended Thinking** - See the agent's reasoning process as it investigates
 
@@ -60,6 +61,8 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 - Node.js 18+
 - kubectl CLI installed and configured
 - `ANTHROPIC_API_KEY` environment variable (managed via [vals](https://github.com/helmfile/vals))
+- `VOYAGE_API_KEY` environment variable (for knowledge pipeline embedding)
+- [Chroma](https://www.trychroma.com/) vector database running locally (for knowledge pipeline)
 
 ## Setup
 
@@ -86,6 +89,29 @@ OTEL_EXPORTER_TYPE=otlp \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod"
 ```
+
+### Knowledge Pipeline
+
+The agent can pre-index cluster knowledge into a vector database for faster, more comprehensive answers.
+
+**Sync resource capabilities** (what resource types exist and what they can do):
+
+```bash
+vals exec -i -f .vals.yaml -- node dist/index.js sync-capabilities
+```
+
+**Sync resource instances** (what's currently running in the cluster):
+
+```bash
+vals exec -i -f .vals.yaml -- node dist/index.js sync-instances
+
+# Preview what would be synced without writing to the database
+vals exec -i -f .vals.yaml -- node dist/index.js sync-instances --dry-run
+```
+
+Together these enable the **"Semantic Bridge" pattern**: capabilities tell the agent what's *possible*, instances tell it what *exists*. When a user asks "what databases are running?", the agent searches capabilities to find database-related resource types, then searches instances filtered to those types to find actual running resources.
+
+See `docs/capability-inference-pipeline.md` and `docs/resource-instance-sync.md` for details.
 
 ### MCP Server (Claude Code, Cursor, etc.)
 
@@ -170,6 +196,8 @@ cluster-whisperer.investigate (root span)
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
 | `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture tool inputs/outputs in traces |
+| `VOYAGE_API_KEY` | - | Voyage AI API key (for knowledge pipeline embedding) |
+| `CHROMA_URL` | `http://localhost:8000` | Chroma vector database URL |
 
 See `docs/tracing-conventions.md` for the complete tracing specification.
 
@@ -177,23 +205,26 @@ See `docs/tracing-conventions.md` for the complete tracing specification.
 
 ```text
 src/
-├── index.ts               # CLI entry point
+├── index.ts               # CLI entry point (agent + sync commands)
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
 │   └── investigator.ts    # ReAct agent setup (LangGraph)
+├── pipeline/              # Knowledge sync pipelines
+│   ├── discovery.ts       # Resource type discovery (kubectl api-resources)
+│   ├── inference.ts       # Capability inference (kubectl explain → LLM)
+│   ├── storage.ts         # Capability document storage
+│   ├── runner.ts          # Capability sync orchestrator
+│   ├── instance-discovery.ts  # Resource instance discovery (kubectl get)
+│   ├── instance-storage.ts    # Instance document storage
+│   └── instance-runner.ts     # Instance sync orchestrator
+├── vectorstore/           # Vector database abstraction
+│   ├── types.ts           # VectorStore interface
+│   └── chroma-backend.ts  # Chroma + Voyage AI implementation
 ├── tools/
 │   ├── core/              # Shared tool logic (schemas, execution)
-│   │   ├── kubectl-get.ts
-│   │   ├── kubectl-describe.ts
-│   │   └── kubectl-logs.ts
 │   ├── langchain/         # CLI agent wrappers
-│   │   └── index.ts
 │   └── mcp/               # MCP server wrappers
-│       └── index.ts
 ├── tracing/               # OpenTelemetry instrumentation
-│   ├── index.ts           # Tracer initialization
-│   ├── context-bridge.ts  # AsyncLocalStorage context propagation
-│   └── tool-tracing.ts    # Tool span wrapper
 └── utils/
     └── kubectl.ts         # Shared kubectl execution helper
 
@@ -201,12 +232,14 @@ prompts/
 └── investigator.md        # System prompt (separate file for easy iteration)
 
 docs/
-├── kubectl-tools.md       # How kubectl tools work
-├── agentic-loop.md        # How the ReAct agent works
-├── mcp-server.md          # MCP server architecture
-├── opentelemetry.md       # OpenTelemetry implementation guide
-├── tracing-conventions.md # Complete tracing specification
-└── langgraph-vs-langchain.md  # LangChain vs LangGraph explained
+├── capability-inference-pipeline.md  # How capability sync works
+├── resource-instance-sync.md         # How instance sync works
+├── kubectl-tools.md                  # How kubectl tools work
+├── agentic-loop.md                   # How the ReAct agent works
+├── mcp-server.md                     # MCP server architecture
+├── opentelemetry.md                  # OpenTelemetry implementation guide
+├── tracing-conventions.md            # Complete tracing specification
+└── langgraph-vs-langchain.md         # LangChain vs LangGraph explained
 ```
 
 ## License
