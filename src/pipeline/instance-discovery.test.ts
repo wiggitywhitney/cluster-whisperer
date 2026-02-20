@@ -468,10 +468,10 @@ describe("discoverInstances", () => {
         if (resource === "pods") {
           return { output: podInstances, isError: false };
         }
-        if (resource === "deployments") {
+        if (resource === "deployments.apps") {
           return { output: deploymentInstances, isError: false };
         }
-        if (resource === "sqls") {
+        if (resource === "sqls.devopstoolkit.live") {
           return { output: sqlInstances, isError: false };
         }
       }
@@ -527,9 +527,9 @@ describe("discoverInstances", () => {
       onProgress: () => {},
     });
 
-    // Check that namespaced resources use -A
+    // Check that namespaced resources use -A (deployments.apps is fully qualified)
     const deploymentCall = mockKubectl.mock.calls.find(
-      (call) => call[0][0] === "get" && call[0][1] === "deployments"
+      (call) => call[0][0] === "get" && call[0][1] === "deployments.apps"
     );
     expect(deploymentCall).toBeDefined();
     expect(deploymentCall![0]).toContain("-A");
@@ -547,7 +547,7 @@ describe("discoverInstances", () => {
       if (args[0] === "api-resources") {
         return { output: apiResourcesOutput, isError: false };
       }
-      if (args[0] === "get" && args[1] === "deployments") {
+      if (args[0] === "get" && args[1] === "deployments.apps") {
         return { output: "Error: forbidden", isError: true };
       }
       if (args[0] === "get") {
@@ -555,7 +555,7 @@ describe("discoverInstances", () => {
         if (resource === "configmaps") return { output: configmapInstances, isError: false };
         if (resource === "namespaces") return { output: namespaceInstances, isError: false };
         if (resource === "pods") return { output: podInstances, isError: false };
-        if (resource === "sqls") return { output: sqlInstances, isError: false };
+        if (resource === "sqls.devopstoolkit.live") return { output: sqlInstances, isError: false };
       }
       return { output: "unknown", isError: true };
     });
@@ -655,7 +655,7 @@ describe("discoverInstances", () => {
       if (args[0] === "api-resources") {
         return { output: apiOutput, isError: false };
       }
-      if (args[0] === "get" && args[1] === "deployments") {
+      if (args[0] === "get" && args[1] === "deployments.apps") {
         return { output: deploymentInstances, isError: false };
       }
       return { output: "unknown", isError: true };

@@ -243,8 +243,9 @@ export async function discoverInstances(
       `Listing instances (${i + 1} of ${targeted.length}): ${fqName}`
     );
 
-    // Build kubectl get args: namespaced resources use -A for all namespaces
-    const getArgs = ["get", resource.name];
+    // Build kubectl get args: use fully qualified name to avoid API group
+    // ambiguity (e.g., "sqls.devopstoolkit.live" instead of just "sqls")
+    const getArgs = ["get", fqName];
     if (resource.namespaced) {
       getArgs.push("-A");
     }
