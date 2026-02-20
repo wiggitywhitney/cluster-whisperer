@@ -260,13 +260,19 @@ export async function discoverInstances(
       continue;
     }
 
-    const instances = parseInstanceList(
-      getResult.output,
-      resource.kind,
-      resource.apiVersion,
-      resource.namespaced
-    );
-    allInstances.push(...instances);
+    try {
+      const instances = parseInstanceList(
+        getResult.output,
+        resource.kind,
+        resource.apiVersion,
+        resource.namespaced
+      );
+      allInstances.push(...instances);
+    } catch (err) {
+      onProgress(
+        `  Warning: skipping ${fqName} (failed to parse instances: ${err instanceof Error ? err.message : String(err)})`
+      );
+    }
   }
 
   onProgress(

@@ -571,6 +571,41 @@ describe("discoverInstances", () => {
     expect(result.map((r) => r.kind)).not.toContain("Deployment");
   });
 
+  it("handles malformed JSON from kubectl get gracefully without crashing pipeline", async () => {
+    const mockKubectl = vi.fn((args: string[]) => {
+      if (args[0] === "api-resources") {
+        return { output: apiResourcesOutput, isError: false };
+      }
+      if (args[0] === "get") {
+        const resource = args[1];
+        if (resource === "configmaps") return { output: configmapInstances, isError: false };
+        if (resource === "namespaces") return { output: namespaceInstances, isError: false };
+        if (resource === "pods") return { output: podInstances, isError: false };
+        // Deployments return malformed JSON (kubectl succeeded but output is truncated)
+        if (resource === "deployments.apps") return { output: "{ truncated", isError: false };
+        if (resource === "sqls.devopstoolkit.live") return { output: sqlInstances, isError: false };
+      }
+      return { output: "unknown", isError: true };
+    });
+    const progressMessages: string[] = [];
+
+    const result = await discoverInstances({
+      kubectl: mockKubectl,
+      onProgress: (msg) => progressMessages.push(msg),
+    });
+
+    // Should still get instances from types with valid JSON
+    // 1 configmap + 2 namespaces + 1 pod + 1 sql = 5 (no deployments)
+    expect(result).toHaveLength(5);
+    expect(result.map((r) => r.kind)).not.toContain("Deployment");
+
+    // Should log a warning about the parse failure
+    const warningMsg = progressMessages.find((m) =>
+      m.includes("failed to parse") && m.includes("deployments.apps")
+    );
+    expect(warningMsg).toBeDefined();
+  });
+
   it("throws on kubectl api-resources failure", async () => {
     const mockKubectl = vi.fn(() => ({
       output: "Error: connection refused",
