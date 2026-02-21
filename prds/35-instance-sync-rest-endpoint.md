@@ -40,7 +40,7 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [ ] Upserts flow through `instanceToDocument()` → `storeInstances()` pipeline
 - [ ] Deletes remove instances from the vector DB by ID
 - [ ] Returns 200 on success, 4xx on bad requests, 5xx on transient failures
-- [ ] Empty payloads return 200 with no processing
+- [ ] Empty payloads return 200 with no processing (defensive — controller typically skips them, but endpoint must tolerate if sent)
 - [ ] `cluster-whisperer serve` starts the HTTP server on a configurable port
 - [ ] `GET /healthz` returns 200 (for Kubernetes readiness probes)
 - [ ] Contract tests validate endpoint behavior matches controller expectations
@@ -185,7 +185,7 @@ program
 | Valid payload accepted | Controller gets success | 200 |
 | Bad request (malformed JSON, invalid schema) | Controller does not retry | 4xx |
 | Transient failure (DB down, timeout) | Controller retries with exponential backoff | 5xx |
-| Empty payload (no upserts or deletes) | Controller skips the POST entirely | N/A (not sent) |
+| Empty payload (no upserts or deletes) | Controller skips the POST entirely, but endpoint must tolerate if sent | 200 (defensive) |
 | Content-Type | `application/json` | — |
 | Auth | None (out of scope) | — |
 
