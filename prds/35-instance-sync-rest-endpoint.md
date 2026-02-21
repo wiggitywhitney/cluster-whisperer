@@ -42,7 +42,8 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [ ] Returns 200 on success, 4xx on bad requests, 5xx on transient failures
 - [ ] Empty payloads return 200 with no processing (defensive — controller typically skips them, but endpoint must tolerate if sent)
 - [ ] `cluster-whisperer serve` starts the HTTP server on a configurable port
-- [ ] `GET /healthz` returns 200 (for Kubernetes readiness probes)
+- [ ] `GET /healthz` returns 200 (liveness — is the process alive)
+- [ ] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
 - [ ] Contract tests validate endpoint behavior matches controller expectations
 - [ ] End-to-end test with k8s-vectordb-sync controller succeeds
 
@@ -50,10 +51,12 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 
 - [ ] **M1**: HTTP Server Foundation
   - Install `hono`, `@hono/node-server`, `@hono/zod-validator`
-  - Create `src/api/server.ts` with Hono app and health check route (`GET /healthz`)
+  - Create `src/api/server.ts` with Hono app and probe routes
+  - `GET /healthz` — liveness probe, always returns 200 if process is running
+  - `GET /readyz` — readiness probe, returns 200 only when ChromaDB is reachable (lightweight ping)
   - Add `cluster-whisperer serve` subcommand to Commander.js CLI
   - Options: `--port <number>` (default: 3000), `--chroma-url <url>` (default: CHROMA_URL env or http://localhost:8000)
-  - Verify server starts and health check responds
+  - Verify server starts and both probes respond correctly
 
 - [ ] **M2**: Sync Endpoint — Upserts
   - Create `POST /api/v1/instances/sync` route in `src/api/routes/instances.ts`
@@ -66,7 +69,7 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [ ] **M3**: Sync Endpoint — Deletes
   - Wire deletes through `vectorStore.delete(collection, ids)`
   - Handle empty deletes array (no processing)
-  - Handle mixed payloads (upserts + deletes in same request)
+  - Handle mixed payloads (upserts + deletes in same request): process deletes first, then upserts. If the same ID appears in both, the upsert recreates the item.
   - Return 200 on success, 500 on vector DB errors
 
 - [ ] **M4**: Error Handling and Edge Cases
@@ -159,9 +162,10 @@ src/api/
 Controller POST → Hono route → Zod validation
   ├─ Invalid → 400 response (controller won't retry)
   ├─ Empty payload → 200 response (no processing)
-  └─ Valid payload:
-       ├─ Upserts: payload.upserts → instanceToDocument() → storeInstances() → 200
-       ├─ Deletes: payload.deletes → vectorStore.delete("instances", ids) → 200
+  └─ Valid payload (deletes first, then upserts):
+       ├─ Deletes: payload.deletes → vectorStore.delete("instances", ids)
+       ├─ Upserts: payload.upserts → instanceToDocument() → storeInstances()
+       ├─ Both succeed → 200
        └─ DB error → 500 response (controller retries with backoff)
 ```
 
