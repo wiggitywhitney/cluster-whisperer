@@ -54,7 +54,8 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - Move `@opentelemetry/api` from `dependencies` to `peerDependencies` (required, `^1.9.0`)
   - Move all OTel SDK packages to `peerDependencies` with `peerDependenciesMeta: { optional: true }`
   - Move `@traceloop/node-server-sdk` to `peerDependencies` with `peerDependenciesMeta: { optional: true }`
-  - Remove `@opentelemetry/semantic-conventions` (already provided transitively by the API)
+  - Keep `@opentelemetry/semantic-conventions` as an optional peer dep (not transitively guaranteed by the API)
+  - Add `"engines": { "node": ">=18", "npm": ">=7" }` to package.json (peer dep auto-install requires npm 7+)
   - Run `npm install` and verify the project still builds
 
 - [ ] **M3**: Dynamic Imports for Optional Packages
@@ -155,9 +156,11 @@ try {
 
 ### npm Behavior
 
-- **npm 7+**: Auto-installs required peer deps (`@opentelemetry/api`). Does NOT auto-install optional peers (SDK packages).
+- **Requires npm 7+**: Peer dep auto-installation was introduced in npm 7. The `engines` field in package.json enforces this.
+- **npm 7+**: Auto-installs required peer deps (`@opentelemetry/api`). Does NOT auto-install optional peers (SDK packages) when `peerDependenciesMeta` marks them `{ "optional": true }`. If `peerDependenciesMeta` is missing from the manifest, npm may attempt to auto-install all peers — so the meta field is required, not decorative.
 - **Consumer who wants telemetry**: `npm install @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-proto @traceloop/node-server-sdk`
 - **Consumer who doesn't want telemetry**: Nothing extra needed. API installs automatically, returns no-ops.
+- **npm 6 and earlier**: Peer deps are not auto-installed. Consumers get a warning but must install manually. The `engines` field prevents silent breakage.
 
 ## Dependencies
 
