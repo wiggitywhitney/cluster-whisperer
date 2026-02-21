@@ -102,11 +102,11 @@ The API package is ~50KB and designed to be present even when no SDK is configur
 },
 "peerDependencies": {
   "@opentelemetry/api": "^1.9.0",
-  "@opentelemetry/exporter-trace-otlp-proto": "^0.203.0",
-  "@opentelemetry/resources": "^2.0.0",
-  "@opentelemetry/sdk-node": "^0.203.0",
-  "@opentelemetry/sdk-trace-node": "^2.0.0",
-  "@opentelemetry/semantic-conventions": "^1.38.0",
+  "@opentelemetry/exporter-trace-otlp-proto": "^0.211.0",
+  "@opentelemetry/resources": "^2.5.0",
+  "@opentelemetry/sdk-node": "^0.211.0",
+  "@opentelemetry/sdk-trace-node": "^2.5.0",
+  "@opentelemetry/semantic-conventions": "^1.39.0",
   "@traceloop/node-server-sdk": "~0.22.6"
 },
 "peerDependenciesMeta": {
