@@ -163,6 +163,11 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
       type: int
       stability: development
       brief: Number of text inputs sent for embedding
+
+    - id: cluster_whisperer.embedding.dimensions
+      type: int
+      stability: development
+      brief: Dimensionality of the returned embedding vectors
 ```
 
 #### Pipeline Attributes
@@ -189,6 +194,11 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
       type: int
       stability: development
       brief: Number of resources discovered
+
+    - id: cluster_whisperer.pipeline.inferred_count
+      type: int
+      stability: development
+      brief: Number of capabilities inferred by LLM
 
     - id: cluster_whisperer.pipeline.stored_count
       type: int
