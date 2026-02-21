@@ -72,7 +72,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Wrap `keywordSearch()` in a span: `cluster-whisperer.vectorstore.keyword_search`
   - Wrap `delete()` in a span: `cluster-whisperer.vectorstore.delete`
   - Set DB semconv attributes on each span (`db.system`, `db.operation.name`, `db.collection.name`)
-  - Set custom attributes: document count, result count, batch size
+  - Set custom attributes: document count, result count
   - Set span status on errors (Chroma failures → ERROR status)
 
 - [ ] **M3**: Embedding Instrumentation
@@ -96,7 +96,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Set HTTP semconv attributes (`http.request.method`, `url.path`, `http.response.status_code`, `http.route`)
   - Set custom attributes on the sync endpoint span: upsert count, delete count
   - Propagate trace context from incoming requests (W3C Trace Context headers)
-  - Health/readiness probes (`/healthz`, `/readyz`) get spans too (opt-out via config if noisy)
+  - Health/readiness probes (`/healthz`, `/readyz`) get spans by default; opt out via `OTEL_HTTP_HEALTH_SPANS=false` if noisy
 
 - [ ] **M6**: Datadog Verification
   - Run capability sync (`cluster-whisperer sync`) with `OTEL_TRACING_ENABLED=true`
@@ -286,7 +286,7 @@ cluster-whisperer.pipeline.sync-capabilities (NEW, parent)
 cluster-whisperer.http.request (NEW, SERVER)
 ├── cluster-whisperer.vectorstore.delete (NEW, if deletes present)
 └── cluster-whisperer.vectorstore.store (NEW, if upserts present)
-    └── cluster-whipperer.embedding.embed (NEW)
+    └── cluster-whisperer.embedding.embed (NEW)
 ```
 
 ### Implementation Pattern
