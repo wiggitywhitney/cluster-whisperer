@@ -136,7 +136,7 @@ const ResourceInstanceSchema = z.object({
   apiGroup: z.string(),
   labels: z.record(z.string()).default({}),
   annotations: z.record(z.string()).default({}),
-  createdAt: z.string(),
+  createdAt: z.string(), // ISO-8601 UTC (e.g., "2026-02-20T10:00:00Z")
 });
 
 const SyncPayloadSchema = z.object({
