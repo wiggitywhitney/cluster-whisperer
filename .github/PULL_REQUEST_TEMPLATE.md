@@ -1,7 +1,3 @@
-<!--
-Thank you for contributing! Please fill out this template to help us review your changes.
--->
-
 ## Description
 <!-- Provide a clear and concise description of your changes -->
 
@@ -34,7 +30,7 @@ Thank you for contributing! Please fill out this template to help us review your
 <!-- This project uses Conventional Commits for automated changelog generation -->
 
 **Your PR title should follow this format:**
-```
+```text
 <type>(<scope>): <description>
 
 Examples:
@@ -54,7 +50,7 @@ Examples:
 - `perf:` - Performance improvements
 
 **Breaking changes:**
-```
+```text
 feat(api)!: remove deprecated v1 endpoints
 
 BREAKING CHANGE: v1 API endpoints have been removed.
@@ -85,7 +81,7 @@ See MIGRATION.md for upgrade guide.
 - [ ] Documentation updated (if applicable)
 - [ ] Code comments added for complex logic
 - [ ] API documentation updated (if API changes)
-- [ ] [CONTRIBUTING.md](CONTRIBUTING.md) guidelines followed
+
 
 ## Security Checklist
 <!-- Complete if your changes affect security -->
