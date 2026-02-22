@@ -41,22 +41,22 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [ ] Deletes remove instances from the vector DB by ID
 - [ ] Returns 200 on success, 4xx on bad requests, 5xx on transient failures
 - [ ] Empty payloads return 200 with no processing (defensive — controller typically skips them, but endpoint must tolerate if sent)
-- [ ] `cluster-whisperer serve` starts the HTTP server on a configurable port
-- [ ] `GET /healthz` returns 200 (liveness — is the process alive)
-- [ ] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
+- [x] `cluster-whisperer serve` starts the HTTP server on a configurable port
+- [x] `GET /healthz` returns 200 (liveness — is the process alive)
+- [x] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
 - [ ] Contract tests validate endpoint behavior matches controller expectations
 - [ ] End-to-end test with k8s-vectordb-sync controller succeeds
 
 ## Milestones
 
-- [ ] **M1**: HTTP Server Foundation
-  - Install `hono`, `@hono/node-server`, `@hono/zod-validator`
-  - Create `src/api/server.ts` with Hono app and probe routes
-  - `GET /healthz` — liveness probe, always returns 200 if process is running
-  - `GET /readyz` — readiness probe, returns 200 only when ChromaDB is reachable (lightweight ping)
-  - Add `cluster-whisperer serve` subcommand to Commander.js CLI
-  - Options: `--port <number>` (default: 3000), `--chroma-url <url>` (default: CHROMA_URL env or http://localhost:8000)
-  - Verify server starts and both probes respond correctly
+- [x] **M1**: HTTP Server Foundation
+  - [x] Install `hono`, `@hono/node-server`, `@hono/zod-validator`
+  - [x] Create `src/api/server.ts` with Hono app and probe routes
+  - [x] `GET /healthz` — liveness probe, always returns 200 if process is running
+  - [x] `GET /readyz` — readiness probe, returns 200 only when ChromaDB is reachable (lightweight ping)
+  - [x] Add `cluster-whisperer serve` subcommand to Commander.js CLI
+  - [x] Options: `--port <number>` (default: 3000), `--chroma-url <url>` (default: CHROMA_URL env or http://localhost:8000)
+  - [x] Verify server starts and both probes respond correctly
 
 - [ ] **M2**: Sync Endpoint — Upserts
   - Create `POST /api/v1/instances/sync` route in `src/api/routes/instances.ts`
@@ -236,9 +236,14 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-21 | `cluster-whisperer serve` subcommand over new bin entry | Matches existing Commander.js pattern. Single binary, multiple modes. |
 | 2026-02-21 | No authentication | Matches controller contract (no auth headers). Out of scope per k8s-vectordb-sync PRD #1 M3. Can be added later. |
 | 2026-02-21 | Reuse existing pipeline functions | Thin wrapper pattern — endpoint does no business logic. Same functions the CLI `sync-instances` command uses. |
+| 2026-02-22 | `strict: false` on Hono app | Tolerates trailing slashes on probe URLs — standard for REST APIs and Kubernetes health checks. |
+| 2026-02-22 | `vectorStore.initialize()` as readiness check | Idempotent (getOrCreateCollection). Avoids adding a new `ping()` method to the VectorStore interface for M1. |
+| 2026-02-22 | Dependency injection via `createApp({ vectorStore })` | Factory pattern makes the app testable via `app.request()` without starting a real server or needing ChromaDB. |
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+| Date | Milestone | Summary |
+|------|-----------|---------|
+| 2026-02-22 | M1 complete | HTTP server foundation: Hono app with `/healthz` and `/readyz` probes, `cluster-whisperer serve` CLI subcommand with `--port` and `--chroma-url` options, 6 unit tests via `app.request()`, SIGTERM graceful shutdown. |
