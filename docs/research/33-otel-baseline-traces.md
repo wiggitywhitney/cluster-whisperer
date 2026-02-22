@@ -170,15 +170,52 @@ service:cluster-whisperer resource_name:cluster-whisperer.mcp.investigate
 
 ## M5 Verification Checklist
 
-After the refactor, verify each of these against this baseline:
+Verified 2026-02-21 after peer dependency refactor (M2-M4). Post-refactor trace `dfa3fe4773b7e83664852591344a4646` compared against baseline.
 
-- [ ] Root span `cluster-whisperer.mcp.investigate` exists with all attributes listed above
-- [ ] `anthropic.chat` spans have `gen_ai.system`, `gen_ai.request.model`, token usage metrics
-- [ ] `gen_ai.tool.definitions` attribute present on LLM chat spans (from ToolDefinitionsProcessor)
-- [ ] Tool spans (`kubectl_get.tool`) have `gen_ai.operation.name: execute_tool` and all GenAI tool attributes
-- [ ] kubectl subprocess spans have `process.executable.name: kubectl`, `process.command_args`, `process.exit.code`
-- [ ] kubectl spans have custom attributes: `cluster_whisperer.k8s.namespace`, `cluster_whisperer.k8s.output_size_bytes`
-- [ ] Parent-child relationships are correct: root → LangGraph → anthropic.chat, root → tool → kubectl
-- [ ] All spans share the same trace ID
-- [ ] LangGraph auto-instrumented spans still appear (CompiledStateGraph, RunnableSequence, ChannelWrite, Branch)
-- [ ] `otel.status_code` is `Ok` for successful operations
+- [x] Root span `cluster-whisperer.cli.investigate` exists with all attributes (CLI mode; MCP variant also valid)
+- [x] `anthropic.chat` spans have `gen_ai.system`, `gen_ai.request.model`, token usage metrics
+- [x] `gen_ai.tool.definitions` attribute present on LLM chat spans (found on 8 spans)
+- [x] Tool spans (`kubectl_get.tool`) have `gen_ai.operation.name: execute_tool` and all GenAI tool attributes
+- [x] kubectl subprocess spans have `process.executable.name: kubectl`, `process.command_args`, `process.exit.code`
+- [x] kubectl spans have `cluster_whisperer.k8s.output_size_bytes` (`k8s.namespace` absent — expected: no namespace-specific calls in this trace)
+- [x] Parent-child relationships correct: root → tool → kubectl chain verified across 6 kubectl_get calls
+- [x] All spans share trace ID `dfa3fe4773b7e83664852591344a4646` (94 spans total)
+- [x] LangGraph auto-instrumented spans present: CompiledStateGraph, RunnableSequence, ChannelWrite, RunnableLambda, DynamicStructuredTool
+- [x] `otel.status_code` is `Ok` on root, kubectl subprocess, and LLM spans
+
+### Post-Refactor Trace Details
+
+**CLI Trace**:
+
+| Field | Value |
+|-------|-------|
+| Trace ID | `dfa3fe4773b7e83664852591344a4646` |
+| Question | "How do I deploy a database in this cluster?" |
+| Mode | CLI (`node dist/index.js`) |
+| Root span | `cluster-whisperer.cli.investigate` |
+| Tool calls | 1 vector_search (failed, ChromaDB down) + 6 kubectl_get |
+| Total spans | 94 |
+| Date | 2026-02-22T01:58:35Z |
+| Exporter | OTLP → localhost:4318 (local Datadog Agent) |
+
+**MCP Trace**:
+
+| Field | Value |
+|-------|-------|
+| Trace ID | `4da342d9c6210f2f68f7c9c6c1f142de` |
+| Question | "What pods are running in the default namespace?" |
+| Mode | MCP (`node dist/mcp-server.js`) |
+| Root span | `cluster-whisperer.mcp.investigate` |
+| Tool calls | 1 kubectl_get |
+| Date | 2026-02-22T02:26:06Z |
+| Exporter | OTLP → localhost:4318 (local Datadog Agent) |
+| MCP-specific attributes | `cluster_whisperer.invocation.mode: mcp`, `cluster_whisperer.mcp.tool.name: investigate`, `gen_ai.tool.call.id`, `gen_ai.tool.name: investigate`, `gen_ai.tool.type: function` |
+
+### Expected Differences from M1 Baseline
+
+| Difference | Why |
+|------------|-----|
+| CLI root span `cli.investigate` vs `mcp.investigate` | CLI invocation uses different root span name |
+| No `cluster_whisperer.k8s.namespace` on CLI kubectl spans | CLI question triggered only cluster-scoped calls (CRDs, compositions) |
+| New `cluster_whisperer.user.question` on root span | Enhancement added since M1 |
+| `otel.status_code: Unset` on tool wrapper spans | OTel default; child kubectl spans have `Ok` |

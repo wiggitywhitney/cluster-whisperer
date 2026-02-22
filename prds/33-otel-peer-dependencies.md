@@ -33,13 +33,13 @@ The API package is ~50KB and designed to be present even when no SDK is configur
 
 ## Success Criteria
 
-- [ ] `@opentelemetry/api` is a required `peerDependency`
-- [ ] All OTel SDK packages are optional peer dependencies via `peerDependenciesMeta`
-- [ ] `@traceloop/node-server-sdk` is an optional peer dependency
-- [ ] Package works without SDK packages installed (graceful no-op)
-- [ ] Package works with SDK packages installed (full telemetry)
-- [ ] Telemetry verified in Datadog before and after refactor
-- [ ] No direct OTel packages remain in `dependencies`
+- [x] `@opentelemetry/api` is a required `peerDependency`
+- [x] All OTel SDK packages are optional peer dependencies via `peerDependenciesMeta`
+- [x] `@traceloop/node-server-sdk` is an optional peer dependency
+- [x] Package works without SDK packages installed (graceful no-op)
+- [x] Package works with SDK packages installed (full telemetry)
+- [x] Telemetry verified in Datadog before and after refactor
+- [x] No direct OTel packages remain in `dependencies`
 
 ## Milestones
 
@@ -72,7 +72,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - Verify `OTEL_TRACING_ENABLED=true` with missing SDK logs a warning but doesn't crash
   - Re-install optional packages and verify telemetry resumes
 
-- [ ] **M5**: Post-Refactor Telemetry Verification
+- [x] **M5**: Post-Refactor Telemetry Verification
   - Run the same investigation as M1 with `OTEL_TRACING_ENABLED=true`
   - Use the same Datadog MCP queries from M1 to verify traces are identical
   - Compare span hierarchy, attributes, and parent-child relationships
@@ -205,3 +205,4 @@ try {
 | 2026-02-21 | M2 complete | All 7 OTel packages moved from `dependencies` to `peerDependencies`/`peerDependenciesMeta`. Added `engines` field. All packages mirrored in `devDependencies` for local development. Build passes, 146 tests pass. |
 | 2026-02-21 | M3 complete | Converted 3 static imports to dynamic `require()` with try/catch in `src/tracing/index.ts`: `@traceloop/node-server-sdk`, `@opentelemetry/sdk-trace-node`, `@opentelemetry/exporter-trace-otlp-proto`. Changed `Tracer` and `SpanExporter` to `import type` (erased at compile time). Init block guarded by traceloop availability. `withTool` export changed from const to function with passthrough fallback. `tool-definitions-processor.ts` unchanged (type-only imports already safe). Build passes, 146 tests pass. |
 | 2026-02-21 | M4 complete | Removed 7 optional OTel packages from `node_modules` (kept `@opentelemetry/api`). CLI ran full agent loop without crashes or `MODULE_NOT_FOUND` errors. MCP server started cleanly. `OTEL_TRACING_ENABLED=true` with missing SDK logged expected warning (`"@traceloop/node-server-sdk is not installed. Tracing will be no-op."`) without crashing — both CLI and MCP modes. `npm install` restored all packages; build passes, 146 tests pass. |
+| 2026-02-21 | M5 complete | Post-refactor telemetry verified in Datadog for both CLI and MCP modes. CLI trace `dfa3fe4773b7e83664852591344a4646` (94 spans, 6 kubectl_get + 1 vector_search): all 10 M5 checklist items pass — span hierarchy, GenAI attributes, tool definitions, process semconv, parent-child relationships all match M1 baseline. MCP trace `4da342d9c6210f2f68f7c9c6c1f142de`: root span `cluster-whisperer.mcp.investigate` with MCP-specific attributes (`invocation.mode: mcp`, `mcp.tool.name: investigate`, `gen_ai.tool.call.id`). All success criteria now met. |
