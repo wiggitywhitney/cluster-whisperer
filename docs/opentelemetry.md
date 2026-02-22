@@ -11,6 +11,54 @@ OpenTelemetry (OTel) is an open standard for collecting observability data: trac
 - Switch backends (Datadog, Jaeger, Honeycomb) without code changes
 - Industry standard with broad ecosystem support
 
+## Installation (for Consumers)
+
+cluster-whisperer uses OpenTelemetry packages as **peer dependencies** so consumers control whether telemetry is installed.
+
+### Required Peer Dependency
+
+`@opentelemetry/api` is a **required** peer dependency. npm 7+ installs it automatically. It's ~50KB and returns no-op implementations when no SDK is configured — zero overhead.
+
+### Optional Peer Dependencies
+
+The SDK packages are **optional**. Consumers who don't want telemetry don't need to install them — everything works without them.
+
+To enable full telemetry, install the optional packages:
+
+```bash
+npm install @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-proto @traceloop/node-server-sdk
+```
+
+All optional peer dependencies:
+
+| Package | Purpose |
+|---------|---------|
+| `@opentelemetry/sdk-trace-node` | Console span exporter for development |
+| `@opentelemetry/exporter-trace-otlp-proto` | OTLP exporter for production backends |
+| `@opentelemetry/sdk-node` | Node.js SDK (used internally by traceloop) |
+| `@opentelemetry/resources` | Resource metadata for spans |
+| `@opentelemetry/semantic-conventions` | Standard attribute names |
+| `@traceloop/node-server-sdk` | Auto-instrumentation for LLM calls |
+
+### Graceful Degradation
+
+When optional packages are absent:
+- CLI and MCP server start and run normally
+- All tracing calls are safe no-ops (from `@opentelemetry/api`)
+- `OTEL_TRACING_ENABLED=true` with missing SDK logs a warning but does not crash
+
+When optional packages are present:
+- Set `OTEL_TRACING_ENABLED=true` to enable tracing
+- Full span hierarchy with LLM calls, tool executions, and kubectl subprocesses
+
+### npm Version Requirements
+
+Peer dependency auto-installation requires npm 7+. The `engines` field in package.json enforces this:
+
+```json
+"engines": { "node": ">=18", "npm": ">=7" }
+```
+
 ## Core Concepts
 
 ### Traces
@@ -24,7 +72,7 @@ Traces are made up of spans.
 A **span** represents a single unit of work within a trace. Spans can be nested to show parent-child relationships.
 
 Example trace structure:
-```
+```text
 [Trace: "Why is my pod crashing?"]
 ├── [Span: anthropic.chat]                          ← LLM call (from OpenLLMetry)
 │   ├── [Span: execute_tool kubectl_get]            ← Tool execution
@@ -74,7 +122,7 @@ Example attributes on a kubectl span:
 
 ### Architecture
 
-```
+```text
 src/tracing/index.ts        → OpenLLMetry initialization (owns TracerProvider)
 src/tracing/tool-tracing.ts → Tool instrumentation using OpenLLMetry's withTool
 src/utils/kubectl.ts        → kubectl subprocess instrumentation
@@ -196,7 +244,7 @@ vals exec -i -f .vals.yaml -- node dist/index.js "what pods are running?"
 
 With tracing enabled, you'll see spans printed to the console:
 
-```
+```text
 [OTel] Initializing OpenTelemetry tracing...
 [OTel] Using console exporter
 [OTel] Tracing enabled for cluster-whisperer v0.1.0
@@ -286,7 +334,7 @@ These attributes follow [OTel GenAI semantic conventions](https://opentelemetry.
 
 When kubectl is executed, a child span is created under the MCP tool span:
 
-```
+```text
 execute_tool kubectl_get (INTERNAL)
 └── kubectl get pods (CLIENT)
 ```
@@ -316,7 +364,7 @@ Note: We keep `k8s.namespace` and `k8s.output_size_bytes` as pragmatic custom at
 
 **Example console output:**
 
-```
+```text
 {
   traceId: 'aee9aa49429300043da06fa36b467828',
   parentSpanContext: { spanId: '64656e98ee0b505c' },  // Parent MCP tool span
@@ -520,7 +568,7 @@ return context.with(activeContext, async () => {
 
 This ensures kubectl spans are correctly parented under MCP tool spans, creating the expected hierarchy:
 
-```
+```text
 execute_tool kubectl_get (INTERNAL, 294ms)
 └── kubectl get pods (CLIENT, 293ms)
 ```

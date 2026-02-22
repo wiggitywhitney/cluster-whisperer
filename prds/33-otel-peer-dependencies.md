@@ -1,6 +1,6 @@
 # PRD #33: OTel Peer Dependencies for Distribution
 
-**Status**: Active
+**Status**: Complete
 **Created**: 2026-02-21
 **GitHub Issue**: [#33](https://github.com/wiggitywhitney/cluster-whisperer/issues/33)
 
@@ -78,7 +78,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - Compare span hierarchy, attributes, and parent-child relationships
   - Verify no regressions in trace completeness or attribute coverage
 
-- [ ] **M6**: Tests and Documentation
+- [x] **M6**: Tests and Documentation
   - Write unit tests for the dynamic import fallback behavior (tracing module loads without SDK)
   - Write integration test that verifies tracing no-ops when SDK is absent
   - Write integration test that verifies tracing works when SDK is present
@@ -151,13 +151,11 @@ The API package is ~50KB and designed to be present even when no SDK is configur
 import * as traceloop from "@traceloop/node-server-sdk";
 import { ConsoleSpanExporter } from "@opentelemetry/sdk-trace-node";
 
-// After (dynamic, graceful degradation):
-let traceloop: typeof import("@traceloop/node-server-sdk") | null = null;
-try {
-  traceloop = require("@traceloop/node-server-sdk");
-} catch {
-  // SDK not installed — tracing will be no-op
-}
+// After (dynamic, graceful degradation via optional-deps.ts):
+// optional-deps.ts wraps require() in try/catch for each package
+import { loadTraceloop, loadSdkTraceNode } from "./optional-deps";
+const traceloop = loadTraceloop();       // returns module or null
+const sdkTraceNode = loadSdkTraceNode(); // returns module or null
 ```
 
 ### npm Behavior
@@ -194,6 +192,7 @@ try {
 | 2026-02-21 | Datadog MCP queries for before/after verification | Real trace comparison is more reliable than unit testing trace output. Validates the full pipeline. |
 | 2026-02-21 | Mirror all peer deps in `devDependencies` for local development | npm does not auto-install optional peers for the root project. `devDependencies` ensures packages are available during development while `peerDependencies` controls the consumer install experience. |
 | 2026-02-21 | `tool-definitions-processor.ts` needs no runtime changes for M3 | Both SDK imports (`SpanProcessor`, `ReadableSpan`) are `import type` — TypeScript erases them at compile time. Verified: compiled JS has zero references to `@opentelemetry/sdk-trace-base`. The class is only instantiated inside `traceloop.initialize()` which is already guarded by the dynamic import check. |
+| 2026-02-22 | Extract `optional-deps.ts` from inline try/catch in `index.ts` | Vitest cannot intercept CJS `require()` calls that go through Node's native module resolver. Wrapping them in an ESM-importable helper module (`optional-deps.ts`) makes the tracing module fully testable via `vi.mock("./optional-deps")`. Behavior is identical to the inline pattern from M3. |
 
 ---
 
@@ -206,3 +205,4 @@ try {
 | 2026-02-21 | M3 complete | Converted 3 static imports to dynamic `require()` with try/catch in `src/tracing/index.ts`: `@traceloop/node-server-sdk`, `@opentelemetry/sdk-trace-node`, `@opentelemetry/exporter-trace-otlp-proto`. Changed `Tracer` and `SpanExporter` to `import type` (erased at compile time). Init block guarded by traceloop availability. `withTool` export changed from const to function with passthrough fallback. `tool-definitions-processor.ts` unchanged (type-only imports already safe). Build passes, 146 tests pass. |
 | 2026-02-21 | M4 complete | Removed 7 optional OTel packages from `node_modules` (kept `@opentelemetry/api`). CLI ran full agent loop without crashes or `MODULE_NOT_FOUND` errors. MCP server started cleanly. `OTEL_TRACING_ENABLED=true` with missing SDK logged expected warning (`"@traceloop/node-server-sdk is not installed. Tracing will be no-op."`) without crashing — both CLI and MCP modes. `npm install` restored all packages; build passes, 146 tests pass. |
 | 2026-02-21 | M5 complete | Post-refactor telemetry verified in Datadog for both CLI and MCP modes. CLI trace `dfa3fe4773b7e83664852591344a4646` (94 spans, 6 kubectl_get + 1 vector_search): all 10 M5 checklist items pass — span hierarchy, GenAI attributes, tool definitions, process semconv, parent-child relationships all match M1 baseline. MCP trace `4da342d9c6210f2f68f7c9c6c1f142de`: root span `cluster-whisperer.mcp.investigate` with MCP-specific attributes (`invocation.mode: mcp`, `mcp.tool.name: investigate`, `gen_ai.tool.call.id`). All success criteria now met. |
+| 2026-02-22 | M6 complete | Created `src/tracing/optional-deps.ts` to wrap CJS `require()` for testability. 23 unit tests (`index.test.ts`) covering SDK absent/present, exporter edge cases, env var handling. 9 integration tests (`tracing.integration.test.ts`) covering full stack with SDK absent (5) and present (4). Updated `docs/opentelemetry.md` with "Installation (for Consumers)" section (required vs optional peers, graceful degradation, npm 7+). Updated README Observability section with peer dependency note. Full suite: 184 passed, 39 skipped, 0 failures. PRD 100% complete. |

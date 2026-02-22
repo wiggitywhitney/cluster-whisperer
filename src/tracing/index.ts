@@ -38,40 +38,27 @@
 import type { Tracer } from "@opentelemetry/api";
 import type { SpanExporter } from "@opentelemetry/sdk-trace-node";
 import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
+import {
+  loadTraceloop,
+  loadSdkTraceNode,
+  loadExporterOtlpProto,
+} from "./optional-deps";
 
 /**
- * Dynamic imports for optional OTel SDK packages.
+ * Optional OTel SDK packages loaded at module init time.
  *
  * These packages are optional peer dependencies — consumers who don't want
- * telemetry don't need to install them. We use try/catch require() so the
- * module loads successfully even when they're absent.
+ * telemetry don't need to install them. The loaders in optional-deps.ts
+ * wrap require() in try/catch so the module loads successfully when absent.
  *
  * When missing:
  * - traceloop = null → no auto-instrumentation, withTool is a passthrough
  * - sdkTraceNode = null → no ConsoleSpanExporter available
  * - exporterOtlpProto = null → no OTLPTraceExporter available
  */
-let traceloop: typeof import("@traceloop/node-server-sdk") | null = null;
-try {
-  traceloop = require("@traceloop/node-server-sdk");
-} catch {
-  // Optional: @traceloop/node-server-sdk not installed
-}
-
-let sdkTraceNode: typeof import("@opentelemetry/sdk-trace-node") | null = null;
-try {
-  sdkTraceNode = require("@opentelemetry/sdk-trace-node");
-} catch {
-  // Optional: @opentelemetry/sdk-trace-node not installed
-}
-
-let exporterOtlpProto: typeof import("@opentelemetry/exporter-trace-otlp-proto") | null =
-  null;
-try {
-  exporterOtlpProto = require("@opentelemetry/exporter-trace-otlp-proto");
-} catch {
-  // Optional: @opentelemetry/exporter-trace-otlp-proto not installed
-}
+const traceloop = loadTraceloop();
+const sdkTraceNode = loadSdkTraceNode();
+const exporterOtlpProto = loadExporterOtlpProto();
 
 /**
  * Configuration constants
