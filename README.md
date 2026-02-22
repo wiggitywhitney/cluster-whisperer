@@ -176,7 +176,7 @@ The MCP server exposes a single `investigate` tool that wraps the same ReAct age
 
 ## Observability
 
-OpenTelemetry tracing provides visibility into agent operations:
+OpenTelemetry tracing provides visibility into agent operations. OTel SDK packages are **optional peer dependencies** — tracing works when installed but everything runs fine without them. See [`docs/opentelemetry.md`](docs/opentelemetry.md) for installation and configuration details.
 
 ```text
 cluster-whisperer.investigate (root span)

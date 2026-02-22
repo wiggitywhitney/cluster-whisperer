@@ -14,6 +14,12 @@
  * Tracing is disabled unless OTEL_TRACING_ENABLED=true. When disabled, the OTel API
  * returns a "no-op" tracer that does nothing - zero performance overhead.
  *
+ * Graceful degradation:
+ * OTel SDK packages (@traceloop/node-server-sdk, @opentelemetry/sdk-trace-node, etc.)
+ * are optional peer dependencies loaded via dynamic require(). When absent, tracing
+ * initialization is skipped and the OTel API returns no-op implementations.
+ * This allows consumers to choose whether to install telemetry support.
+ *
  * Exporter options:
  * - console (default): Prints spans to stdout, useful for development
  * - otlp: Sends spans via OTLP protocol to a collector (Datadog Agent, Jaeger, etc.)
@@ -29,14 +35,30 @@
  * the same trace context and export destination.
  */
 
-import * as traceloop from "@traceloop/node-server-sdk";
-import {
-  ConsoleSpanExporter,
-  SpanExporter,
-} from "@opentelemetry/sdk-trace-node";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { Tracer } from "@opentelemetry/api";
+import { trace, type Tracer } from "@opentelemetry/api";
+import type { SpanExporter } from "@opentelemetry/sdk-trace-node";
 import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
+import {
+  loadTraceloop,
+  loadSdkTraceNode,
+  loadExporterOtlpProto,
+} from "./optional-deps";
+
+/**
+ * Optional OTel SDK packages loaded at module init time.
+ *
+ * These packages are optional peer dependencies — consumers who don't want
+ * telemetry don't need to install them. The loaders in optional-deps.ts
+ * wrap require() in try/catch so the module loads successfully when absent.
+ *
+ * When missing:
+ * - traceloop = null → no auto-instrumentation, withTool is a passthrough
+ * - sdkTraceNode = null → no ConsoleSpanExporter available
+ * - exporterOtlpProto = null → no OTLPTraceExporter available
+ */
+const traceloop = loadTraceloop();
+const sdkTraceNode = loadSdkTraceNode();
+const exporterOtlpProto = loadExporterOtlpProto();
 
 /**
  * Configuration constants
@@ -82,6 +104,10 @@ const exporterType = process.env.OTEL_EXPORTER_TYPE || "console";
 /**
  * Create the appropriate span exporter based on configuration.
  *
+ * Only called inside the initialization block when @traceloop/node-server-sdk
+ * is available. Checks for specific exporter packages and provides clear error
+ * messages if the requested exporter type requires a package that isn't installed.
+ *
  * Console exporter: Prints spans to stdout in a readable format.
  * Great for development and debugging.
  *
@@ -90,6 +116,12 @@ const exporterType = process.env.OTEL_EXPORTER_TYPE || "console";
  */
 function createSpanExporter(): SpanExporter {
   if (exporterType === "otlp") {
+    if (!exporterOtlpProto) {
+      throw new Error(
+        "OTEL_EXPORTER_TYPE=otlp requires @opentelemetry/exporter-trace-otlp-proto. " +
+          "Install it: npm install @opentelemetry/exporter-trace-otlp-proto"
+      );
+    }
     const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
     if (!endpoint) {
       throw new Error(
@@ -101,7 +133,7 @@ function createSpanExporter(): SpanExporter {
     const base = endpoint.replace(/\/+$/, "");
     const url = base.endsWith("/v1/traces") ? base : `${base}/v1/traces`;
     console.log(`[OTel] Using OTLP exporter → ${base}`);
-    return new OTLPTraceExporter({ url });
+    return new exporterOtlpProto.OTLPTraceExporter({ url });
   }
 
   if (exporterType !== "console") {
@@ -110,12 +142,19 @@ function createSpanExporter(): SpanExporter {
     );
   }
 
+  if (!sdkTraceNode) {
+    throw new Error(
+      "Console exporter requires @opentelemetry/sdk-trace-node. " +
+        "Install it: npm install @opentelemetry/sdk-trace-node"
+    );
+  }
+
   console.log("[OTel] Using console exporter");
-  return new ConsoleSpanExporter();
+  return new sdkTraceNode.ConsoleSpanExporter();
 }
 
 /**
- * Initialize tracing if enabled.
+ * Initialize tracing if enabled and SDK packages are available.
  *
  * Key architecture decision: OpenLLMetry owns the TracerProvider.
  *
@@ -127,65 +166,79 @@ function createSpanExporter(): SpanExporter {
  *
  * This follows the OTel best practice: let one library own the TracerProvider
  * and configure it through that library's options.
+ *
+ * When @traceloop/node-server-sdk is not installed, initialization is skipped
+ * and all tracing calls fall through to the OTel API's built-in no-ops.
  */
 if (isTracingEnabled) {
-  console.log("[OTel] Initializing OpenTelemetry tracing...");
+  if (!traceloop) {
+    console.warn(
+      "[OTel] OTEL_TRACING_ENABLED=true but @traceloop/node-server-sdk is not installed. " +
+        "Tracing will be no-op. Install SDK packages for full telemetry."
+    );
+  } else {
+    console.log("[OTel] Initializing OpenTelemetry tracing..."); // eslint-disable-line no-console
 
-  const exporter = createSpanExporter();
+    const exporter = createSpanExporter();
 
-  /**
-   * Initialize OpenLLMetry with our exporter.
-   *
-   * OpenLLMetry auto-instruments LangChain and Anthropic SDK calls, creating spans with:
-   * - gen_ai.request.model (e.g., "claude-sonnet-4-20250514")
-   * - gen_ai.provider.name (e.g., "anthropic")
-   * - gen_ai.usage.input_tokens / output_tokens
-   * - gen_ai.operation.name (e.g., "chat")
-   *
-   * By passing our exporter, these auto-instrumented spans go to the same
-   * destination as our manual tool and kubectl spans.
-   */
-  traceloop.initialize({
-    appName: SERVICE_NAME,
-    // Use our exporter - this is the key to unified tracing
-    exporter: exporter,
-    // Disable batching for immediate export - better for development and short-lived CLI
-    disableBatch: true,
-    // Capture prompt/completion content only when explicitly enabled (security: default false)
-    traceContent: isCaptureAiPayloads,
-    // Silence the default "Traceloop exporting traces to..." message
-    silenceInitializationMessage: true,
-    // Custom SpanProcessor that adds gen_ai.tool.definitions to LLM chat spans.
-    // OpenLLMetry's auto-instrumentation creates anthropic.chat spans but doesn't
-    // include tool definitions — our processor fills that gap for LLM Observability.
-    processor: new ToolDefinitionsProcessor(),
-  });
+    /**
+     * Initialize OpenLLMetry with our exporter.
+     *
+     * OpenLLMetry auto-instruments LangChain and Anthropic SDK calls, creating spans with:
+     * - gen_ai.request.model (e.g., "claude-sonnet-4-20250514")
+     * - gen_ai.provider.name (e.g., "anthropic")
+     * - gen_ai.usage.input_tokens / output_tokens
+     * - gen_ai.operation.name (e.g., "chat")
+     *
+     * By passing our exporter, these auto-instrumented spans go to the same
+     * destination as our manual tool and kubectl spans.
+     */
+    traceloop.initialize({
+      appName: SERVICE_NAME,
+      // Use our exporter - this is the key to unified tracing
+      exporter: exporter,
+      // Disable batching for immediate export - better for development and short-lived CLI
+      disableBatch: true,
+      // Capture prompt/completion content only when explicitly enabled (security: default false)
+      traceContent: isCaptureAiPayloads,
+      // Silence the default "Traceloop exporting traces to..." message
+      silenceInitializationMessage: true,
+      // Custom SpanProcessor that adds gen_ai.tool.definitions to LLM chat spans.
+      // OpenLLMetry's auto-instrumentation creates anthropic.chat spans but doesn't
+      // include tool definitions — our processor fills that gap for LLM Observability.
+      processor: new ToolDefinitionsProcessor(),
+    });
 
-  console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`);
-  console.log("[OTel] OpenLLMetry initialized for LLM instrumentation");
+    console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`); // eslint-disable-line no-console
+    console.log("[OTel] OpenLLMetry initialized for LLM instrumentation"); // eslint-disable-line no-console
 
-  /**
-   * Graceful shutdown: flush pending spans before process exits.
-   *
-   * Why this matters:
-   * Even with disableBatch: true, there may be spans in flight when the process
-   * exits. forceFlush ensures they're exported before shutdown.
-   *
-   * Note: The @traceloop/node-server-sdk v0.22.x only exports forceFlush(),
-   * not a shutdown() method. forceFlush() is sufficient for our CLI use case.
-   */
-  const shutdown = async () => {
-    try {
-      await traceloop.forceFlush();
-      console.log("[OTel] Tracing shut down gracefully");
-    } catch (error) {
-      console.error("[OTel] Error shutting down tracing:", error);
-    }
-  };
+    /**
+     * Graceful shutdown: flush pending spans before process exits.
+     *
+     * Why this matters:
+     * Even with disableBatch: true, there may be spans in flight when the process
+     * exits. forceFlush ensures they're exported before shutdown.
+     *
+     * Note: The @traceloop/node-server-sdk v0.22.x only exports forceFlush(),
+     * not a shutdown() method. forceFlush() is sufficient for our CLI use case.
+     *
+     * The const binding captures the traceloop reference at init time, ensuring
+     * the shutdown handler always references the SDK instance used for initialization.
+     */
+    const traceloopSdk = traceloop;
+    const shutdown = async () => {
+      try {
+        await traceloopSdk.forceFlush();
+        console.log("[OTel] Tracing shut down gracefully"); // eslint-disable-line no-console
+      } catch (error) {
+        console.error("[OTel] Error shutting down tracing:", error);
+      }
+    };
 
-  // Handle common termination signals
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+    // Handle common termination signals
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+  }
 }
 
 /**
@@ -210,18 +263,26 @@ export function getTracer(): Tracer {
   // Use standard OTel API - this returns the tracer from whatever
   // TracerProvider is registered globally (OpenLLMetry's when tracing is enabled,
   // or a no-op when disabled)
-  const { trace } = require("@opentelemetry/api");
   return trace.getTracer(SERVICE_NAME);
 }
 
 /**
  * Re-export OpenLLMetry's withTool for use in tool-tracing.ts
  *
- * This wrapper creates properly-parented spans for tool executions.
- * It's the official way to create tool spans that integrate with OpenLLMetry's
- * auto-instrumented LLM spans.
+ * When @traceloop/node-server-sdk is installed, this delegates to OpenLLMetry's
+ * withTool which creates properly-parented spans for tool executions.
+ * When the SDK is absent, this is a passthrough that calls the function directly —
+ * the OTel API's no-op tracer handles span creation safely.
  */
-export const withTool = traceloop.withTool;
+export function withTool<T>(
+  config: { name: string },
+  fn: () => Promise<T>
+): Promise<T> {
+  if (traceloop) {
+    return traceloop.withTool(config, fn);
+  }
+  return fn();
+}
 
 /**
  * Export AI payload capture flag for use in context-bridge.ts
