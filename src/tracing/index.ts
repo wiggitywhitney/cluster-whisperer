@@ -177,7 +177,7 @@ if (isTracingEnabled) {
         "Tracing will be no-op. Install SDK packages for full telemetry."
     );
   } else {
-    console.log("[OTel] Initializing OpenTelemetry tracing...");
+    console.log("[OTel] Initializing OpenTelemetry tracing..."); // eslint-disable-line no-console
 
     const exporter = createSpanExporter();
 
@@ -209,8 +209,8 @@ if (isTracingEnabled) {
       processor: new ToolDefinitionsProcessor(),
     });
 
-    console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`);
-    console.log("[OTel] OpenLLMetry initialized for LLM instrumentation");
+    console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`); // eslint-disable-line no-console
+    console.log("[OTel] OpenLLMetry initialized for LLM instrumentation"); // eslint-disable-line no-console
 
     /**
      * Graceful shutdown: flush pending spans before process exits.
@@ -229,7 +229,7 @@ if (isTracingEnabled) {
     const shutdown = async () => {
       try {
         await traceloopSdk.forceFlush();
-        console.log("[OTel] Tracing shut down gracefully");
+        console.log("[OTel] Tracing shut down gracefully"); // eslint-disable-line no-console
       } catch (error) {
         console.error("[OTel] Error shutting down tracing:", error);
       }
