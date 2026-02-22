@@ -65,7 +65,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - When optional packages are present and `OTEL_TRACING_ENABLED=true`, behavior is identical to today
   - Static imports of `@opentelemetry/api` in other files remain unchanged (required peer)
 
-- [ ] **M4**: Graceful Degradation Verification
+- [x] **M4**: Graceful Degradation Verification
   - Temporarily uninstall all optional OTel packages
   - Verify CLI starts and runs an investigation successfully (no crashes, no errors)
   - Verify MCP server starts and handles requests successfully
@@ -204,3 +204,4 @@ try {
 | 2026-02-21 | M1 complete | Baseline traces captured from 2026-02-19 Datadog APM data. Two reference traces documented with full span hierarchy, attributes by span type, and M5 verification checklist. See `docs/research/33-otel-baseline-traces.md`. |
 | 2026-02-21 | M2 complete | All 7 OTel packages moved from `dependencies` to `peerDependencies`/`peerDependenciesMeta`. Added `engines` field. All packages mirrored in `devDependencies` for local development. Build passes, 146 tests pass. |
 | 2026-02-21 | M3 complete | Converted 3 static imports to dynamic `require()` with try/catch in `src/tracing/index.ts`: `@traceloop/node-server-sdk`, `@opentelemetry/sdk-trace-node`, `@opentelemetry/exporter-trace-otlp-proto`. Changed `Tracer` and `SpanExporter` to `import type` (erased at compile time). Init block guarded by traceloop availability. `withTool` export changed from const to function with passthrough fallback. `tool-definitions-processor.ts` unchanged (type-only imports already safe). Build passes, 146 tests pass. |
+| 2026-02-21 | M4 complete | Removed 7 optional OTel packages from `node_modules` (kept `@opentelemetry/api`). CLI ran full agent loop without crashes or `MODULE_NOT_FOUND` errors. MCP server started cleanly. `OTEL_TRACING_ENABLED=true` with missing SDK logged expected warning (`"@traceloop/node-server-sdk is not installed. Tracing will be no-op."`) without crashing — both CLI and MCP modes. `npm install` restored all packages; build passes, 146 tests pass. |
