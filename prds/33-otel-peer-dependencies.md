@@ -58,7 +58,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - Add `"engines": { "node": ">=18", "npm": ">=7" }` to package.json (peer dep auto-install requires npm 7+)
   - Run `npm install` and verify the project still builds
 
-- [ ] **M3**: Dynamic Imports for Optional Packages
+- [x] **M3**: Dynamic Imports for Optional Packages
   - In `src/tracing/index.ts`: convert static imports of SDK and Traceloop to dynamic `require()` wrapped in try/catch
   - In `src/tracing/tool-definitions-processor.ts`: wrap SpanProcessor import in try/catch (already uses lazy require)
   - When optional packages are missing, tracing initialization is skipped entirely
@@ -131,7 +131,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
 |------|--------|-----|
 | `package.json` | Move deps to peer/optionalPeer | Core of the refactor |
 | `src/tracing/index.ts` | Static imports → dynamic require() with try/catch for SDK + traceloop | These are the only SDK consumers |
-| `src/tracing/tool-definitions-processor.ts` | Wrap SpanProcessor import in try/catch | Extends SDK class |
+| `src/tracing/tool-definitions-processor.ts` | No changes needed | SDK imports are `import type` (erased at compile time); class only instantiated inside guarded init block |
 
 ### Files That Don't Change
 
@@ -193,6 +193,7 @@ try {
 | 2026-02-21 | Use `peerDependenciesMeta` with `optional: true` for SDK packages | npm 7+ does not auto-install optional peers. Consumers choose whether to install telemetry. |
 | 2026-02-21 | Datadog MCP queries for before/after verification | Real trace comparison is more reliable than unit testing trace output. Validates the full pipeline. |
 | 2026-02-21 | Mirror all peer deps in `devDependencies` for local development | npm does not auto-install optional peers for the root project. `devDependencies` ensures packages are available during development while `peerDependencies` controls the consumer install experience. |
+| 2026-02-21 | `tool-definitions-processor.ts` needs no runtime changes for M3 | Both SDK imports (`SpanProcessor`, `ReadableSpan`) are `import type` — TypeScript erases them at compile time. Verified: compiled JS has zero references to `@opentelemetry/sdk-trace-base`. The class is only instantiated inside `traceloop.initialize()` which is already guarded by the dynamic import check. |
 
 ---
 
@@ -202,3 +203,4 @@ try {
 |------|-----------|-------|
 | 2026-02-21 | M1 complete | Baseline traces captured from 2026-02-19 Datadog APM data. Two reference traces documented with full span hierarchy, attributes by span type, and M5 verification checklist. See `docs/research/33-otel-baseline-traces.md`. |
 | 2026-02-21 | M2 complete | All 7 OTel packages moved from `dependencies` to `peerDependencies`/`peerDependenciesMeta`. Added `engines` field. All packages mirrored in `devDependencies` for local development. Build passes, 146 tests pass. |
+| 2026-02-21 | M3 complete | Converted 3 static imports to dynamic `require()` with try/catch in `src/tracing/index.ts`: `@traceloop/node-server-sdk`, `@opentelemetry/sdk-trace-node`, `@opentelemetry/exporter-trace-otlp-proto`. Changed `Tracer` and `SpanExporter` to `import type` (erased at compile time). Init block guarded by traceloop availability. `withTool` export changed from const to function with passthrough fallback. `tool-definitions-processor.ts` unchanged (type-only imports already safe). Build passes, 146 tests pass. |
