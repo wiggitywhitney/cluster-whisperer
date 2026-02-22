@@ -43,7 +43,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
 
 ## Milestones
 
-- [ ] **M1**: Baseline Telemetry Verification
+- [x] **M1**: Baseline Telemetry Verification
   - Run cluster-whisperer with `OTEL_TRACING_ENABLED=true` against a live cluster
   - Use Datadog MCP tools to query APM spans and verify the current trace hierarchy
   - Document the expected span structure: root span → anthropic.chat → tool spans → kubectl spans
@@ -191,4 +191,6 @@ try {
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+| Date | Milestone | Notes |
+|------|-----------|-------|
+| 2026-02-21 | M1 complete | Baseline traces captured from 2026-02-19 Datadog APM data. Two reference traces documented with full span hierarchy, attributes by span type, and M5 verification checklist. See `docs/research/33-otel-baseline-traces.md`. |
