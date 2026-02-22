@@ -50,7 +50,7 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   - Capture baseline span attributes (GenAI semconv, process semconv, custom attributes)
   - This establishes the "before" snapshot that M5 will verify against
 
-- [ ] **M2**: Update package.json Dependency Declarations
+- [x] **M2**: Update package.json Dependency Declarations
   - Move `@opentelemetry/api` from `dependencies` to `peerDependencies` (required, `^1.9.0`)
   - Move all OTel SDK packages to `peerDependencies` with `peerDependenciesMeta: { optional: true }`
   - Move `@traceloop/node-server-sdk` to `peerDependencies` with `peerDependenciesMeta: { optional: true }`
@@ -116,8 +116,14 @@ The API package is ~50KB and designed to be present even when no SDK is configur
   "@opentelemetry/sdk-trace-node": { "optional": true },
   "@opentelemetry/semantic-conventions": { "optional": true },
   "@traceloop/node-server-sdk": { "optional": true }
+},
+"engines": {
+  "node": ">=18",
+  "npm": ">=7"
 }
 ```
+
+> **Note**: All peer dependency packages are also listed in `devDependencies` to ensure they're available during local development. npm does not auto-install optional peers for the root project.
 
 ### Files That Change
 
@@ -186,6 +192,7 @@ try {
 | 2026-02-21 | `@opentelemetry/api` as required (not optional) peer | API is ~50KB, returns no-ops by design. Making it required avoids dynamic imports in 6 files. |
 | 2026-02-21 | Use `peerDependenciesMeta` with `optional: true` for SDK packages | npm 7+ does not auto-install optional peers. Consumers choose whether to install telemetry. |
 | 2026-02-21 | Datadog MCP queries for before/after verification | Real trace comparison is more reliable than unit testing trace output. Validates the full pipeline. |
+| 2026-02-21 | Mirror all peer deps in `devDependencies` for local development | npm does not auto-install optional peers for the root project. `devDependencies` ensures packages are available during development while `peerDependencies` controls the consumer install experience. |
 
 ---
 
@@ -194,3 +201,4 @@ try {
 | Date | Milestone | Notes |
 |------|-----------|-------|
 | 2026-02-21 | M1 complete | Baseline traces captured from 2026-02-19 Datadog APM data. Two reference traces documented with full span hierarchy, attributes by span type, and M5 verification checklist. See `docs/research/33-otel-baseline-traces.md`. |
+| 2026-02-21 | M2 complete | All 7 OTel packages moved from `dependencies` to `peerDependencies`/`peerDependenciesMeta`. Added `engines` field. All packages mirrored in `devDependencies` for local development. Build passes, 146 tests pass. |
