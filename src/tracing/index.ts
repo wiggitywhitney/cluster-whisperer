@@ -35,7 +35,7 @@
  * the same trace context and export destination.
  */
 
-import type { Tracer } from "@opentelemetry/api";
+import { trace, type Tracer } from "@opentelemetry/api";
 import type { SpanExporter } from "@opentelemetry/sdk-trace-node";
 import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
 import {
@@ -263,7 +263,6 @@ export function getTracer(): Tracer {
   // Use standard OTel API - this returns the tracer from whatever
   // TracerProvider is registered globally (OpenLLMetry's when tracing is enabled,
   // or a no-op when disabled)
-  const { trace } = require("@opentelemetry/api");
   return trace.getTracer(SERVICE_NAME);
 }
 
