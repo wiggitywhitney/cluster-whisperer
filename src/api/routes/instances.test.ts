@@ -1,5 +1,5 @@
 /**
- * instances.test.ts - Unit tests for the sync endpoint route (PRD #35 M2)
+ * instances.test.ts - Unit tests for the sync endpoint route (PRD #35 M2–M3)
  *
  * Tests the POST /api/v1/instances/sync route using app.request() with a
  * mock VectorStore. No real server or ChromaDB needed.
@@ -7,6 +7,9 @@
  * The route handler is a thin wrapper: validate (Zod), delegate (pipeline
  * functions), respond (status code). These tests verify the wiring between
  * those layers and the correct HTTP response for each scenario.
+ *
+ * M2 tests cover upserts, validation, and error handling.
+ * M3 tests cover deletes, mixed payloads, delete ordering, and delete errors.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -218,11 +221,66 @@ describe("POST /api/v1/instances/sync — DB errors", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/v1/instances/sync — deletes accepted but not processed (M2)
+// POST /api/v1/instances/sync — deletes (M3)
 // ---------------------------------------------------------------------------
 
-describe("POST /api/v1/instances/sync — deletes field (M2 passthrough)", () => {
-  it("accepts deletes in the payload without processing them", async () => {
+describe("POST /api/v1/instances/sync — deletes", () => {
+  it("deletes instances by ID from the vector store", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await postSync(app, {
+      deletes: ["default/apps/v1/Deployment/old-service"],
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ status: "ok", upserted: 0, deleted: 1 });
+    expect(mockStore.delete).toHaveBeenCalledWith("instances", [
+      "default/apps/v1/Deployment/old-service",
+    ]);
+  });
+
+  it("handles multiple deletes", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await postSync(app, {
+      deletes: [
+        "default/apps/v1/Deployment/old-service",
+        "kube-system/v1/Service/legacy-dns",
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ status: "ok", upserted: 0, deleted: 2 });
+    expect(mockStore.delete).toHaveBeenCalledWith("instances", [
+      "default/apps/v1/Deployment/old-service",
+      "kube-system/v1/Service/legacy-dns",
+    ]);
+  });
+
+  it("skips vectorStore.delete when deletes array is empty", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await postSync(app, {
+      upserts: [makeInstance()],
+      deletes: [],
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockStore.delete).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/instances/sync — mixed payloads (M3)
+// ---------------------------------------------------------------------------
+
+describe("POST /api/v1/instances/sync — mixed upserts + deletes", () => {
+  it("processes both upserts and deletes in the same request", async () => {
     const mockStore = createMockVectorStore();
     const app = createApp({ vectorStore: mockStore });
 
@@ -232,7 +290,64 @@ describe("POST /api/v1/instances/sync — deletes field (M2 passthrough)", () =>
     });
 
     expect(res.status).toBe(200);
-    // Deletes accepted by schema but not processed until M3
-    expect(mockStore.delete).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body).toEqual({ status: "ok", upserted: 1, deleted: 1 });
+    expect(mockStore.delete).toHaveBeenCalled();
+    expect(mockStore.store).toHaveBeenCalled();
+  });
+
+  it("processes deletes before upserts", async () => {
+    const mockStore = createMockVectorStore();
+    const callOrder: string[] = [];
+    mockStore.delete.mockImplementation(async () => {
+      callOrder.push("delete");
+    });
+    mockStore.store.mockImplementation(async () => {
+      callOrder.push("store");
+    });
+    const app = createApp({ vectorStore: mockStore });
+
+    await postSync(app, {
+      upserts: [makeInstance()],
+      deletes: ["default/apps/v1/Deployment/old-service"],
+    });
+
+    expect(callOrder).toEqual(["delete", "store"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/instances/sync — delete DB errors (M3)
+// ---------------------------------------------------------------------------
+
+describe("POST /api/v1/instances/sync — delete DB errors", () => {
+  it("returns 500 when vector store fails during deletes", async () => {
+    const mockStore = createMockVectorStore();
+    mockStore.delete.mockRejectedValue(
+      new Error("ChromaDB connection refused")
+    );
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await postSync(app, {
+      deletes: ["default/apps/v1/Deployment/old-service"],
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toContain("ChromaDB connection refused");
+  });
+
+  it("does not process upserts if deletes fail", async () => {
+    const mockStore = createMockVectorStore();
+    mockStore.delete.mockRejectedValue(new Error("DB error"));
+    const app = createApp({ vectorStore: mockStore });
+
+    await postSync(app, {
+      upserts: [makeInstance()],
+      deletes: ["default/apps/v1/Deployment/old-service"],
+    });
+
+    // Deletes run first and fail — upserts should not execute
+    expect(mockStore.store).not.toHaveBeenCalled();
   });
 });

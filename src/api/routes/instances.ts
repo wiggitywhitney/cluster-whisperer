@@ -1,15 +1,15 @@
 /**
- * instances.ts - Sync endpoint route handler (PRD #35 M2)
+ * instances.ts - Sync endpoint route handler (PRD #35 M2–M3)
  *
  * Receives batched instance changes from the k8s-vectordb-sync controller
  * and stores them in the vector database via existing pipeline functions.
  *
  * This is a thin wrapper: validate (Zod), delegate (pipeline), respond
  * (status code). No business logic lives here — the heavy lifting is in
- * instanceToDocument() and storeInstances() from the pipeline module.
+ * instanceToDocument(), storeInstances(), and vectorStore.delete().
  *
- * M2 handles upserts only. Deletes are accepted by the schema (so the
- * controller's payload validates) but not processed until M3.
+ * Processing order: deletes first, then upserts. If the same ID appears
+ * in both arrays, the delete removes it and the upsert recreates it.
  */
 
 import { Hono } from "hono";
@@ -58,6 +58,12 @@ export function createInstancesRoute(vectorStore: VectorStore): Hono {
       const payload = c.req.valid("json");
 
       try {
+        // Process deletes first — if the same ID appears in both arrays,
+        // the delete removes it and the upsert recreates it below
+        if (payload.deletes.length > 0) {
+          await vectorStore.delete("instances", payload.deletes);
+        }
+
         // Cast validated payload to ResourceInstance[] — Zod schema matches the type
         const instances = payload.upserts as ResourceInstance[];
 
@@ -71,7 +77,7 @@ export function createInstancesRoute(vectorStore: VectorStore): Hono {
         return c.json({
           status: "ok",
           upserted: payload.upserts.length,
-          deleted: 0, // M3 will process deletes
+          deleted: payload.deletes.length,
         });
       } catch (error) {
         const message =
