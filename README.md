@@ -1,10 +1,10 @@
 # cluster-whisperer
 
-AI agent that answers natural language questions about your Kubernetes cluster.
+AI agent that investigates Kubernetes clusters and makes their capabilities searchable by natural language. Available as a CLI, MCP server, and REST API — with OpenTelemetry tracing throughout.
 
 ## What is this?
 
-An AI agent that lets you ask questions about your Kubernetes cluster in plain English. Available via **CLI** for direct terminal use or as an **MCP server** for integration with Claude Code, Cursor, and other MCP clients.
+An AI agent that lets you ask questions about your Kubernetes cluster in plain English. It investigates using kubectl, searches a vector database of cluster knowledge, and explains what it finds. Available via **CLI** for direct terminal use, as an **MCP server** for integration with Claude Code, Cursor, and other MCP clients, or as a **REST API** for receiving live updates from a Kubernetes controller.
 
 ```bash
 $ cluster-whisperer "Why are pods failing in the payments namespace?"
@@ -31,7 +31,32 @@ file '/app/server.js'. This usually means the Docker image was built
 incorrectly or the working directory is misconfigured.
 ```
 
-The agent investigates by running kubectl commands, showing its reasoning along the way.
+The agent can also search the cluster's knowledge base to discover what's available — not just what's broken:
+
+```bash
+$ cluster-whisperer "What types of databases can I provision?"
+
+Thinking: This is a question about available capabilities. Let me search
+the vector database for database-related resource types...
+
+🔧 Tool: vector_search
+   Args: {"query":"managed database provisioning","collection":"capabilities"}
+   Result:
+   1. PostgreSQL (acid.zalan.do/v1) — Managed PostgreSQL clusters with
+      automated failover, backups, and connection pooling. Complexity: high.
+   2. SQL (devopstoolkit.live/v1) — Composite resource for managed SQL
+      databases across cloud providers. Complexity: medium.
+
+────────────────────────────────────────────────────────────
+Answer:
+Your cluster has two database-related resource types:
+- PostgreSQL (Zalando operator) for managed PostgreSQL with automated
+  failover and backups
+- SQL (DevOps Toolkit) as a cloud-agnostic abstraction for managed
+  databases
+```
+
+The first example shows **investigation** — the agent runs kubectl commands and reasons about what it finds. The second shows **discovery** — the agent searches pre-indexed cluster knowledge using semantic similarity, finding relevant resources even when the exact words don't match.
 
 ## How it works: The ReAct Pattern
 
@@ -42,7 +67,7 @@ Think → Act → Observe → Think → Act → Observe → ... → Answer
 ```
 
 1. **Reason** - Agent thinks about what to do next
-2. **Act** - Agent calls a kubectl tool
+2. **Act** - Agent calls a tool (kubectl or vector search)
 3. **Observe** - Agent sees the result
 4. Repeat until the agent has enough information to answer
 
@@ -52,17 +77,28 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 
 - **CLI Agent** - Ask questions directly from the terminal with visible reasoning
 - **MCP Server** - Use kubectl tools from Claude Code, Cursor, or any MCP-compatible client
+- **REST API** - Receive live instance updates from a Kubernetes controller, keeping the vector database in sync automatically
 - **Knowledge Pipeline** - Pre-index cluster capabilities and running instances into a vector database for semantic search
+- **Vector Search** - Unified search tool with semantic, keyword, and metadata filtering — the agent uses this to discover what your cluster can do
 - **OpenTelemetry Tracing** - Full observability with traces exportable to Datadog, Jaeger, etc.
 - **Extended Thinking** - See the agent's reasoning process as it investigates
 
 ## Prerequisites
 
 - Node.js 18+
-- kubectl CLI installed and configured
-- `ANTHROPIC_API_KEY` environment variable (managed via [vals](https://github.com/helmfile/vals))
-- `VOYAGE_API_KEY` environment variable (for knowledge pipeline embedding)
-- [Chroma](https://www.trychroma.com/) vector database running locally (for knowledge pipeline)
+- kubectl CLI installed and configured (for investigation and sync commands)
+- `ANTHROPIC_API_KEY` environment variable (for the investigation agent and capability sync)
+- `VOYAGE_API_KEY` environment variable (for vector database embedding)
+- [Chroma](https://www.trychroma.com/) vector database running locally (for knowledge pipeline and vector search)
+
+Not every command needs everything:
+
+| Command | kubectl | Anthropic API Key | Voyage API Key | Chroma |
+|---------|---------|-------------------|----------------|--------|
+| `<question>` (investigate) | Yes | Yes | Optional | Optional |
+| `sync` (capabilities) | Yes | Yes | Yes | Yes |
+| `sync-instances` | Yes | No | Yes | Yes |
+| `serve` (REST API) | No | No | Yes | Yes |
 
 ## Setup
 
@@ -97,7 +133,7 @@ The agent can pre-index cluster knowledge into a vector database for faster, mor
 **Sync resource capabilities** (what resource types exist and what they can do):
 
 ```bash
-vals exec -i -f .vals.yaml -- node dist/index.js sync-capabilities
+vals exec -i -f .vals.yaml -- node dist/index.js sync
 ```
 
 **Sync resource instances** (what's currently running in the cluster):
@@ -137,16 +173,60 @@ Add to your `.mcp.json` (in project root or `~/.claude/`):
 
 See `docs/mcp-server.md` for details on how MCP works.
 
+### REST API
+
+Start the HTTP server to receive instance sync payloads from a Kubernetes controller:
+
+```bash
+vals exec -i -f .vals.yaml -- node dist/index.js serve
+
+# Custom port
+vals exec -i -f .vals.yaml -- node dist/index.js serve --port 8080
+```
+
+The server exposes:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/healthz` | GET | Liveness probe — always returns 200 if the process is running |
+| `/readyz` | GET | Readiness probe — returns 200 only when Chroma is reachable |
+| `/api/v1/instances/sync` | POST | Receives batched instance upserts and deletes |
+
+The sync endpoint accepts a JSON payload with two arrays:
+
+```json
+{
+  "upserts": [
+    {
+      "id": "default/apps/v1/Deployment/nginx",
+      "namespace": "default",
+      "name": "nginx",
+      "kind": "Deployment",
+      "apiVersion": "apps/v1",
+      "apiGroup": "apps",
+      "labels": {},
+      "annotations": {},
+      "createdAt": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "deletes": ["default/apps/v1/Deployment/old-nginx"]
+}
+```
+
+This is designed to work with the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller, which watches Kubernetes clusters for resource changes and pushes them here. But any client can POST to the endpoint — the contract is the JSON schema above.
+
+The server handles graceful shutdown on SIGTERM, making it Kubernetes-deployment friendly.
+
 ## Architecture
 
-cluster-whisperer exposes kubectl tools via two interfaces:
+cluster-whisperer exposes kubectl and vector search tools via three interfaces:
 
 ### CLI Agent
 
 ```text
-User Question → ReAct Agent → [kubectl tools] → Cluster → Answer
-                    ↑              |
-                    └──────────────┘
+User Question → ReAct Agent → [kubectl + vector search tools] → Cluster / Vector DB → Answer
+                    ↑                       |
+                    └───────────────────────┘
                    (agent sees result,
                     decides next action)
 ```
@@ -156,7 +236,7 @@ The CLI agent has its own reasoning loop - it decides which tools to call and in
 ### MCP Server
 
 ```text
-User Question → [Claude Code / Cursor] → MCP → investigate tool → ReAct Agent → Cluster
+User Question → [Claude Code / Cursor] → MCP → investigate tool → ReAct Agent → Cluster / Vector DB
                                                       ↑                  |
                                                       └──────────────────┘
                                                      (agent reasons internally)
@@ -164,15 +244,31 @@ User Question → [Claude Code / Cursor] → MCP → investigate tool → ReAct 
 
 The MCP server exposes a single `investigate` tool that wraps the same ReAct agent used by the CLI. This gives MCP clients complete investigations with full tracing - one call captures the entire reasoning chain.
 
+### REST API
+
+```text
+k8s-vectordb-sync controller → POST /api/v1/instances/sync → Hono server → Vector DB
+                                                                  ↑
+Kubernetes cluster ──(watches)──┘                          (upserts + deletes)
+```
+
+The REST API receives pushed instance data from the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller. This keeps the vector database continuously up-to-date as resources change in the cluster, without requiring on-demand `sync-instances` runs.
+
 ### Available Tools
 
 **CLI Agent**: Uses these tools internally during investigation:
 - `kubectl_get` - List resources and their status
 - `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
+- `vector_search` - Search the vector database with three composable dimensions:
+  - **Semantic search** (`query`) — natural language similarity via embeddings (e.g., "managed database" finds SQL CRDs)
+  - **Keyword search** (`keyword`) — exact substring match, no embedding call (e.g., "backup" finds docs mentioning backup)
+  - **Metadata filters** (`kind`, `apiGroup`, `namespace`, `complexity`) — exact match on structured fields
+
+  The agent uses kubectl tools for **investigation** ("why is this pod failing?") and vector search for **discovery** ("what databases can I provision?").
 
 **MCP Server**: Exposes a single high-level tool:
-- `investigate` - Ask a question, get a complete answer (wraps the ReAct agent)
+- `investigate` - Ask a question, get a complete answer (wraps the ReAct agent with all tools above)
 
 ## Observability
 
@@ -184,8 +280,10 @@ cluster-whisperer.investigate (root span)
 │   └── kubectl get pods -n default
 ├── kubectl_describe.tool
 │   └── kubectl describe pod broken-pod
-└── kubectl_logs.tool
-    └── kubectl logs broken-pod
+├── kubectl_logs.tool
+│   └── kubectl logs broken-pod
+└── vector_search.tool
+    └── query: "managed database provisioning"
 ```
 
 **Environment Variables:**
@@ -196,19 +294,34 @@ cluster-whisperer.investigate (root span)
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
 | `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture tool inputs/outputs in traces |
-| `VOYAGE_API_KEY` | - | Voyage AI API key (for knowledge pipeline embedding) |
+| `VOYAGE_API_KEY` | - | Voyage AI API key (required by sync, sync-instances, and serve) |
 | `CHROMA_URL` | `http://localhost:8000` | Chroma vector database URL |
 
-See `docs/tracing-conventions.md` for the complete tracing specification.
+**Schema Validation:**
+
+Custom span attributes (`cluster_whisperer.*`, `traceloop.*`, `gen_ai.*`) are formally defined in a [Weaver](https://github.com/open-telemetry/weaver) registry at `telemetry/registry/attributes.yaml`. This is the single source of truth for attribute names, types, and descriptions. Weaver validates the schema and resolves references to OTel semantic conventions:
+
+```bash
+npm run telemetry:check     # Validate registry structure and references
+npm run telemetry:resolve   # Resolve all references to flat JSON
+```
+
+See `docs/tracing-conventions.md` for tracing architecture, context propagation, and design rationale.
 
 ## Project Structure
 
 ```text
 src/
-├── index.ts               # CLI entry point (agent + sync commands)
+├── index.ts               # CLI entry point (agent + sync + serve commands)
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
 │   └── investigator.ts    # ReAct agent setup (LangGraph)
+├── api/                   # REST API for receiving instance sync payloads
+│   ├── server.ts          # Hono HTTP server with health probes
+│   ├── routes/
+│   │   └── instances.ts   # POST /api/v1/instances/sync endpoint
+│   └── schemas/
+│       └── sync-payload.ts # Zod validation for controller payloads
 ├── pipeline/              # Knowledge sync pipelines
 │   ├── discovery.ts       # Resource type discovery (kubectl api-resources)
 │   ├── inference.ts       # Capability inference (kubectl explain → LLM)
@@ -219,27 +332,48 @@ src/
 │   └── instance-runner.ts     # Instance sync orchestrator
 ├── vectorstore/           # Vector database abstraction
 │   ├── types.ts           # VectorStore interface
-│   └── chroma-backend.ts  # Chroma + Voyage AI implementation
+│   ├── chroma-backend.ts  # Chroma implementation
+│   └── embeddings.ts      # Voyage AI embedding provider
 ├── tools/
 │   ├── core/              # Shared tool logic (schemas, execution)
+│   │   ├── kubectl-get.ts
+│   │   ├── kubectl-describe.ts
+│   │   ├── kubectl-logs.ts
+│   │   ├── vector-search.ts   # Unified semantic/keyword/metadata search
+│   │   └── format-results.ts  # Search result formatting
 │   ├── langchain/         # CLI agent wrappers
 │   └── mcp/               # MCP server wrappers
 ├── tracing/               # OpenTelemetry instrumentation
+│   ├── index.ts           # OTel initialization, exporter setup
+│   ├── context-bridge.ts  # AsyncLocalStorage workaround for LangGraph
+│   ├── tool-tracing.ts    # Tool span wrapper
+│   ├── tool-definitions-processor.ts  # Adds tool definitions to LLM spans
+│   └── optional-deps.ts   # Graceful loading of optional OTel packages
 └── utils/
     └── kubectl.ts         # Shared kubectl execution helper
 
 prompts/
-└── investigator.md        # System prompt (separate file for easy iteration)
+├── investigator.md        # Agent system prompt (investigation behavior)
+└── capability-inference.md # Capability inference prompt (sync pipeline)
+
+telemetry/
+└── registry/              # OpenTelemetry Weaver schema
+    ├── attributes.yaml    # Custom attribute definitions
+    └── registry_manifest.yaml  # Schema metadata + OTel semconv dependency
+
+scripts/
+└── seed-test-data.ts      # Load sample data into Chroma for testing
 
 docs/
-├── capability-inference-pipeline.md  # How capability sync works
-├── resource-instance-sync.md         # How instance sync works
-├── kubectl-tools.md                  # How kubectl tools work
-├── agentic-loop.md                   # How the ReAct agent works
-├── mcp-server.md                     # MCP server architecture
-├── opentelemetry.md                  # OpenTelemetry implementation guide
-├── tracing-conventions.md            # Complete tracing specification
-└── langgraph-vs-langchain.md         # LangChain vs LangGraph explained
+├── agentic-loop.md                  # How the ReAct agent works
+├── capability-inference-pipeline.md # How capability sync works
+├── kubectl-tools.md                 # How kubectl tools work
+├── langgraph-vs-langchain.md        # LangChain vs LangGraph explained
+├── mcp-server.md                    # MCP server architecture
+├── opentelemetry.md                 # OpenTelemetry implementation guide
+├── resource-instance-sync.md        # How instance sync works
+├── tracing-conventions.md           # Tracing architecture and design rationale
+└── vector-database.md               # Vector database architecture
 ```
 
 ## License
