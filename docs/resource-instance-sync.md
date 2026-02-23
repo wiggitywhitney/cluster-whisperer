@@ -89,6 +89,96 @@ Sync complete: 87 discovered, 87 stored, 0 deleted.
 
 The sync uses upsert — re-running is safe and updates existing entries. Every sync processes all resources and cleans up stale entries. A full sync is fast since there's no LLM inference step; the bottleneck is kubectl calls and embedding API requests.
 
+## Push-Based Sync via HTTP Endpoint
+
+The `sync-instances` CLI command is a pull-based approach: cluster-whisperer runs kubectl internally to discover resources. The HTTP endpoint provides a push-based alternative: an external controller watches the cluster and pushes changes as they happen.
+
+### How It Works
+
+The [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller watches a Kubernetes cluster for resource changes and pushes batched instance metadata over HTTP. Cluster-whisperer receives these payloads at `POST /api/v1/instances/sync` and stores them using the same pipeline functions as the CLI command.
+
+```text
+k8s-vectordb-sync controller (watches cluster)
+        |
+        | POST /api/v1/instances/sync
+        v
+cluster-whisperer serve (Hono HTTP server)
+        |
+        v
+   Zod validation → instanceToDocument() → storeInstances()
+        |
+        v
+   ChromaDB (instances collection)
+```
+
+### Running the HTTP Server
+
+```bash
+# Start ChromaDB
+docker start chromadb  # or: docker run -d --name chromadb -p 8000:8000 chromadb/chroma:latest
+
+# Start the HTTP server (vals injects VOYAGE_API_KEY)
+vals exec -f .vals.yaml -- npx tsx src/index.ts serve --port 3000 --chroma-url http://localhost:8000
+```
+
+The server exposes three routes:
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/healthz` | GET | Liveness probe (always 200) |
+| `/readyz` | GET | Readiness probe (200 when ChromaDB is reachable) |
+| `/api/v1/instances/sync` | POST | Receive batched upserts and deletes |
+
+### Running the Controller
+
+```bash
+# In the k8s-vectordb-sync repo (uses current kubeconfig context)
+REST_ENDPOINT=http://localhost:3000/api/v1/instances/sync make run
+```
+
+The controller discovers all watchable resource types, starts informers, debounces changes, and flushes batches to the endpoint. On startup, all existing resources are synced. After that, only changes are pushed.
+
+### Payload Format
+
+```json
+{
+  "upserts": [
+    {
+      "id": "default/apps/v1/Deployment/nginx",
+      "namespace": "default",
+      "name": "nginx",
+      "kind": "Deployment",
+      "apiVersion": "apps/v1",
+      "apiGroup": "apps",
+      "labels": { "app": "nginx" },
+      "annotations": null,
+      "createdAt": "2026-01-17T21:51:56Z"
+    }
+  ],
+  "deletes": ["default/apps/v1/Deployment/old-service"]
+}
+```
+
+Both `upserts` and `deletes` can be `null` (Go nil slices serialize as JSON null) or empty arrays. The Zod schema handles both cases.
+
+### Response Codes
+
+| Code | Meaning | Controller Behavior |
+|------|---------|-------------------|
+| 200 | Success | Moves on |
+| 4xx | Bad request (validation failure) | Does not retry |
+| 5xx | Transient failure (ChromaDB down) | Retries with exponential backoff |
+
+### Pull vs Push Comparison
+
+| Aspect | `sync-instances` (pull) | `serve` endpoint (push) |
+|--------|------------------------|------------------------|
+| Trigger | Manual CLI run | Automatic on resource changes |
+| Latency | Minutes (full scan each time) | Seconds (debounced incremental) |
+| Stale cleanup | Built-in (compares discovered vs stored) | Controller sends deletes |
+| Dependencies | kubectl access | k8s-vectordb-sync controller |
+| Use case | One-off sync, development | Continuous sync, production |
+
 ## What Gets Stored
 
 ### Instance Data Structure

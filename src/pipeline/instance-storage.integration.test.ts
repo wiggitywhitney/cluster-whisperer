@@ -344,8 +344,10 @@ describe.skipIf(!!skipReason)("instance storage and search (integration)", () =>
     expect(progressMessages.length).toBeGreaterThan(0);
     expect(progressMessages.some((m) => m.includes("Storing"))).toBe(true);
 
-    // Verify documents were stored by searching the instances collection
-    const results = await vectorStore.search(
+    // Verify documents were stored using keywordSearch (deterministic substring
+    // match) instead of semantic search, which can be crowded out by similar
+    // documents written concurrently by other test suites
+    const results = await vectorStore.keywordSearch(
       INSTANCES_COLLECTION,
       "nginx-orchestrator",
       { nResults: 5 }

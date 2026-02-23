@@ -32,6 +32,7 @@ import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import { syncCapabilities } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
 import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
+import { createApp, startServer } from "./api/server";
 
 // ---------------------------------------------------------------------------
 // Environment validation
@@ -110,6 +111,15 @@ function validateSyncEnvironment(): void {
 function validateInstanceSyncEnvironment(): void {
   validateVoyageKey();
   validateKubectl();
+}
+
+/**
+ * Validates environment for the serve command.
+ * Needs Voyage AI for embeddings (upserts go through the embedding pipeline).
+ * Does NOT need Anthropic or kubectl — the controller pushes data over HTTP.
+ */
+function validateServeEnvironment(): void {
+  validateVoyageKey();
 }
 
 /**
@@ -360,6 +370,47 @@ async function main() {
         }
         process.exit(1);
       }
+    });
+
+  // -------------------------------------------------------------------------
+  // Serve subcommand: start HTTP server for receiving instance sync payloads
+  // -------------------------------------------------------------------------
+
+  program
+    .command("serve")
+    .description(
+      "Start HTTP server to receive instance sync from k8s-vectordb-sync controller"
+    )
+    .option("--port <number>", "HTTP server port", "3000")
+    .option(
+      "--chroma-url <url>",
+      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    )
+    .action(async (options: { port: string; chromaUrl?: string }) => {
+      validateServeEnvironment();
+
+      const port = parseInt(options.port, 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        console.error(`Error: Invalid port number: ${options.port}`);
+        process.exit(1);
+      }
+
+      // Create the vector store with Voyage AI embeddings
+      const embedder = new VoyageEmbedding();
+      const vectorStore = new ChromaBackend(embedder, {
+        chromaUrl: options.chromaUrl,
+      });
+
+      const app = createApp({ vectorStore });
+      const server = startServer(app, { port });
+
+      // Graceful shutdown on SIGTERM (Kubernetes sends this before killing the pod)
+      process.on("SIGTERM", () => {
+        console.log("\nReceived SIGTERM, shutting down..."); // eslint-disable-line no-console
+        server.close(() => {
+          process.exit(0);
+        });
+      });
     });
 
   await program.parseAsync(process.argv);
