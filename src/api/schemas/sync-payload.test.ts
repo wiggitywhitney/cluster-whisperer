@@ -74,6 +74,26 @@ describe("ResourceInstanceSchema", () => {
     );
     expect(result.success).toBe(false);
   });
+
+  it("accepts null labels (Go nil map serializes as JSON null)", () => {
+    const result = ResourceInstanceSchema.safeParse(
+      makeInstance({ labels: null })
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.labels).toEqual({});
+    }
+  });
+
+  it("accepts null annotations (Go nil map serializes as JSON null)", () => {
+    const result = ResourceInstanceSchema.safeParse(
+      makeInstance({ annotations: null })
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.annotations).toEqual({});
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -106,6 +126,28 @@ describe("SyncPayloadSchema", () => {
   it("defaults deletes to empty array when omitted", () => {
     const result = SyncPayloadSchema.safeParse({
       upserts: [makeInstance()],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.deletes).toEqual([]);
+    }
+  });
+
+  it("accepts null upserts (Go nil slice serializes as JSON null)", () => {
+    const result = SyncPayloadSchema.safeParse({
+      upserts: null,
+      deletes: ["some/id"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.upserts).toEqual([]);
+    }
+  });
+
+  it("accepts null deletes (Go nil slice serializes as JSON null)", () => {
+    const result = SyncPayloadSchema.safeParse({
+      upserts: [makeInstance()],
+      deletes: null,
     });
     expect(result.success).toBe(true);
     if (result.success) {

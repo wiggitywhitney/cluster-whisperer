@@ -1,6 +1,6 @@
 # PRD #35: Instance Sync REST Endpoint
 
-**Status**: Active
+**Status**: Complete
 **Created**: 2026-02-21
 **GitHub Issue**: [#35](https://github.com/wiggitywhitney/cluster-whisperer/issues/35)
 
@@ -45,7 +45,7 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [x] `GET /healthz` returns 200 (liveness — is the process alive)
 - [x] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
 - [x] Contract tests validate endpoint behavior matches controller expectations
-- [ ] End-to-end test with k8s-vectordb-sync controller succeeds
+- [x] End-to-end test with k8s-vectordb-sync controller succeeds
 
 ## Milestones
 
@@ -89,13 +89,13 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
   - [x] Integration tests: verify response codes match controller expectations (200, 4xx, 5xx)
   - [x] These tests should mirror the k8s-vectordb-sync contract tests from the controller side
 
-- [ ] **M6**: End-to-End Validation
-  - Run `cluster-whisperer serve` against a real ChromaDB instance
-  - Run k8s-vectordb-sync controller pointing at the endpoint
-  - Verify instances appear in vector DB after controller push
-  - Verify deleted instances are removed from vector DB
-  - Verify the agent can find pushed instances via semantic search
-  - Document the full setup and demo flow
+- [x] **M6**: End-to-End Validation
+  - [x] Run `cluster-whisperer serve` against a real ChromaDB instance
+  - [x] Run k8s-vectordb-sync controller pointing at the endpoint
+  - [x] Verify instances appear in vector DB after controller push
+  - [x] Verify deleted instances are removed from vector DB
+  - [x] Verify the agent can find pushed instances via semantic search
+  - [x] Document the full setup and demo flow
 
 ## Technical Approach
 
@@ -140,8 +140,8 @@ const ResourceInstanceSchema = z.object({
 });
 
 const SyncPayloadSchema = z.object({
-  upserts: z.array(ResourceInstanceSchema).default([]),
-  deletes: z.array(z.string()).default([]),
+  upserts: z.array(ResourceInstanceSchema).nullable().transform(v => v ?? []).default([]),
+  deletes: z.array(z.string()).nullable().transform(v => v ?? []).default([]),
 });
 ```
 
@@ -240,6 +240,7 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-22 | `vectorStore.initialize()` as readiness check | Idempotent (getOrCreateCollection). Avoids adding a new `ping()` method to the VectorStore interface for M1. |
 | 2026-02-22 | Dependency injection via `createApp({ vectorStore })` | Factory pattern makes the app testable via `app.request()` without starting a real server or needing ChromaDB. |
 | 2026-02-23 | `keywordSearch` over `search` for shared-collection integration tests | Deterministic substring matching avoids flaky failures when concurrent test suites write semantically similar documents to the same ChromaDB collection. |
+| 2026-02-23 | `.nullable().transform()` on upserts/deletes arrays | Go nil slices serialize as JSON `null`. Same pattern already used for labels/annotations. Discovered during E2E when controller payloads returned 400. |
 
 ---
 
@@ -252,3 +253,4 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-22 | M3 complete | Sync endpoint deletes: added `vectorStore.delete("instances", ids)` call before upserts in route handler. Empty deletes array skipped (no DB call). Mixed payloads process deletes first, then upserts. 7 new tests replacing 1 M2 passthrough test (17 route tests total, 223 suite-wide). |
 | 2026-02-23 | M4 complete | Error handling edge cases: verified all 5 scenarios covered by M1-M3 implementation. Added 2 new tests — malformed JSON body (raw `{broken json` → 400) and large payload (100 upserts + 50 deletes → 200). 225 tests suite-wide (19 route tests). |
 | 2026-02-23 | M5 complete | Contract integration tests in `src/api/routes/instances.integration.test.ts`: 12 tests against real ChromaDB + Voyage AI verifying upserts land in DB, deletes remove from DB, mixed payloads, empty payloads, validation errors, and response code contract matching controller expectations. Fixed pre-existing flaky orchestrator test in `instance-storage.integration.test.ts` (semantic search → keywordSearch). 276 tests suite-wide. |
+| 2026-02-23 | M6 complete | End-to-end validation against real Kind cluster (spider-rainbows) with k8s-vectordb-sync controller. Fixed Go nil slice interop bug (null upserts/deletes arrays → 400). Controller synced 868 instances to ChromaDB. Verified upserts, deletes (created/deleted e2e-delete-test pod), and semantic search via agent. Documented push-based sync in `docs/resource-instance-sync.md`. 229 unit tests passing, 2 new null-array tests. |

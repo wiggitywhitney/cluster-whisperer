@@ -33,10 +33,18 @@ export const ResourceInstanceSchema = z.object({
   apiVersion: z.string(),
   /** API group (e.g., "apps", "" for core resources) */
   apiGroup: z.string(),
-  /** Labels from metadata.labels */
-  labels: z.record(z.string()).default({}),
-  /** Filtered annotations */
-  annotations: z.record(z.string()).default({}),
+  /** Labels from metadata.labels — nullable because Go nil maps serialize as JSON null */
+  labels: z
+    .record(z.string())
+    .nullable()
+    .transform((v) => v ?? {})
+    .default({}),
+  /** Filtered annotations — nullable for the same Go nil reason */
+  annotations: z
+    .record(z.string())
+    .nullable()
+    .transform((v) => v ?? {})
+    .default({}),
   /** ISO-8601 UTC timestamp from metadata.creationTimestamp */
   createdAt: z.string(),
 });
@@ -44,15 +52,23 @@ export const ResourceInstanceSchema = z.object({
 /**
  * Schema for the full sync payload sent by the controller.
  *
- * Both arrays default to empty so the endpoint tolerates partial payloads.
- * The controller typically sends both, but defensive defaults avoid
- * unnecessary 400 errors on edge cases.
+ * Both arrays are nullable because Go nil slices serialize as JSON null.
+ * They also default to empty when omitted entirely. The nullable+transform
+ * pattern matches how labels/annotations handle Go nil maps above.
  */
 export const SyncPayloadSchema = z.object({
   /** Instances to create or update in the vector DB */
-  upserts: z.array(ResourceInstanceSchema).default([]),
+  upserts: z
+    .array(ResourceInstanceSchema)
+    .nullable()
+    .transform((v) => v ?? [])
+    .default([]),
   /** Instance IDs to remove from the vector DB */
-  deletes: z.array(z.string()).default([]),
+  deletes: z
+    .array(z.string())
+    .nullable()
+    .transform((v) => v ?? [])
+    .default([]),
 });
 
 /** TypeScript type inferred from the validated payload */
