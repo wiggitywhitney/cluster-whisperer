@@ -8,33 +8,9 @@
  * readiness probe, making it injectable for testing with a mock.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createApp } from "./server";
-import type { VectorStore } from "../vectorstore";
-
-// ---------------------------------------------------------------------------
-// Test fixture helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Creates a mock VectorStore with all methods stubbed.
- * The readiness probe uses initialize() as a lightweight connectivity check.
- */
-function createMockVectorStore(): VectorStore & {
-  initialize: ReturnType<typeof vi.fn>;
-  store: ReturnType<typeof vi.fn>;
-  search: ReturnType<typeof vi.fn>;
-  keywordSearch: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
-} {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    store: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([]),
-    keywordSearch: vi.fn().mockResolvedValue([]),
-    delete: vi.fn().mockResolvedValue(undefined),
-  };
-}
+import { createMockVectorStore } from "./test-helpers";
 
 // ---------------------------------------------------------------------------
 // GET /healthz — liveness probe

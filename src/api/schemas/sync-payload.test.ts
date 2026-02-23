@@ -7,26 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import { SyncPayloadSchema, ResourceInstanceSchema } from "./sync-payload";
-
-// ---------------------------------------------------------------------------
-// Test fixture helpers
-// ---------------------------------------------------------------------------
-
-/** Creates a valid ResourceInstance payload matching the controller's format */
-function makeInstance(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "default/apps/v1/Deployment/nginx",
-    namespace: "default",
-    name: "nginx",
-    kind: "Deployment",
-    apiVersion: "apps/v1",
-    apiGroup: "apps",
-    labels: { app: "nginx", tier: "frontend" },
-    annotations: { description: "Main web server" },
-    createdAt: "2026-02-20T10:00:00Z",
-    ...overrides,
-  };
-}
+import { makeInstance } from "../test-helpers";
 
 // ---------------------------------------------------------------------------
 // ResourceInstanceSchema

@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { SyncPayloadSchema } from "../schemas/sync-payload";
 import { storeInstances } from "../../pipeline/instance-storage";
+import { INSTANCES_COLLECTION } from "../../vectorstore";
 import type { VectorStore } from "../../vectorstore";
 import type { ResourceInstance } from "../../pipeline/types";
 
@@ -61,7 +62,7 @@ export function createInstancesRoute(vectorStore: VectorStore): Hono {
         // Process deletes first — if the same ID appears in both arrays,
         // the delete removes it and the upsert recreates it below
         if (payload.deletes.length > 0) {
-          await vectorStore.delete("instances", payload.deletes);
+          await vectorStore.delete(INSTANCES_COLLECTION, payload.deletes);
         }
 
         // Cast validated payload to ResourceInstance[] — Zod schema matches the type

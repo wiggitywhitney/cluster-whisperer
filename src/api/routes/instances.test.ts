@@ -13,46 +13,9 @@
  * M4 tests cover error handling edge cases: malformed JSON and large payloads.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createApp } from "../server";
-import type { VectorStore } from "../../vectorstore";
-
-// ---------------------------------------------------------------------------
-// Test fixture helpers
-// ---------------------------------------------------------------------------
-
-/** Creates a mock VectorStore with all methods stubbed */
-function createMockVectorStore(): VectorStore & {
-  initialize: ReturnType<typeof vi.fn>;
-  store: ReturnType<typeof vi.fn>;
-  search: ReturnType<typeof vi.fn>;
-  keywordSearch: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
-} {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    store: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([]),
-    keywordSearch: vi.fn().mockResolvedValue([]),
-    delete: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-/** Creates a valid resource instance payload matching the controller's format */
-function makeInstance(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "default/apps/v1/Deployment/nginx",
-    namespace: "default",
-    name: "nginx",
-    kind: "Deployment",
-    apiVersion: "apps/v1",
-    apiGroup: "apps",
-    labels: { app: "nginx", tier: "frontend" },
-    annotations: { description: "Main web server" },
-    createdAt: "2026-02-20T10:00:00Z",
-    ...overrides,
-  };
-}
+import { createMockVectorStore, makeInstance } from "../test-helpers";
 
 /** Helper to POST JSON to the sync endpoint */
 function postSync(app: ReturnType<typeof createApp>, body: unknown) {

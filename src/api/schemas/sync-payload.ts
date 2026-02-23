@@ -46,7 +46,7 @@ export const ResourceInstanceSchema = z.object({
     .transform((v) => v ?? {})
     .default({}),
   /** ISO-8601 UTC timestamp from metadata.creationTimestamp */
-  createdAt: z.string(),
+  createdAt: z.string().datetime(),
 });
 
 /**

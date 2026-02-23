@@ -21,6 +21,7 @@
 
 import { Hono } from "hono";
 import { serve, type ServerType } from "@hono/node-server";
+import { INSTANCES_COLLECTION } from "../vectorstore";
 import type { VectorStore } from "../vectorstore";
 import { createInstancesRoute } from "./routes/instances";
 
@@ -76,9 +77,17 @@ export function createApp(deps: ServerDependencies): Hono {
    */
   app.get("/readyz", async (c) => {
     try {
-      await deps.vectorStore.initialize("instances", {
-        distanceMetric: "cosine",
-      });
+      await Promise.race([
+        deps.vectorStore.initialize(INSTANCES_COLLECTION, {
+          distanceMetric: "cosine",
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("readiness check timed out")),
+            5000
+          )
+        ),
+      ]);
       return c.json({ status: "ok" });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
