@@ -44,7 +44,7 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 - [x] `cluster-whisperer serve` starts the HTTP server on a configurable port
 - [x] `GET /healthz` returns 200 (liveness — is the process alive)
 - [x] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
-- [ ] Contract tests validate endpoint behavior matches controller expectations
+- [x] Contract tests validate endpoint behavior matches controller expectations
 - [ ] End-to-end test with k8s-vectordb-sync controller succeeds
 
 ## Milestones
@@ -79,15 +79,15 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
   - [x] Vector DB connection failure returns 500 (controller will retry)
   - [x] Large payloads handled correctly (controller batches, but test boundary)
 
-- [ ] **M5**: Contract Tests
-  - Unit tests for Zod schema validation (valid payloads, edge cases, malformed input)
-  - Integration tests: POST with upserts → verify documents in vector DB
-  - Integration tests: POST with deletes → verify documents removed from vector DB
-  - Integration tests: POST with mixed upserts + deletes → verify both operations
-  - Integration tests: empty payload → 200, no DB operations
-  - Integration tests: malformed payload → 400
-  - Integration tests: verify response codes match controller expectations (200, 4xx, 5xx)
-  - These tests should mirror the k8s-vectordb-sync contract tests from the controller side
+- [x] **M5**: Contract Tests
+  - [x] Unit tests for Zod schema validation (valid payloads, edge cases, malformed input)
+  - [x] Integration tests: POST with upserts → verify documents in vector DB
+  - [x] Integration tests: POST with deletes → verify documents removed from vector DB
+  - [x] Integration tests: POST with mixed upserts + deletes → verify both operations
+  - [x] Integration tests: empty payload → 200, no DB operations
+  - [x] Integration tests: malformed payload → 400
+  - [x] Integration tests: verify response codes match controller expectations (200, 4xx, 5xx)
+  - [x] These tests should mirror the k8s-vectordb-sync contract tests from the controller side
 
 - [ ] **M6**: End-to-End Validation
   - Run `cluster-whisperer serve` against a real ChromaDB instance
@@ -239,6 +239,7 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-22 | `strict: false` on Hono app | Tolerates trailing slashes on probe URLs — standard for REST APIs and Kubernetes health checks. |
 | 2026-02-22 | `vectorStore.initialize()` as readiness check | Idempotent (getOrCreateCollection). Avoids adding a new `ping()` method to the VectorStore interface for M1. |
 | 2026-02-22 | Dependency injection via `createApp({ vectorStore })` | Factory pattern makes the app testable via `app.request()` without starting a real server or needing ChromaDB. |
+| 2026-02-23 | `keywordSearch` over `search` for shared-collection integration tests | Deterministic substring matching avoids flaky failures when concurrent test suites write semantically similar documents to the same ChromaDB collection. |
 
 ---
 
@@ -250,3 +251,4 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-22 | M2 complete | Sync endpoint upserts: Zod schema in `src/api/schemas/sync-payload.ts`, route handler in `src/api/routes/instances.ts` using `@hono/zod-validator` middleware, wired through `storeInstances()` pipeline. 27 new tests (16 schema + 11 route). Deletes accepted by schema but not processed until M3. |
 | 2026-02-22 | M3 complete | Sync endpoint deletes: added `vectorStore.delete("instances", ids)` call before upserts in route handler. Empty deletes array skipped (no DB call). Mixed payloads process deletes first, then upserts. 7 new tests replacing 1 M2 passthrough test (17 route tests total, 223 suite-wide). |
 | 2026-02-23 | M4 complete | Error handling edge cases: verified all 5 scenarios covered by M1-M3 implementation. Added 2 new tests — malformed JSON body (raw `{broken json` → 400) and large payload (100 upserts + 50 deletes → 200). 225 tests suite-wide (19 route tests). |
+| 2026-02-23 | M5 complete | Contract integration tests in `src/api/routes/instances.integration.test.ts`: 12 tests against real ChromaDB + Voyage AI verifying upserts land in DB, deletes remove from DB, mixed payloads, empty payloads, validation errors, and response code contract matching controller expectations. Fixed pre-existing flaky orchestrator test in `instance-storage.integration.test.ts` (semantic search → keywordSearch). 276 tests suite-wide. |
