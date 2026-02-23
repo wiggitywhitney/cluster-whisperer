@@ -36,11 +36,11 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
 
 ## Success Criteria
 
-- [ ] `POST /api/v1/instances/sync` accepts the controller's JSON payload format
-- [ ] Upserts flow through `instanceToDocument()` → `storeInstances()` pipeline
+- [x] `POST /api/v1/instances/sync` accepts the controller's JSON payload format
+- [x] Upserts flow through `instanceToDocument()` → `storeInstances()` pipeline
 - [ ] Deletes remove instances from the vector DB by ID
-- [ ] Returns 200 on success, 4xx on bad requests, 5xx on transient failures
-- [ ] Empty payloads return 200 with no processing (defensive — controller typically skips them, but endpoint must tolerate if sent)
+- [x] Returns 200 on success, 4xx on bad requests, 5xx on transient failures
+- [x] Empty payloads return 200 with no processing (defensive — controller typically skips them, but endpoint must tolerate if sent)
 - [x] `cluster-whisperer serve` starts the HTTP server on a configurable port
 - [x] `GET /healthz` returns 200 (liveness — is the process alive)
 - [x] `GET /readyz` returns 200 only when ChromaDB is reachable (readiness — can it serve traffic)
@@ -58,13 +58,13 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
   - [x] Options: `--port <number>` (default: 3000), `--chroma-url <url>` (default: CHROMA_URL env or http://localhost:8000)
   - [x] Verify server starts and both probes respond correctly
 
-- [ ] **M2**: Sync Endpoint — Upserts
-  - Create `POST /api/v1/instances/sync` route in `src/api/routes/instances.ts`
-  - Define Zod schema matching the controller's payload format (upserts + deletes arrays)
-  - Wire upserts through existing `instanceToDocument()` and `storeInstances()` pipeline
-  - Validate with Zod, return 400 for malformed payloads
-  - Return 200 on success, 500 on vector DB errors
-  - Handle empty upserts array (no processing, return 200)
+- [x] **M2**: Sync Endpoint — Upserts
+  - [x] Create `POST /api/v1/instances/sync` route in `src/api/routes/instances.ts`
+  - [x] Define Zod schema matching the controller's payload format (upserts + deletes arrays)
+  - [x] Wire upserts through existing `instanceToDocument()` and `storeInstances()` pipeline
+  - [x] Validate with Zod, return 400 for malformed payloads
+  - [x] Return 200 on success, 500 on vector DB errors
+  - [x] Handle empty upserts array (no processing, return 200)
 
 - [ ] **M3**: Sync Endpoint — Deletes
   - Wire deletes through `vectorStore.delete(collection, ids)`
@@ -247,3 +247,4 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | Date | Milestone | Summary |
 |------|-----------|---------|
 | 2026-02-22 | M1 complete | HTTP server foundation: Hono app with `/healthz` and `/readyz` probes, `cluster-whisperer serve` CLI subcommand with `--port` and `--chroma-url` options, 6 unit tests via `app.request()`, SIGTERM graceful shutdown. |
+| 2026-02-22 | M2 complete | Sync endpoint upserts: Zod schema in `src/api/schemas/sync-payload.ts`, route handler in `src/api/routes/instances.ts` using `@hono/zod-validator` middleware, wired through `storeInstances()` pipeline. 27 new tests (16 schema + 11 route). Deletes accepted by schema but not processed until M3. |

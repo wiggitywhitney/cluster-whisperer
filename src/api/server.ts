@@ -22,6 +22,7 @@
 import { Hono } from "hono";
 import { serve, type ServerType } from "@hono/node-server";
 import type { VectorStore } from "../vectorstore";
+import { createInstancesRoute } from "./routes/instances";
 
 /**
  * Dependencies injected into the Hono app.
@@ -57,6 +58,10 @@ export function createApp(deps: ServerDependencies): Hono {
   app.get("/healthz", (c) => {
     return c.json({ status: "ok" });
   });
+
+  // Mount the sync endpoint for receiving instance data from the controller
+  const instancesRoute = createInstancesRoute(deps.vectorStore);
+  app.route("/api/v1/instances/sync", instancesRoute);
 
   /**
    * Readiness probe — "can the process serve traffic?"
