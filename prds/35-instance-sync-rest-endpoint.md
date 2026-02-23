@@ -72,12 +72,12 @@ Add a `POST /api/v1/instances/sync` endpoint using Hono (lightweight HTTP framew
   - [x] Handle mixed payloads (upserts + deletes in same request): process deletes first, then upserts. If the same ID appears in both, the upsert recreates the item.
   - [x] Return 200 on success, 500 on vector DB errors
 
-- [ ] **M4**: Error Handling and Edge Cases
-  - Empty payload (both arrays empty or missing) returns 200
-  - Malformed JSON returns 400
-  - Invalid payload shape (fails Zod validation) returns 400 with error details
-  - Vector DB connection failure returns 500 (controller will retry)
-  - Large payloads handled correctly (controller batches, but test boundary)
+- [x] **M4**: Error Handling and Edge Cases
+  - [x] Empty payload (both arrays empty or missing) returns 200
+  - [x] Malformed JSON returns 400
+  - [x] Invalid payload shape (fails Zod validation) returns 400 with error details
+  - [x] Vector DB connection failure returns 500 (controller will retry)
+  - [x] Large payloads handled correctly (controller batches, but test boundary)
 
 - [ ] **M5**: Contract Tests
   - Unit tests for Zod schema validation (valid payloads, edge cases, malformed input)
@@ -249,3 +249,4 @@ The controller's Go `ResourceInstance` struct maps directly to the existing Type
 | 2026-02-22 | M1 complete | HTTP server foundation: Hono app with `/healthz` and `/readyz` probes, `cluster-whisperer serve` CLI subcommand with `--port` and `--chroma-url` options, 6 unit tests via `app.request()`, SIGTERM graceful shutdown. |
 | 2026-02-22 | M2 complete | Sync endpoint upserts: Zod schema in `src/api/schemas/sync-payload.ts`, route handler in `src/api/routes/instances.ts` using `@hono/zod-validator` middleware, wired through `storeInstances()` pipeline. 27 new tests (16 schema + 11 route). Deletes accepted by schema but not processed until M3. |
 | 2026-02-22 | M3 complete | Sync endpoint deletes: added `vectorStore.delete("instances", ids)` call before upserts in route handler. Empty deletes array skipped (no DB call). Mixed payloads process deletes first, then upserts. 7 new tests replacing 1 M2 passthrough test (17 route tests total, 223 suite-wide). |
+| 2026-02-23 | M4 complete | Error handling edge cases: verified all 5 scenarios covered by M1-M3 implementation. Added 2 new tests — malformed JSON body (raw `{broken json` → 400) and large payload (100 upserts + 50 deletes → 200). 225 tests suite-wide (19 route tests). |

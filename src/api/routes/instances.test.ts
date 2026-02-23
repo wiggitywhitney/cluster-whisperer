@@ -10,6 +10,7 @@
  *
  * M2 tests cover upserts, validation, and error handling.
  * M3 tests cover deletes, mixed payloads, delete ordering, and delete errors.
+ * M4 tests cover error handling edge cases: malformed JSON and large payloads.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -349,5 +350,55 @@ describe("POST /api/v1/instances/sync — delete DB errors", () => {
 
     // Deletes run first and fail — upserts should not execute
     expect(mockStore.store).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/instances/sync — error handling edge cases (M4)
+// ---------------------------------------------------------------------------
+
+describe("POST /api/v1/instances/sync — error handling edge cases", () => {
+  it("returns 400 for malformed JSON body", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    // Send raw malformed JSON — can't use postSync() since it JSON.stringify()s
+    const res = await app.request("/api/v1/instances/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{broken json",
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockStore.store).not.toHaveBeenCalled();
+    expect(mockStore.delete).not.toHaveBeenCalled();
+  });
+
+  it("handles large payloads with many instances", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    // Generate 100 unique instances — controller batches, but test the boundary
+    const instances = Array.from({ length: 100 }, (_, i) =>
+      makeInstance({
+        id: `namespace-${i}/apps/v1/Deployment/service-${i}`,
+        name: `service-${i}`,
+        namespace: `namespace-${i}`,
+      })
+    );
+
+    const res = await postSync(app, {
+      upserts: instances,
+      deletes: Array.from({ length: 50 }, (_, i) => `old/apps/v1/Deployment/legacy-${i}`),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ status: "ok", upserted: 100, deleted: 50 });
+    expect(mockStore.delete).toHaveBeenCalledWith(
+      "instances",
+      expect.arrayContaining(["old/apps/v1/Deployment/legacy-0"])
+    );
+    expect(mockStore.store).toHaveBeenCalled();
   });
 });
