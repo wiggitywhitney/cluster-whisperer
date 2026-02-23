@@ -67,7 +67,7 @@ Think → Act → Observe → Think → Act → Observe → ... → Answer
 ```
 
 1. **Reason** - Agent thinks about what to do next
-2. **Act** - Agent calls a kubectl tool
+2. **Act** - Agent calls a tool (kubectl or vector search)
 3. **Observe** - Agent sees the result
 4. Repeat until the agent has enough information to answer
 
@@ -133,7 +133,7 @@ The agent can pre-index cluster knowledge into a vector database for faster, mor
 **Sync resource capabilities** (what resource types exist and what they can do):
 
 ```bash
-vals exec -i -f .vals.yaml -- node dist/index.js sync-capabilities
+vals exec -i -f .vals.yaml -- node dist/index.js sync
 ```
 
 **Sync resource instances** (what's currently running in the cluster):
@@ -294,7 +294,7 @@ cluster-whisperer.investigate (root span)
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
 | `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture tool inputs/outputs in traces |
-| `VOYAGE_API_KEY` | - | Voyage AI API key (for knowledge pipeline embedding) |
+| `VOYAGE_API_KEY` | - | Voyage AI API key (required by sync, sync-instances, and serve) |
 | `CHROMA_URL` | `http://localhost:8000` | Chroma vector database URL |
 
 **Schema Validation:**
