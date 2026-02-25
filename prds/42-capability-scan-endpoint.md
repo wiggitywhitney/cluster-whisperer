@@ -107,6 +107,8 @@ The controller will POST this structure when CRDs are added or removed:
 
 Resource names use the fully qualified format that `kubectl api-resources` produces (e.g., `certificates.cert-manager.io`), which matches what `discoverResources()` already uses internally.
 
+**Overlap handling**: If the same resource name appears in both `upserts` and `deletes`, deletes are processed first, then upserts. This matches the instance sync endpoint's behavior (PRD #35) — the delete removes the old entry and the upsert recreates it with fresh inference.
+
 ### Processing Flow (Upserts)
 
 ```text
@@ -158,13 +160,16 @@ For the initial implementation, synchronous processing is simpler and sufficient
 - CRD changes are rare (operator installs, not continuous)
 - Typical batch size is small (1-10 CRDs per operator)
 - At ~5 seconds per resource, a 10-CRD batch takes ~50 seconds
-- The controller can use a longer HTTP timeout for this endpoint
+- The controller should use a **120-second HTTP timeout** for this endpoint (vs the default 30s for instance sync)
+- The endpoint is naturally idempotent — re-scanning the same CRD produces the same inference result and upserts overwrite the existing entry
 
 If large batches become a problem, async (202 Accepted + background processing) can be added later.
 
 ### API Key Requirements
 
-The capability scan endpoint requires both `ANTHROPIC_API_KEY` (for LLM inference) and `VOYAGE_API_KEY` (for embedding). The instance sync endpoint only requires `VOYAGE_API_KEY`. The server startup should validate that both keys are available when the capability scan endpoint is enabled.
+The capability scan endpoint requires both `ANTHROPIC_API_KEY` (for LLM inference) and `VOYAGE_API_KEY` (for embedding). The instance sync endpoint only requires `VOYAGE_API_KEY`.
+
+The endpoint is always mounted (no feature flag). If `ANTHROPIC_API_KEY` is missing at request time, the endpoint returns 503 with a clear error message ("capability scanning requires ANTHROPIC_API_KEY"). This avoids a separate enablement env var — the presence of the API key is the implicit flag.
 
 ## Dependencies
 
@@ -175,7 +180,7 @@ The capability scan endpoint requires both `ANTHROPIC_API_KEY` (for LLM inferenc
 ## Out of Scope
 
 - CRD event detection in the controller (handled by a separate PRD in the k8s-vectordb-sync repo)
-- Authentication/authorization on the endpoint
+- Authentication/authorization on the endpoint (consistent with the instance sync endpoint, which also has no auth — both are internal APIs on a private network)
 - Rate limiting or queuing for large batches
 - Webhook-based triggers
 
