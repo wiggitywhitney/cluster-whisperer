@@ -98,9 +98,9 @@ Not every command needs everything:
 | `<question>` (investigate) | Yes | Yes | Optional | Optional |
 | `sync` (capabilities) | Yes | Yes | Yes | Yes |
 | `sync-instances` | Yes | No | Yes | Yes |
-| `serve` (REST API) | No | Optional* | Yes | Yes |
+| `serve` (REST API) | Optional* | Optional* | Yes | Yes |
 
-*\*Required for the `/api/v1/capabilities/scan` endpoint. Without it, only instance sync is available.*
+*\*Required for the `/api/v1/capabilities/scan` endpoint, which runs `kubectl api-resources` and `kubectl explain` for discovery, and calls the Anthropic API for inference. Without these, only instance sync is available.*
 
 ## Setup
 

@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createCapabilitiesRoute,
+  MAX_SCAN_ITEMS,
   type CapabilitiesRouteDeps,
 } from "./capabilities";
 import { createMockVectorStore } from "../test-helpers";
@@ -236,8 +237,10 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
 
     await postScan(app, { deletes: ["old-resource.example.io"] });
 
-    // Give background a moment to complete
-    await new Promise((r) => setTimeout(r, 10));
+    // Wait for background delete to complete, then verify pipeline was skipped
+    await vi.waitFor(() => {
+      expect(deps.vectorStore.delete).toHaveBeenCalled();
+    });
 
     expect(deps.discoverResources).not.toHaveBeenCalled();
     expect(deps.inferCapabilities).not.toHaveBeenCalled();
@@ -250,8 +253,10 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
 
     await postScan(app, { upserts: ["certificates.cert-manager.io"] });
 
-    // Give background a moment to complete
-    await new Promise((r) => setTimeout(r, 10));
+    // Wait for background pipeline to complete, then verify delete was skipped
+    await vi.waitFor(() => {
+      expect(deps.storeCapabilities).toHaveBeenCalled();
+    });
 
     expect(deps.vectorStore.delete).not.toHaveBeenCalled();
   });
@@ -303,5 +308,20 @@ describe("POST /api/v1/capabilities/scan — validation errors", () => {
 
     expect(deps.discoverResources).not.toHaveBeenCalled();
     expect(deps.vectorStore.delete).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when payload exceeds maximum item count", async () => {
+    const deps = createMockDeps();
+    const app = createTestApp(deps);
+
+    const tooMany = Array.from(
+      { length: MAX_SCAN_ITEMS + 1 },
+      (_, i) => `resource-${i}.example.io`
+    );
+    const res = await postScan(app, { upserts: tooMany });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Payload too large");
   });
 });

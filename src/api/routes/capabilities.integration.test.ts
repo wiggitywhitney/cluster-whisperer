@@ -68,19 +68,41 @@ async function shouldSkip(): Promise<string | false> {
 const skipReason = await shouldSkip();
 
 // ---------------------------------------------------------------------------
-// Mock kubectl — same canned resources as runner.integration.test.ts
+// Per-run isolation — unique resource names prevent cross-run collisions
+// ---------------------------------------------------------------------------
+
+/**
+ * Unique suffix for this test run. Ensures documents created in the shared
+ * capabilities collection don't collide with other runs (parallel CI, or
+ * running against a non-ephemeral Chroma instance with real data).
+ */
+const RUN_ID = Date.now().toString(36);
+const TEST_GROUP = `tst${RUN_ID}.io`;
+
+/** Fully qualified resource names for canned kubectl fixtures */
+const SQL_FQ = `sqls.${TEST_GROUP}`;
+const CM_FQ = `configmaps.${TEST_GROUP}`;
+const ING_FQ = `ingresses.${TEST_GROUP}`;
+
+/** Unique resource names for delete and mixed tests */
+const DELETE_1_FQ = `delete-${RUN_ID}-1.example.io`;
+const DELETE_2_FQ = `delete-${RUN_ID}-2.example.io`;
+const MIXED_DELETE_FQ = `mixed-delete-${RUN_ID}.example.io`;
+
+// ---------------------------------------------------------------------------
+// Mock kubectl — canned resources with per-run unique groups
 // ---------------------------------------------------------------------------
 
 /**
  * Canned output for `kubectl api-resources -o wide`.
- * Three resources: a CRD (SQL), a core resource (ConfigMap), and a
- * networking resource (Ingress). Reused from runner.integration.test.ts.
+ * Three resources with a per-run unique API group so their fully qualified
+ * names (used as Chroma document IDs) don't collide across test runs.
  */
 const API_RESOURCES_OUTPUT = [
   "NAME            SHORTNAMES   APIVERSION                       NAMESPACED   KIND        VERBS                                                        CATEGORIES",
-  "sqls                         devopstoolkit.live/v1beta1       true         SQL         delete,deletecollection,get,list,patch,create,update,watch   ",
-  "configmaps      cm           v1                               true         ConfigMap   create,delete,deletecollection,get,list,patch,update,watch   all",
-  "ingresses       ing          networking.k8s.io/v1             true         Ingress     create,delete,deletecollection,get,list,patch,update,watch   ",
+  "sqls                         " + `${TEST_GROUP}/v1beta1`.padEnd(33) + "true         SQL         delete,deletecollection,get,list,patch,create,update,watch   ",
+  "configmaps      cm           " + `${TEST_GROUP}/v1`.padEnd(33) + "true         ConfigMap   create,delete,deletecollection,get,list,patch,update,watch   all",
+  "ingresses       ing          " + `${TEST_GROUP}/v1`.padEnd(33) + "true         Ingress     create,delete,deletecollection,get,list,patch,update,watch   ",
 ].join("\n");
 
 /**
@@ -88,7 +110,7 @@ const API_RESOURCES_OUTPUT = [
  * Only the SQL resource is a CRD.
  */
 const CRD_LIST_OUTPUT = JSON.stringify({
-  items: [{ metadata: { name: "sqls.devopstoolkit.live" } }],
+  items: [{ metadata: { name: SQL_FQ } }],
 });
 
 /**
@@ -96,9 +118,9 @@ const CRD_LIST_OUTPUT = JSON.stringify({
  * Abbreviated schemas — enough for Haiku to infer capabilities.
  */
 const EXPLAIN_OUTPUTS: Record<string, string> = {
-  "sqls.devopstoolkit.live": [
+  [SQL_FQ]: [
     "KIND:     SQL",
-    "VERSION:  devopstoolkit.live/v1beta1",
+    `VERSION:  ${TEST_GROUP}/v1beta1`,
     "",
     "DESCRIPTION:",
     "  SQL is a composite resource claim for provisioning managed SQL databases.",
@@ -114,9 +136,9 @@ const EXPLAIN_OUTPUTS: Record<string, string> = {
     "      host\t<string>",
     "      port\t<integer>",
   ].join("\n"),
-  configmaps: [
+  [CM_FQ]: [
     "KIND:     ConfigMap",
-    "VERSION:  v1",
+    `VERSION:  ${TEST_GROUP}/v1`,
     "",
     "DESCRIPTION:",
     "  ConfigMap holds configuration data for pods to consume.",
@@ -126,9 +148,9 @@ const EXPLAIN_OUTPUTS: Record<string, string> = {
     "  binaryData\t<map[string]string>",
     "  immutable\t<boolean>",
   ].join("\n"),
-  "ingresses.networking.k8s.io": [
+  [ING_FQ]: [
     "KIND:     Ingress",
-    "VERSION:  networking.k8s.io/v1",
+    `VERSION:  ${TEST_GROUP}/v1`,
     "",
     "DESCRIPTION:",
     "  Ingress is a collection of rules that allow inbound connections to reach services.",
@@ -271,11 +293,7 @@ describe.skipIf(!!skipReason)(
     describe("upserts", () => {
       it("stores inferred capabilities in ChromaDB after async processing", async () => {
         const res = await postScan(app, {
-          upserts: [
-            "sqls.devopstoolkit.live",
-            "configmaps",
-            "ingresses.networking.k8s.io",
-          ],
+          upserts: [SQL_FQ, CM_FQ, ING_FQ],
         });
 
         // Endpoint returns 202 immediately — pipeline runs in background
@@ -288,11 +306,7 @@ describe.skipIf(!!skipReason)(
         });
 
         // Track IDs for cleanup
-        const expectedIds = [
-          "sqls.devopstoolkit.live",
-          "configmaps",
-          "ingresses.networking.k8s.io",
-        ];
+        const expectedIds = [SQL_FQ, CM_FQ, ING_FQ];
         allTestIds.push(...expectedIds);
 
         // Poll ChromaDB until all 3 capabilities are stored.
@@ -319,9 +333,7 @@ describe.skipIf(!!skipReason)(
           "database",
           { nResults: 5 }
         );
-        const sqlResult = dbResults.find(
-          (r) => r.id === "sqls.devopstoolkit.live"
-        );
+        const sqlResult = dbResults.find((r) => r.id === SQL_FQ);
         expect(sqlResult).toBeDefined();
         expect(sqlResult!.metadata.kind).toBe("SQL");
       }, 120_000);
@@ -335,13 +347,13 @@ describe.skipIf(!!skipReason)(
       it("removes capabilities from ChromaDB after async processing", async () => {
         // Seed capabilities directly via storeCapabilities() — no LLM needed
         const seeded = makeSeededCapabilities([
-          { resourceName: "delete-test-1.example.io", kind: "DeleteTest1" },
-          { resourceName: "delete-test-2.example.io", kind: "DeleteTest2" },
+          { resourceName: DELETE_1_FQ, kind: "DeleteTest1" },
+          { resourceName: DELETE_2_FQ, kind: "DeleteTest2" },
         ]);
         await storeCapabilities(seeded, vectorStore, {
           onProgress: () => {},
         });
-        allTestIds.push("delete-test-1.example.io", "delete-test-2.example.io");
+        allTestIds.push(DELETE_1_FQ, DELETE_2_FQ);
 
         // Verify they exist before deleting
         const beforeResults = await vectorStore.keywordSearch(
@@ -350,15 +362,15 @@ describe.skipIf(!!skipReason)(
           { nResults: 10 }
         );
         expect(
-          beforeResults.find((r) => r.id === "delete-test-1.example.io")
+          beforeResults.find((r) => r.id === DELETE_1_FQ)
         ).toBeDefined();
         expect(
-          beforeResults.find((r) => r.id === "delete-test-2.example.io")
+          beforeResults.find((r) => r.id === DELETE_2_FQ)
         ).toBeDefined();
 
         // Delete via the endpoint
         const res = await postScan(app, {
-          deletes: ["delete-test-1.example.io", "delete-test-2.example.io"],
+          deletes: [DELETE_1_FQ, DELETE_2_FQ],
         });
 
         expect(res.status).toBe(202);
@@ -378,10 +390,10 @@ describe.skipIf(!!skipReason)(
               { nResults: 10 }
             );
             expect(
-              afterResults.find((r) => r.id === "delete-test-1.example.io")
+              afterResults.find((r) => r.id === DELETE_1_FQ)
             ).toBeUndefined();
             expect(
-              afterResults.find((r) => r.id === "delete-test-2.example.io")
+              afterResults.find((r) => r.id === DELETE_2_FQ)
             ).toBeUndefined();
           },
           { timeout: 15_000, interval: 1_000 }
@@ -397,12 +409,12 @@ describe.skipIf(!!skipReason)(
       it("processes both operations and reaches correct final state", async () => {
         // Seed a capability that will be deleted in the mixed request
         const seeded = makeSeededCapabilities([
-          { resourceName: "mixed-delete.example.io", kind: "MixedDelete" },
+          { resourceName: MIXED_DELETE_FQ, kind: "MixedDelete" },
         ]);
         await storeCapabilities(seeded, vectorStore, {
           onProgress: () => {},
         });
-        allTestIds.push("mixed-delete.example.io");
+        allTestIds.push(MIXED_DELETE_FQ);
 
         // Verify the seeded doc exists before the mixed request
         const beforeResults = await vectorStore.keywordSearch(
@@ -411,13 +423,13 @@ describe.skipIf(!!skipReason)(
           { nResults: 10 }
         );
         expect(
-          beforeResults.find((r) => r.id === "mixed-delete.example.io")
+          beforeResults.find((r) => r.id === MIXED_DELETE_FQ)
         ).toBeDefined();
 
         // POST mixed payload: delete the seeded doc, upsert via real pipeline
         const res = await postScan(app, {
-          upserts: ["sqls.devopstoolkit.live"],
-          deletes: ["mixed-delete.example.io"],
+          upserts: [SQL_FQ],
+          deletes: [MIXED_DELETE_FQ],
         });
 
         expect(res.status).toBe(202);
@@ -428,7 +440,7 @@ describe.skipIf(!!skipReason)(
           deletes: 1,
         });
 
-        allTestIds.push("sqls.devopstoolkit.live");
+        allTestIds.push(SQL_FQ);
 
         // Poll until BOTH conditions are true atomically:
         // - deleted doc is gone
@@ -444,7 +456,7 @@ describe.skipIf(!!skipReason)(
               { nResults: 10 }
             );
             expect(
-              deleteCheck.find((r) => r.id === "mixed-delete.example.io")
+              deleteCheck.find((r) => r.id === MIXED_DELETE_FQ)
             ).toBeUndefined();
 
             // Check upsert: SQL capability should be present
@@ -454,7 +466,7 @@ describe.skipIf(!!skipReason)(
               { nResults: 10 }
             );
             expect(
-              upsertCheck.find((r) => r.id === "sqls.devopstoolkit.live")
+              upsertCheck.find((r) => r.id === SQL_FQ)
             ).toBeDefined();
           },
           { timeout: 90_000, interval: 2_000 }

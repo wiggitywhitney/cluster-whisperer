@@ -31,6 +31,13 @@ import type {
 } from "../../pipeline/types";
 
 /**
+ * Maximum number of items (upserts + deletes combined) accepted per scan request.
+ * Prevents unbounded fire-and-forget LLM work from a single oversized request.
+ * CRD changes are infrequent — a typical controller POST has 1-6 items.
+ */
+export const MAX_SCAN_ITEMS = 200;
+
+/**
  * Dependencies for the capabilities route.
  *
  * Each pipeline function is injected so tests can stub them independently.
@@ -92,6 +99,18 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
     }),
     async (c) => {
       const payload = c.req.valid("json");
+
+      // Reject oversized payloads before kicking off background work
+      const totalItems = payload.upserts.length + payload.deletes.length;
+      if (totalItems > MAX_SCAN_ITEMS) {
+        return c.json(
+          {
+            error: "Payload too large",
+            details: `Maximum ${MAX_SCAN_ITEMS} total items across upserts and deletes`,
+          },
+          400
+        );
+      }
 
       // Suppress progress logging in HTTP context (no stdout in a server)
       const silentProgress = () => {};
