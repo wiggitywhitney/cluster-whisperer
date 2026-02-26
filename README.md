@@ -98,7 +98,9 @@ Not every command needs everything:
 | `<question>` (investigate) | Yes | Yes | Optional | Optional |
 | `sync` (capabilities) | Yes | Yes | Yes | Yes |
 | `sync-instances` | Yes | No | Yes | Yes |
-| `serve` (REST API) | No | No | Yes | Yes |
+| `serve` (REST API) | No | Optional* | Yes | Yes |
+
+*\*Required for the `/api/v1/capabilities/scan` endpoint. Without it, only instance sync is available.*
 
 ## Setup
 
@@ -191,8 +193,9 @@ The server exposes:
 | `/healthz` | GET | Liveness probe — always returns 200 if the process is running |
 | `/readyz` | GET | Readiness probe — returns 200 only when Chroma is reachable |
 | `/api/v1/instances/sync` | POST | Receives batched instance upserts and deletes |
+| `/api/v1/capabilities/scan` | POST | Triggers capability inference for specific CRDs (optional — requires `ANTHROPIC_API_KEY`) |
 
-The sync endpoint accepts a JSON payload with two arrays:
+The instance sync endpoint accepts a JSON payload with two arrays:
 
 ```json
 {
@@ -213,7 +216,18 @@ The sync endpoint accepts a JSON payload with two arrays:
 }
 ```
 
-This is designed to work with the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller, which watches Kubernetes clusters for resource changes and pushes them here. But any client can POST to the endpoint — the contract is the JSON schema above.
+The capability scan endpoint accepts a list of fully qualified CRD resource names:
+
+```json
+{
+  "upserts": ["certificates.cert-manager.io", "issuers.cert-manager.io"],
+  "deletes": ["old-resource.example.io"]
+}
+```
+
+Unlike instance sync (which returns 200 synchronously), the capability scan returns 202 Accepted immediately and processes in the background — LLM inference takes ~4-6 seconds per resource. See `docs/capability-inference-pipeline.md` for details.
+
+Both endpoints are designed to work with the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller, which watches Kubernetes clusters for resource and CRD changes and pushes them here. Any client can POST to either endpoint — the contract is the JSON schema above.
 
 The server handles graceful shutdown on SIGTERM, making it Kubernetes-deployment friendly.
 
@@ -247,12 +261,18 @@ The MCP server exposes a single `investigate` tool that wraps the same ReAct age
 ### REST API
 
 ```text
-k8s-vectordb-sync controller → POST /api/v1/instances/sync → Hono server → Vector DB
-                                                                  ↑
-Kubernetes cluster ──(watches)──┘                          (upserts + deletes)
+k8s-vectordb-sync controller
+        |
+        ├── POST /api/v1/instances/sync      (resource changes)
+        ├── POST /api/v1/capabilities/scan   (CRD changes)
+        v
+cluster-whisperer serve (Hono server) → Vector DB
+        ^
+        |
+Kubernetes cluster ──(watches)──┘
 ```
 
-The REST API receives pushed instance data from the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller. This keeps the vector database continuously up-to-date as resources change in the cluster, without requiring on-demand `sync-instances` runs.
+The REST API receives pushed data from the [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller. Instance sync keeps the vector database up-to-date as resources change. Capability scan triggers LLM inference when new CRDs are installed, so the agent discovers new resource types automatically.
 
 ### Available Tools
 
@@ -316,12 +336,14 @@ src/
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
 │   └── investigator.ts    # ReAct agent setup (LangGraph)
-├── api/                   # REST API for receiving instance sync payloads
+├── api/                   # REST API for controller-pushed sync
 │   ├── server.ts          # Hono HTTP server with health probes
 │   ├── routes/
-│   │   └── instances.ts   # POST /api/v1/instances/sync endpoint
+│   │   ├── instances.ts   # POST /api/v1/instances/sync endpoint
+│   │   └── capabilities.ts # POST /api/v1/capabilities/scan endpoint
 │   └── schemas/
-│       └── sync-payload.ts # Zod validation for controller payloads
+│       ├── sync-payload.ts # Zod validation for instance sync payloads
+│       └── scan-payload.ts # Zod validation for capability scan payloads
 ├── pipeline/              # Knowledge sync pipelines
 │   ├── discovery.ts       # Resource type discovery (kubectl api-resources)
 │   ├── inference.ts       # Capability inference (kubectl explain → LLM)

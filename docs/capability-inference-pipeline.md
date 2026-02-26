@@ -86,6 +86,106 @@ Sync complete: 153 discovered, 153 inferred, 153 stored.
 
 The sync uses upsert — re-running is safe and updates existing entries. There is no incremental diff; every sync processes all resources. A full sync of ~150 resources takes a few minutes (schema extraction is fast, LLM inference is the bottleneck).
 
+## Push-Based Scan via HTTP Endpoint
+
+The `sync` CLI command is a pull-based approach: cluster-whisperer runs kubectl internally to discover all resources. The HTTP endpoint provides a push-based alternative: an external controller watches the cluster for CRD changes and tells cluster-whisperer which specific resources to scan.
+
+### How It Works
+
+The [k8s-vectordb-sync](https://github.com/wiggitywhitney/k8s-vectordb-sync) controller watches a Kubernetes cluster for CRD events (added/removed). When new CRDs appear, the controller POSTs their resource names to `POST /api/v1/capabilities/scan`. Cluster-whisperer runs the same inference pipeline as the CLI command, but scoped to only the requested resources.
+
+```text
+k8s-vectordb-sync controller (watches CRD events)
+        |
+        | POST /api/v1/capabilities/scan
+        v
+cluster-whisperer serve (Hono HTTP server)
+        |
+        v
+   Zod validation → 202 Accepted (immediate response)
+        |
+        v  (background — fire-and-forget)
+        |
+        ├── vectorStore.delete("capabilities", deletes)
+        |
+        └── discoverResources({ resourceNames: upserts })
+                |  (kubectl api-resources → filter to requested names → kubectl explain)
+                v
+            inferCapabilities() — LLM inference per resource
+                |  (schema → Haiku → structured JSON)
+                v
+            storeCapabilities() → ChromaDB (capabilities collection)
+```
+
+### Why Asynchronous
+
+Unlike instance sync (which returns 200 synchronously), the capability scan endpoint returns 202 Accepted immediately and processes in the background. This is because capability inference is slow — each resource requires a `kubectl explain` call and an LLM inference call (~4-6 seconds per resource). Returning immediately means:
+
+- The controller's HTTP timeout is never at risk
+- A failed inference doesn't cause the controller to retry the whole batch
+- cluster-whisperer can process at its own pace without back-pressuring the controller
+
+Pipeline failures are logged to stderr and observable via OpenTelemetry spans, not returned as HTTP status codes.
+
+### Payload Format
+
+```json
+{
+  "upserts": [
+    "certificates.cert-manager.io",
+    "issuers.cert-manager.io",
+    "clusterissuers.cert-manager.io"
+  ],
+  "deletes": [
+    "old-resource.example.io"
+  ]
+}
+```
+
+Resource names use the fully qualified format from `kubectl api-resources` — `<plural>.<group>` for grouped resources (e.g., `certificates.cert-manager.io`) or just the plural for core resources (e.g., `pods`).
+
+Both `upserts` and `deletes` can be `null` (Go nil slices serialize as JSON null), empty arrays, or omitted entirely. The Zod schema normalizes all cases to empty arrays.
+
+If the same resource appears in both arrays, deletes are processed first, then upserts. This removes the old entry and recreates it with fresh inference.
+
+### Response Codes
+
+| Code | Meaning | Controller Behavior |
+|------|---------|-------------------|
+| 202 | Accepted — processing started in background | Moves on |
+| 4xx | Bad request (validation failure) | Does not retry |
+
+The 202 response includes a summary of what was accepted:
+
+```json
+{
+  "status": "accepted",
+  "upserts": 3,
+  "deletes": 1
+}
+```
+
+### Scoped Discovery
+
+When the `sync` CLI runs, it discovers all ~150 resource types and runs `kubectl explain` for each one. The HTTP endpoint scopes discovery to only the requested resources, avoiding unnecessary work.
+
+For example, if cert-manager installs 3 new CRDs, the endpoint runs `kubectl explain` for just those 3 resources instead of all 150+. This reduces processing time from minutes to seconds (plus LLM inference time for the 3 resources).
+
+### API Key Requirements
+
+The capability scan endpoint requires both `ANTHROPIC_API_KEY` (for LLM inference) and `VOYAGE_API_KEY` (for embedding). The route is optionally mounted — it only exists when the server is started with capability dependencies configured. If the route is not mounted, requests to `/api/v1/capabilities/scan` return 404.
+
+### Pull vs Push Comparison
+
+| Aspect | `sync` CLI (pull) | `/capabilities/scan` endpoint (push) |
+|--------|-------------------|--------------------------------------|
+| Trigger | Manual CLI run | Automatic on CRD changes |
+| Scope | All resources in the cluster | Only the CRDs that changed |
+| Response | Synchronous (blocks until done) | Asynchronous (202 Accepted, background processing) |
+| Delete support | No (upsert only) | Yes (removes capabilities for deleted CRDs) |
+| Dependencies | kubectl access | k8s-vectordb-sync controller |
+| Use case | Initial sync, development | Continuous sync, production |
+
 ## What Gets Stored
 
 ### Capability Data Structure

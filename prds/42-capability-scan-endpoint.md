@@ -1,6 +1,6 @@
 # PRD #42: Capability Scan REST Endpoint
 
-**Status**: Active
+**Status**: Complete
 **Created**: 2026-02-25
 **GitHub Issue**: [#42](https://github.com/wiggitywhitney/cluster-whisperer/issues/42)
 
@@ -80,7 +80,7 @@ The capability scan endpoint has fundamentally different characteristics from in
   - Contract tests matching the controller's expected payload format
   - End-to-end: install CRD → controller detects → POSTs to scan endpoint → agent finds new capability (deferred — requires cross-repo CI with Kind cluster and k8s-vectordb-sync controller)
 
-- [ ] **M5**: Documentation
+- [x] **M5**: Documentation
   - Document the new endpoint in `docs/capability-inference-pipeline.md`
   - Update `docs/resource-instance-sync.md` to reference the capability scan endpoint
   - Update README with the capability scan endpoint details
@@ -190,3 +190,4 @@ The endpoint is optionally mounted — `ServerDependencies.capabilities` must be
 
 - **2026-02-26**: Completed M1 (endpoint), M2 (deletes), and M3 (scoped discovery) in a single implementation pass. M2 and M3 were folded into M1 as they are tightly coupled. Created: `scan-payload.ts` (Zod schema), `capabilities.ts` (route handler with async fire-and-forget), modified `discovery.ts` (resourceNames filter) and `server.ts` (optional route mounting). 33 new unit tests, 256 total passing. Remaining: M4 (integration tests) and M5 (documentation).
 - **2026-02-26**: Completed M4 (integration testing). Created `capabilities.integration.test.ts` with 12 tests across 5 describe blocks: upsert verification against real ChromaDB (POST → 202 → poll → capabilities stored with correct metadata), delete verification (seed via `storeCapabilities()`, delete via endpoint, verify removal), mixed upserts+deletes with atomic assertion (both conditions checked in single `waitFor` to prevent race), controller payload contract (Go nil slices, empty objects, CRD name format, 400 paths), and response shape contract. Uses `vi.waitFor()` polling for async fire-and-forget verification. Reuses canned kubectl fixtures from `runner.integration.test.ts`. 268 total tests (256 unit + 12 integration). Full cross-repo e2e test (CRD install → controller → endpoint → agent) deferred to CI workflow. Remaining: M5 (documentation).
+- **2026-02-26**: Completed M5 (documentation). Added "Push-Based Scan via HTTP Endpoint" section to `docs/capability-inference-pipeline.md` covering processing flow, payload format, async 202 response, scoped discovery, API key requirements, and pull vs push comparison. Updated `docs/resource-instance-sync.md` with capability scan route in endpoint table and CRD-triggered scan cross-references. Updated README with capability scan in endpoint table, `Optional*` Anthropic key for `serve`, capability scan payload example, updated architecture diagram, and new files in project structure. PRD #42 complete — all milestones (M1–M5) and success criteria (7/7) done.

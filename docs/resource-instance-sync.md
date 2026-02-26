@@ -121,13 +121,16 @@ docker start chromadb  # or: docker run -d --name chromadb -p 8000:8000 chromadb
 vals exec -f .vals.yaml -- npx tsx src/index.ts serve --port 3000 --chroma-url http://localhost:8000
 ```
 
-The server exposes three routes:
+The server exposes these routes:
 
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `/healthz` | GET | Liveness probe (always 200) |
 | `/readyz` | GET | Readiness probe (200 when ChromaDB is reachable) |
-| `/api/v1/instances/sync` | POST | Receive batched upserts and deletes |
+| `/api/v1/instances/sync` | POST | Receive batched instance upserts and deletes |
+| `/api/v1/capabilities/scan` | POST | Trigger capability inference for specific CRDs (optional — see below) |
+
+The capabilities route is optionally mounted. When the server is started with `ANTHROPIC_API_KEY` and `VOYAGE_API_KEY` available, it enables capability scanning for CRD changes alongside instance sync. See `docs/capability-inference-pipeline.md` for details on the capability scan endpoint, payload format, and async processing model.
 
 ### Running the Controller
 
@@ -137,6 +140,8 @@ REST_ENDPOINT=http://localhost:3000/api/v1/instances/sync make run
 ```
 
 The controller discovers all watchable resource types, starts informers, debounces changes, and flushes batches to the endpoint. On startup, all existing resources are synced. After that, only changes are pushed.
+
+The controller also detects CRD changes (new CRDs installed, existing CRDs removed). When CRD events occur, it POSTs to `/api/v1/capabilities/scan` to trigger capability inference for the new resource types. This keeps both the instances collection (what's running) and the capabilities collection (what's possible) up to date automatically.
 
 ### Payload Format
 
