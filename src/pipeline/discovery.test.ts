@@ -732,4 +732,92 @@ describe("discoverResources", () => {
     // Should include a count like "(1 of 4)"
     expect(schemaMessages[0]).toMatch(/\(\d+ of \d+\)/);
   });
+
+  // -------------------------------------------------------------------------
+  // Scoped discovery via resourceNames filter (PRD #42 M1/M3)
+  // -------------------------------------------------------------------------
+
+  it("only extracts schemas for resources matching resourceNames filter", async () => {
+    const mockKubectl = createMockKubectl();
+
+    const result = await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+      resourceNames: ["sqls.devopstoolkit.live"],
+    });
+
+    // Should only return the one matching resource
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("sqls.devopstoolkit.live");
+    expect(result[0].isCRD).toBe(true);
+  });
+
+  it("filters to multiple requested resource names", async () => {
+    const mockKubectl = createMockKubectl();
+
+    const result = await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+      resourceNames: ["sqls.devopstoolkit.live", "deployments.apps"],
+    });
+
+    expect(result).toHaveLength(2);
+    const names = result.map((r) => r.name);
+    expect(names).toContain("sqls.devopstoolkit.live");
+    expect(names).toContain("deployments.apps");
+  });
+
+  it("returns empty array when no resource names match", async () => {
+    const mockKubectl = createMockKubectl();
+
+    const result = await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+      resourceNames: ["nonexistent.example.io"],
+    });
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("only runs kubectl explain for matching resources", async () => {
+    const mockKubectl = createMockKubectl();
+
+    await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+      resourceNames: ["sqls.devopstoolkit.live"],
+    });
+
+    // kubectl explain should only be called once (for sqls.devopstoolkit.live)
+    const explainCalls = mockKubectl.mock.calls.filter(
+      (call) => call[0][0] === "explain"
+    );
+    expect(explainCalls).toHaveLength(1);
+    expect(explainCalls[0][0][1]).toBe("sqls.devopstoolkit.live");
+  });
+
+  it("discovers all resources when resourceNames is omitted", async () => {
+    const mockKubectl = createMockKubectl();
+
+    const result = await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+    });
+
+    // Without filter, should return all 4 filtered resources
+    expect(result).toHaveLength(4);
+  });
+
+  it("discovers all resources when resourceNames is empty array", async () => {
+    const mockKubectl = createMockKubectl();
+
+    const result = await discoverResources({
+      kubectl: mockKubectl,
+      onProgress: () => {},
+      resourceNames: [],
+    });
+
+    // Empty array means "no filter" — same as omitting
+    expect(result).toHaveLength(4);
+  });
 });

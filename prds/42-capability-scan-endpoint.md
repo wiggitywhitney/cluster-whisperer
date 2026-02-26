@@ -1,6 +1,6 @@
 # PRD #42: Capability Scan REST Endpoint
 
-**Status**: Open
+**Status**: Active
 **Created**: 2026-02-25
 **GitHub Issue**: [#42](https://github.com/wiggitywhitney/cluster-whisperer/issues/42)
 
@@ -47,33 +47,32 @@ The capability scan endpoint has fundamentally different characteristics from in
 
 ## Success Criteria
 
-- [ ] `POST /api/v1/capabilities/scan` endpoint receives CRD names and triggers inference for those resources
+- [x] `POST /api/v1/capabilities/scan` endpoint receives CRD names and triggers inference for those resources
 - [ ] New CRD capabilities appear in the vector database after the endpoint processes them
-- [ ] Deleted CRDs are removed from the capabilities collection
-- [ ] Endpoint reuses existing pipeline functions from PRD #25 (no reimplementation)
-- [ ] The endpoint works with the k8s-vectordb-sync controller's payload format
-- [ ] Error handling matches instance sync patterns (400 for bad payload, 500 for server errors)
-- [ ] Tests cover the endpoint, pipeline integration, and error paths
+- [x] Deleted CRDs are removed from the capabilities collection
+- [x] Endpoint reuses existing pipeline functions from PRD #25 (no reimplementation)
+- [x] The endpoint works with the k8s-vectordb-sync controller's payload format
+- [x] Error handling: 400 for bad payload (async processing means pipeline errors are logged, not returned as HTTP status)
+- [x] Tests cover the endpoint, pipeline integration, and error paths
 
 ## Milestones
 
-- [ ] **M1**: Capability Scan Endpoint (Upserts)
+- [x] **M1**: Capability Scan Endpoint (Upserts)
   - Add `POST /api/v1/capabilities/scan` route to the Hono server
   - Define Zod schema for the scan payload (resource names to scan)
   - Wire endpoint to existing pipeline: `discoverResources()` scoped to specific resource names → `inferCapabilities()` → `storeCapabilities()`
   - Mount route in `server.ts` alongside the existing instances route
   - Unit tests for route handler, payload validation, and pipeline integration
-  - Decide: synchronous (block until inference completes) vs asynchronous (return 202, process in background)
+  - Decided: asynchronous fire-and-forget (return 202, process in background)
 
-- [ ] **M2**: Capability Delete Support
+- [x] **M2**: Capability Delete Support (folded into M1)
   - Handle delete requests — remove capability entries from the capabilities collection by resource name
   - Reuse `vectorStore.delete()` with capability document IDs
   - Unit tests for delete path
 
-- [ ] **M3**: Pipeline Scoping
-  - Modify `discoverResources()` (or create a wrapper) to accept a filter for specific resource names instead of discovering everything
-  - This is the key change: the existing pipeline always discovers all resources. The endpoint needs to discover only the resources the controller specified.
-  - Unit and integration tests for scoped discovery
+- [x] **M3**: Pipeline Scoping (folded into M1)
+  - Added `resourceNames?: string[]` to `DiscoveryOptions` — `discoverResources()` skips `kubectl explain` for non-matching resources
+  - Unit tests for scoped discovery (6 tests covering matching, no matches, empty filter, kubectl explain call count)
 
 - [ ] **M4**: Integration Testing
   - Integration tests against real ChromaDB: POST scan payload → verify capabilities appear in vector DB
@@ -109,41 +108,31 @@ Resource names use the fully qualified format that `kubectl api-resources` produ
 
 **Overlap handling**: If the same resource name appears in both `upserts` and `deletes`, deletes are processed first, then upserts. This matches the instance sync endpoint's behavior (PRD #35) — the delete removes the old entry and the upsert recreates it with fresh inference.
 
-### Processing Flow (Upserts)
+### Processing Flow
 
 ```text
-Controller POSTs: { upserts: ["certificates.cert-manager.io"] }
+Controller POSTs: { upserts: ["certificates.cert-manager.io"], deletes: ["old.example.io"] }
     |
     v
-Zod validation
+Zod validation (synchronous — 400 on bad input)
     |
     v
-discoverResources() — scoped to just those resource names
-    |  (kubectl api-resources → filter to requested names → kubectl explain --recursive)
-    v
-inferCapabilities() — LLM inference for each discovered resource
-    |  (schema → Haiku → structured JSON → ResourceCapability)
-    v
-storeCapabilities() — embed and store in "capabilities" collection
+202 Accepted: { status: "accepted", upserts: 1, deletes: 1 }
     |
-    v
-200 OK: { scanned: 1, stored: 1 }
+    v  (background — fire-and-forget)
+    |
+    ├── vectorStore.delete("capabilities", ["old.example.io"])
+    |
+    └── discoverResources({ resourceNames: ["certificates.cert-manager.io"] })
+            |  (kubectl api-resources → filter to requested names → kubectl explain --recursive)
+            v
+        inferCapabilities() — LLM inference for each discovered resource
+            |  (schema → Haiku → structured JSON → ResourceCapability)
+            v
+        storeCapabilities() — embed and store in "capabilities" collection
 ```
 
-### Processing Flow (Deletes)
-
-```text
-Controller POSTs: { deletes: ["old-resource.example.io"] }
-    |
-    v
-Zod validation
-    |
-    v
-vectorStore.delete("capabilities", ["old-resource.example.io"])
-    |  (document IDs in capabilities collection match resource names)
-    v
-200 OK: { deleted: 1 }
-```
+Pipeline failures are logged and observable via OTel spans (PRD #37), not returned to the controller.
 
 ### Scoped Discovery
 
@@ -154,22 +143,19 @@ The existing `discoverResources()` discovers all resources in the cluster. The e
 
 Option 2 is preferred — it avoids running `kubectl explain` for resources we don't need.
 
-### Synchronous vs Asynchronous
+### Asynchronous Fire-and-Forget
 
-For the initial implementation, synchronous processing is simpler and sufficient:
-- CRD changes are rare (operator installs, not continuous)
-- Typical batch size is small (1-10 CRDs per operator)
-- At ~5 seconds per resource, a 10-CRD batch takes ~50 seconds
-- The controller should use a **120-second HTTP timeout** for this endpoint (vs the default 30s for instance sync)
-- The endpoint is naturally idempotent — re-scanning the same CRD produces the same inference result and upserts overwrite the existing entry
-
-If large batches become a problem, async (202 Accepted + background processing) can be added later.
+The endpoint validates synchronously (400 on bad input) and returns 202 immediately. The pipeline runs in the background:
+- Controller's 30s HTTP timeout is never close to hit
+- A failed inference doesn't cause the controller to retry the whole batch
+- cluster-whisperer can rate-limit LLM calls without back-pressuring the controller
+- The endpoint is naturally idempotent — re-scanning the same CRD produces the same result
 
 ### API Key Requirements
 
 The capability scan endpoint requires both `ANTHROPIC_API_KEY` (for LLM inference) and `VOYAGE_API_KEY` (for embedding). The instance sync endpoint only requires `VOYAGE_API_KEY`.
 
-The endpoint is always mounted (no feature flag). If `ANTHROPIC_API_KEY` is missing at request time, the endpoint returns 503 with a clear error message ("capability scanning requires ANTHROPIC_API_KEY"). This avoids a separate enablement env var — the presence of the API key is the implicit flag.
+The endpoint is optionally mounted — `ServerDependencies.capabilities` must be provided for the route to exist. In practice, the CLI subcommand wires the real pipeline functions (which require the API keys). If keys are missing, the pipeline functions fail in the background and errors are logged.
 
 ## Dependencies
 
@@ -191,11 +177,15 @@ The endpoint is always mounted (no feature flag). If `ANTHROPIC_API_KEY` is miss
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-02-25 | Separate endpoint (`/capabilities/scan`) not shared with `/instances/sync` | Different processing pipelines (LLM inference vs embedding only), different latency profiles (seconds vs milliseconds), different API key requirements, different volume patterns. REST convention: different resources = different endpoints. |
-| 2026-02-25 | Synchronous processing for initial implementation | CRD changes are rare and batches are small. Simpler implementation. Async can be added later if needed. |
+| 2026-02-25 | ~~Synchronous processing for initial implementation~~ Superseded by 2026-02-26 async decision | Originally planned synchronous. Revised after analyzing controller timeout constraints. |
 | 2026-02-25 | Resource names as fully qualified strings | Matches `kubectl api-resources` format and what `discoverResources()` already uses internally. The controller can construct these from CRD metadata. |
+| 2026-02-26 | Async fire-and-forget (202) instead of synchronous (200) | Controller shouldn't wait for LLM inference (~5s/resource). Prevents timeout issues, decouples retry semantics — controller retries delivery, not processing. Pipeline failures observable via OTel spans. |
+| 2026-02-26 | Own deps interface (`CapabilitiesRouteDeps`) per route | Route factories declare what they need. Independently testable with minimal stubs. No coupling between routes via shared `ServerDependencies`. |
+| 2026-02-26 | Optional route mounting via `ServerDependencies.capabilities` | Capabilities route only mounts when deps are provided. Avoids always-on mounting and 503 checks for missing API keys. |
+| 2026-02-26 | Controller field names changed from `added`/`deleted` to `upserts`/`deletes` | Server defines the API contract. Consistency with instance sync endpoint. `upserts` describes intent (idempotent desired state), not event (`added`). |
 
 ---
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+- **2026-02-26**: Completed M1 (endpoint), M2 (deletes), and M3 (scoped discovery) in a single implementation pass. M2 and M3 were folded into M1 as they are tightly coupled. Created: `scan-payload.ts` (Zod schema), `capabilities.ts` (route handler with async fire-and-forget), modified `discovery.ts` (resourceNames filter) and `server.ts` (optional route mounting). 33 new unit tests, 256 total passing. Remaining: M4 (integration tests) and M5 (documentation).

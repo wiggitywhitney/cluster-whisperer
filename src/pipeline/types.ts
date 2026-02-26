@@ -71,6 +71,14 @@ export interface DiscoveryOptions {
    * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
+  /**
+   * Optional: only discover these specific resource names.
+   * Uses fully qualified names (e.g., ["certificates.cert-manager.io", "deployments.apps"]).
+   * When provided, kubectl explain is only run for matching resources — avoids
+   * expensive schema extraction for resources the caller doesn't need.
+   * When omitted or empty, discovers all resources (existing behavior).
+   */
+  resourceNames?: string[];
 }
 
 // ---------------------------------------------------------------------------
