@@ -228,16 +228,40 @@ export async function discoverResources(
     `After filtering: ${filtered.length} resources (removed ${allResources.length - filtered.length}).`
   );
 
+  // Step 3b: Scope to requested resource names if provided (PRD #42)
+  // When resourceNames is set, only extract schemas for matching resources.
+  // This avoids expensive kubectl explain calls for resources the caller
+  // doesn't need (e.g., the capability scan endpoint only needs specific CRDs).
+  const resourceNameFilter = options?.resourceNames;
+  const hasNameFilter = resourceNameFilter && resourceNameFilter.length > 0;
+  const requestedNames = hasNameFilter ? new Set(resourceNameFilter) : null;
+
   // Step 4: Extract schemas for each remaining resource
+  // Pre-compute the extraction count for accurate progress reporting.
+  // When resourceNames is set, only matching resources are extracted.
+  const schemaCount = requestedNames
+    ? filtered.filter((r) => {
+        const g = extractGroup(r.apiVersion);
+        return requestedNames.has(buildFullyQualifiedName(r.name, g));
+      }).length
+    : filtered.length;
+
   const discovered: DiscoveredResource[] = [];
+  let extractionIndex = 0;
 
   for (let i = 0; i < filtered.length; i++) {
     const resource = filtered[i];
     const group = extractGroup(resource.apiVersion);
     const fqName = buildFullyQualifiedName(resource.name, group);
 
+    // Skip resources not in the requested set
+    if (requestedNames && !requestedNames.has(fqName)) {
+      continue;
+    }
+
+    extractionIndex++;
     onProgress(
-      `Extracting schema (${i + 1} of ${filtered.length}): ${fqName}`
+      `Extracting schema (${extractionIndex} of ${schemaCount}): ${fqName}`
     );
 
     const explainResult = kubectl([

@@ -24,6 +24,10 @@ import { serve, type ServerType } from "@hono/node-server";
 import { INSTANCES_COLLECTION } from "../vectorstore";
 import type { VectorStore } from "../vectorstore";
 import { createInstancesRoute } from "./routes/instances";
+import {
+  createCapabilitiesRoute,
+  type CapabilitiesRouteDeps,
+} from "./routes/capabilities";
 
 /**
  * Dependencies injected into the Hono app.
@@ -32,8 +36,10 @@ import { createInstancesRoute } from "./routes/instances";
  * subcommand passes a real ChromaBackend + VoyageEmbedding.
  */
 export interface ServerDependencies {
-  /** Vector store used for readiness probe (and sync endpoint in M2+) */
+  /** Vector store used for readiness probe and sync endpoints */
   vectorStore: VectorStore;
+  /** Dependencies for the capability scan endpoint (PRD #42). Optional — omit to skip mounting. */
+  capabilities?: CapabilitiesRouteDeps;
 }
 
 /**
@@ -63,6 +69,12 @@ export function createApp(deps: ServerDependencies): Hono {
   // Mount the sync endpoint for receiving instance data from the controller
   const instancesRoute = createInstancesRoute(deps.vectorStore);
   app.route("/api/v1/instances/sync", instancesRoute);
+
+  // Mount the capability scan endpoint if dependencies are provided (PRD #42)
+  if (deps.capabilities) {
+    const capabilitiesRoute = createCapabilitiesRoute(deps.capabilities);
+    app.route("/api/v1/capabilities/scan", capabilitiesRoute);
+  }
 
   /**
    * Readiness probe — "can the process serve traffic?"

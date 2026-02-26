@@ -8,9 +8,10 @@
  * readiness probe, making it injectable for testing with a mock.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createApp } from "./server";
 import { createMockVectorStore } from "./test-helpers";
+import type { CapabilitiesRouteDeps } from "./routes/capabilities";
 
 // ---------------------------------------------------------------------------
 // GET /healthz — liveness probe
@@ -78,6 +79,48 @@ describe("GET /readyz", () => {
     expect(mockStore.initialize).toHaveBeenCalledWith("instances", {
       distanceMetric: "cosine",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Capability scan route mounting (PRD #42)
+// ---------------------------------------------------------------------------
+
+describe("capability scan route", () => {
+  function createMockCapsDeps(): CapabilitiesRouteDeps {
+    return {
+      vectorStore: createMockVectorStore(),
+      discoverResources: vi.fn().mockResolvedValue([]),
+      inferCapabilities: vi.fn().mockResolvedValue([]),
+      storeCapabilities: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("mounts capabilities route when deps are provided", async () => {
+    const mockStore = createMockVectorStore();
+    const capsDeps = createMockCapsDeps();
+    const app = createApp({ vectorStore: mockStore, capabilities: capsDeps });
+
+    const res = await app.request("/api/v1/capabilities/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upserts: ["test.example.io"] }),
+    });
+
+    expect(res.status).toBe(202);
+  });
+
+  it("returns 404 for capabilities route when deps are omitted", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await app.request("/api/v1/capabilities/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upserts: ["test.example.io"] }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });
 
