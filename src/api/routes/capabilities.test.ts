@@ -10,14 +10,22 @@
  * that the pipeline is invoked with the correct arguments.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import {
   createCapabilitiesRoute,
   MAX_SCAN_ITEMS,
+  MAX_IN_FLIGHT_SCANS,
+  resetInFlightScans,
   type CapabilitiesRouteDeps,
 } from "./capabilities";
 import { createMockVectorStore } from "../test-helpers";
+
+// Reset module-level in-flight counter between tests so concurrency state
+// from one test doesn't leak into the next.
+beforeEach(() => {
+  resetInFlightScans();
+});
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -323,5 +331,46 @@ describe("POST /api/v1/capabilities/scan — validation errors", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Payload too large");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/capabilities/scan — concurrency limits (429)
+// ---------------------------------------------------------------------------
+
+describe("POST /api/v1/capabilities/scan — concurrency limits", () => {
+  it("returns 429 when max in-flight scans are reached", async () => {
+    // Create deps where discoverResources never resolves — simulates
+    // long-running pipelines that hold in-flight slots.
+    const deps = createMockDeps({
+      discoverResources: vi.fn().mockReturnValue(new Promise(() => {})),
+    });
+    const app = createTestApp(deps);
+
+    // Fill all in-flight slots with requests that never complete
+    const pending: Promise<Response>[] = [];
+    for (let i = 0; i < MAX_IN_FLIGHT_SCANS; i++) {
+      pending.push(
+        postScan(app, { upserts: [`resource-${i}.example.io`] })
+      );
+    }
+
+    // All should be accepted (202)
+    const responses = await Promise.all(pending);
+    for (const res of responses) {
+      expect(res.status).toBe(202);
+    }
+
+    // Allow setTimeout(0) callbacks to fire so in-flight counter increments
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Next request should be rejected (429)
+    const res = await postScan(app, {
+      upserts: ["one-too-many.example.io"],
+    });
+
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("Too many scan jobs in progress");
   });
 });

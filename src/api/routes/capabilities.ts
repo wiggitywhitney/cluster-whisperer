@@ -38,6 +38,25 @@ import type {
 export const MAX_SCAN_ITEMS = 200;
 
 /**
+ * Maximum number of scan pipelines that can run concurrently.
+ * Each pipeline calls the LLM for inference, so unbounded concurrency
+ * could overwhelm downstream providers and spike cost. Excess requests
+ * are rejected with 429 — the controller can retry later.
+ */
+export const MAX_IN_FLIGHT_SCANS = 4;
+
+/** Tracks how many background scan pipelines are currently running. */
+let inFlightScans = 0;
+
+/**
+ * Resets the in-flight scan counter to zero.
+ * Exposed for unit tests that need to isolate concurrency state between runs.
+ */
+export function resetInFlightScans(): void {
+  inFlightScans = 0;
+}
+
+/**
  * Dependencies for the capabilities route.
  *
  * Each pipeline function is injected so tests can stub them independently.
@@ -112,6 +131,15 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
         );
       }
 
+      // Reject when too many pipelines are already running.
+      // The controller can retry later — 429 signals backpressure.
+      if (inFlightScans >= MAX_IN_FLIGHT_SCANS) {
+        return c.json(
+          { error: "Too many scan jobs in progress" },
+          429
+        );
+      }
+
       // Suppress progress logging in HTTP context (no stdout in a server)
       const silentProgress = () => {};
 
@@ -122,8 +150,11 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
       // setTimeout(0) defers the background work to the next event-loop tick,
       // ensuring the 202 response is flushed before any synchronous setup
       // (e.g., kubectl spawns) in processInBackground can block the thread.
+      inFlightScans++;
       setTimeout(() => {
-        processInBackground(deps, payload, silentProgress);
+        processInBackground(deps, payload, silentProgress).finally(() => {
+          inFlightScans--;
+        });
       }, 0);
 
       return c.json(
@@ -146,54 +177,54 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
  * Runs deletes first (fast — just a vector store call), then the
  * full upsert pipeline (discover → infer → store). Errors are logged
  * but not propagated — the HTTP response has already been sent.
+ *
+ * Returns a promise so the caller can track completion (e.g., to
+ * decrement the in-flight counter via .finally()).
  */
-function processInBackground(
+async function processInBackground(
   deps: CapabilitiesRouteDeps,
   payload: { upserts: string[]; deletes: string[] },
   onProgress: (message: string) => void
-): void {
-  // Use void to explicitly discard the promise (fire-and-forget)
-  void (async () => {
-    // Process deletes first
-    if (payload.deletes.length > 0) {
-      try {
-        await deps.vectorStore.delete(
-          CAPABILITIES_COLLECTION,
-          payload.deletes
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
-        // eslint-disable-next-line no-console
-        console.error(
-          `Capability scan: delete failed: ${message}`
-        );
-      }
+): Promise<void> {
+  // Process deletes first
+  if (payload.deletes.length > 0) {
+    try {
+      await deps.vectorStore.delete(
+        CAPABILITIES_COLLECTION,
+        payload.deletes
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.error(
+        `Capability scan: delete failed: ${message}`
+      );
     }
+  }
 
-    // Process upserts through the pipeline
-    if (payload.upserts.length > 0) {
-      try {
-        const discovered = await deps.discoverResources({
-          resourceNames: payload.upserts,
-          onProgress,
-        });
+  // Process upserts through the pipeline
+  if (payload.upserts.length > 0) {
+    try {
+      const discovered = await deps.discoverResources({
+        resourceNames: payload.upserts,
+        onProgress,
+      });
 
-        const capabilities = await deps.inferCapabilities(discovered, {
-          onProgress,
-        });
+      const capabilities = await deps.inferCapabilities(discovered, {
+        onProgress,
+      });
 
-        await deps.storeCapabilities(capabilities, deps.vectorStore, {
-          onProgress,
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
-        // eslint-disable-next-line no-console
-        console.error(
-          `Capability scan: upsert pipeline failed: ${message}`
-        );
-      }
+      await deps.storeCapabilities(capabilities, deps.vectorStore, {
+        onProgress,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.error(
+        `Capability scan: upsert pipeline failed: ${message}`
+      );
     }
-  })();
+  }
 }

@@ -407,6 +407,11 @@ describe.skipIf(!!skipReason)(
 
     describe("mixed upserts + deletes", () => {
       it("processes both operations and reaches correct final state", async () => {
+        // Remove SQL_FQ if it exists from the earlier upserts test —
+        // ensures this test validates the mixed-request upsert path,
+        // not leftover state from a prior test.
+        await vectorStore.delete(CAPABILITIES_COLLECTION, [SQL_FQ]);
+
         // Seed a capability that will be deleted in the mixed request
         const seeded = makeSeededCapabilities([
           { resourceName: MIXED_DELETE_FQ, kind: "MixedDelete" },
