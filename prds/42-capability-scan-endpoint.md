@@ -48,7 +48,7 @@ The capability scan endpoint has fundamentally different characteristics from in
 ## Success Criteria
 
 - [x] `POST /api/v1/capabilities/scan` endpoint receives CRD names and triggers inference for those resources
-- [ ] New CRD capabilities appear in the vector database after the endpoint processes them
+- [x] New CRD capabilities appear in the vector database after the endpoint processes them
 - [x] Deleted CRDs are removed from the capabilities collection
 - [x] Endpoint reuses existing pipeline functions from PRD #25 (no reimplementation)
 - [x] The endpoint works with the k8s-vectordb-sync controller's payload format
@@ -74,11 +74,11 @@ The capability scan endpoint has fundamentally different characteristics from in
   - Added `resourceNames?: string[]` to `DiscoveryOptions` — `discoverResources()` skips `kubectl explain` for non-matching resources
   - Unit tests for scoped discovery (6 tests covering matching, no matches, empty filter, kubectl explain call count)
 
-- [ ] **M4**: Integration Testing
+- [x] **M4**: Integration Testing
   - Integration tests against real ChromaDB: POST scan payload → verify capabilities appear in vector DB
   - Integration tests for delete: POST delete payload → verify capabilities removed
   - Contract tests matching the controller's expected payload format
-  - End-to-end: install CRD → controller detects → POSTs to scan endpoint → agent finds new capability
+  - End-to-end: install CRD → controller detects → POSTs to scan endpoint → agent finds new capability (deferred — requires cross-repo CI with Kind cluster and k8s-vectordb-sync controller)
 
 - [ ] **M5**: Documentation
   - Document the new endpoint in `docs/capability-inference-pipeline.md`
@@ -189,3 +189,4 @@ The endpoint is optionally mounted — `ServerDependencies.capabilities` must be
 ## Progress Log
 
 - **2026-02-26**: Completed M1 (endpoint), M2 (deletes), and M3 (scoped discovery) in a single implementation pass. M2 and M3 were folded into M1 as they are tightly coupled. Created: `scan-payload.ts` (Zod schema), `capabilities.ts` (route handler with async fire-and-forget), modified `discovery.ts` (resourceNames filter) and `server.ts` (optional route mounting). 33 new unit tests, 256 total passing. Remaining: M4 (integration tests) and M5 (documentation).
+- **2026-02-26**: Completed M4 (integration testing). Created `capabilities.integration.test.ts` with 12 tests across 5 describe blocks: upsert verification against real ChromaDB (POST → 202 → poll → capabilities stored with correct metadata), delete verification (seed via `storeCapabilities()`, delete via endpoint, verify removal), mixed upserts+deletes with atomic assertion (both conditions checked in single `waitFor` to prevent race), controller payload contract (Go nil slices, empty objects, CRD name format, 400 paths), and response shape contract. Uses `vi.waitFor()` polling for async fire-and-forget verification. Reuses canned kubectl fixtures from `runner.integration.test.ts`. 268 total tests (256 unit + 12 integration). Full cross-repo e2e test (CRD install → controller → endpoint → agent) deferred to CI workflow. Remaining: M5 (documentation).
