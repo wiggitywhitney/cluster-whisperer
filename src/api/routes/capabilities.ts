@@ -118,7 +118,13 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
       // Fire-and-forget: process deletes and upserts in the background.
       // The controller's job is done once it receives 202.
       // Pipeline failures surface via OTel spans, not HTTP responses.
-      processInBackground(deps, payload, silentProgress);
+      //
+      // setTimeout(0) defers the background work to the next event-loop tick,
+      // ensuring the 202 response is flushed before any synchronous setup
+      // (e.g., kubectl spawns) in processInBackground can block the thread.
+      setTimeout(() => {
+        processInBackground(deps, payload, silentProgress);
+      }, 0);
 
       return c.json(
         {

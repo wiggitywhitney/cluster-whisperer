@@ -227,7 +227,7 @@ function makeSeededCapabilities(
     capabilities: ["test-capability"],
     providers: [],
     complexity: "low" as const,
-    description: "Seeded for integration test",
+    description: `Seeded for integration test run-${RUN_ID}`,
     useCase: "Testing delete behavior",
     confidence: 0.9,
     ...o,
@@ -317,7 +317,7 @@ describe.skipIf(!!skipReason)(
             const results = await vectorStore.search(
               CAPABILITIES_COLLECTION,
               "database configuration networking",
-              { nResults: 20 }
+              { nResults: 50 }
             );
             const storedIds = results.map((r) => r.id);
             for (const id of expectedIds) {
@@ -331,7 +331,7 @@ describe.skipIf(!!skipReason)(
         const dbResults = await vectorStore.search(
           CAPABILITIES_COLLECTION,
           "database",
-          { nResults: 5 }
+          { nResults: 50 }
         );
         const sqlResult = dbResults.find((r) => r.id === SQL_FQ);
         expect(sqlResult).toBeDefined();
@@ -358,8 +358,8 @@ describe.skipIf(!!skipReason)(
         // Verify they exist before deleting
         const beforeResults = await vectorStore.keywordSearch(
           CAPABILITIES_COLLECTION,
-          "Seeded for integration test",
-          { nResults: 10 }
+          `run-${RUN_ID}`,
+          { nResults: 50 }
         );
         expect(
           beforeResults.find((r) => r.id === DELETE_1_FQ)
@@ -386,8 +386,8 @@ describe.skipIf(!!skipReason)(
           async () => {
             const afterResults = await vectorStore.keywordSearch(
               CAPABILITIES_COLLECTION,
-              "Seeded for integration test",
-              { nResults: 10 }
+              `run-${RUN_ID}`,
+              { nResults: 50 }
             );
             expect(
               afterResults.find((r) => r.id === DELETE_1_FQ)
@@ -419,8 +419,8 @@ describe.skipIf(!!skipReason)(
         // Verify the seeded doc exists before the mixed request
         const beforeResults = await vectorStore.keywordSearch(
           CAPABILITIES_COLLECTION,
-          "MixedDelete",
-          { nResults: 10 }
+          `run-${RUN_ID}`,
+          { nResults: 50 }
         );
         expect(
           beforeResults.find((r) => r.id === MIXED_DELETE_FQ)
@@ -452,8 +452,8 @@ describe.skipIf(!!skipReason)(
             // Check delete: seeded doc should be gone
             const deleteCheck = await vectorStore.keywordSearch(
               CAPABILITIES_COLLECTION,
-              "MixedDelete",
-              { nResults: 10 }
+              `run-${RUN_ID}`,
+              { nResults: 50 }
             );
             expect(
               deleteCheck.find((r) => r.id === MIXED_DELETE_FQ)
@@ -463,7 +463,7 @@ describe.skipIf(!!skipReason)(
             const upsertCheck = await vectorStore.search(
               CAPABILITIES_COLLECTION,
               "database",
-              { nResults: 10 }
+              { nResults: 50 }
             );
             expect(
               upsertCheck.find((r) => r.id === SQL_FQ)
