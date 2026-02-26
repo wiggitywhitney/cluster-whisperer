@@ -153,8 +153,8 @@ If the same resource appears in both arrays, deletes are processed first, then u
 | Code | Meaning | Controller Behavior |
 |------|---------|-------------------|
 | 202 | Accepted — processing started in background | Moves on |
+| 400 | Bad request (validation failure) | Does not retry |
 | 429 | Too many requests — scan queue is full | Retries with backoff |
-| 4xx | Bad request (validation failure) | Does not retry |
 
 The 202 response includes a summary of what was accepted:
 
