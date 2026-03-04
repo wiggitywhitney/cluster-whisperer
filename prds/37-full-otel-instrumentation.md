@@ -109,7 +109,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Verify HTTP request → vectorstore → embedding span tree
   - Compare attribute coverage against Weaver schema — every defined attribute should appear
 
-- [ ] **M7**: Tests
+- [x] **M7**: Tests
   - Unit tests: verify each instrumented function creates spans with correct attributes
   - Unit tests: verify span status is set correctly on success and error paths
   - Unit tests: verify no spans created when tracing is disabled (no-op tracer)
@@ -393,3 +393,4 @@ Use OTel's `propagation.extract()` with the W3C TraceContext propagator (registe
 - **2026-03-03 — M3 Complete**: Wrapped VoyageEmbedding.embed() in a `cluster-whisperer.embedding.embed` span (kind: CLIENT). GenAI semconv attributes set (gen_ai.operation.name="embeddings", gen_ai.request.model). Custom attributes: input_count, dimensions. Error paths set ERROR status and recordException. 12 new unit tests, 297 total tests pass.
 - **2026-03-03 — M4 Complete**: Wrapped syncCapabilities() and syncInstances() in parent spans (kind: INTERNAL) with child spans for each stage. syncCapabilities: parent + discovery/inference/storage children. syncInstances: parent + discovery/stale-cleanup/storage children. Pipeline attributes set: name, stage, dry_run, discovered_count, inferred_count, stored_count, deleted_count. AsyncLocalStorageContextManager used in tests for parent-child verification. 34 new OTel tests, 331 total tests pass.
 - **2026-03-03 — M5 Complete**: Added Hono tracing middleware (`src/api/tracing-middleware.ts`) creating `cluster-whisperer.http.request` SERVER spans. HTTP semconv attributes set (http.request.method, url.path, http.response.status_code, http.route). W3C Trace Context propagation via `propagation.extract()` for cross-service traces. Custom sync attributes (upsert_count, delete_count) set on active span by route handlers. Health probe opt-out via OTEL_HTTP_HEALTH_SPANS=false. ABOUTME headers added to server.ts, instances.ts, capabilities.ts. 23 new tests, 354 total tests pass.
+- **2026-03-04 — M7 Complete**: All 6 test requirements verified as covered by tests written incrementally during M2–M5. 128 OTel-focused tests across 7 test files: chroma-backend (27), embeddings (12), runner.otel (17), instance-runner.otel (17), tracing-middleware (23), tracing/index (23), tracing.integration (9). Coverage includes span creation with attributes, success/error status, no-op tracer behavior, parent-child hierarchy, and HTTP middleware spans. Full suite: 354 pass, 0 fail.
