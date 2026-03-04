@@ -82,7 +82,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Set custom attributes: input text count, embedding dimensions
   - Set span status on errors (Voyage API failures → ERROR status)
 
-- [ ] **M4**: Pipeline Instrumentation
+- [x] **M4**: Pipeline Instrumentation
   - Import `getTracer()` in `src/pipeline/runner.ts` and `src/pipeline/instance-runner.ts`
   - Wrap `syncCapabilities()` in a parent span: `cluster-whisperer.pipeline.sync-capabilities`
   - Create child spans for each stage: discovery, inference, storage
@@ -391,3 +391,4 @@ Use OTel's `propagation.extract()` with the W3C TraceContext propagator (registe
 - **2026-03-03 — M1 Complete**: Extended Weaver schema with 4 new attribute groups (vectorstore, embedding, pipeline, http). Added DB semconv refs, GenAI semconv refs, HTTP semconv refs, and custom pipeline attributes. `weaver registry check` passes. Header comments updated to document all 10 attribute groups.
 - **2026-03-03 — M2 Complete**: Wrapped all 5 ChromaBackend methods in OTel spans (initialize, store, search, keywordSearch, delete). Each span sets DB semconv attributes (db.system=chromadb, db.operation.name, db.collection.name) and custom attributes (document_count, result_count). Error paths set ERROR status and recordException. 27 new unit tests, 285 total tests pass.
 - **2026-03-03 — M3 Complete**: Wrapped VoyageEmbedding.embed() in a `cluster-whisperer.embedding.embed` span (kind: CLIENT). GenAI semconv attributes set (gen_ai.operation.name="embeddings", gen_ai.request.model). Custom attributes: input_count, dimensions. Error paths set ERROR status and recordException. 12 new unit tests, 297 total tests pass.
+- **2026-03-03 — M4 Complete**: Wrapped syncCapabilities() and syncInstances() in parent spans (kind: INTERNAL) with child spans for each stage. syncCapabilities: parent + discovery/inference/storage children. syncInstances: parent + discovery/stale-cleanup/storage children. Pipeline attributes set: name, stage, dry_run, discovered_count, inferred_count, stored_count, deleted_count. AsyncLocalStorageContextManager used in tests for parent-child verification. 34 new OTel tests, 331 total tests pass.
