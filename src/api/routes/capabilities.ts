@@ -1,3 +1,6 @@
+// ABOUTME: Capability scan endpoint — accepts CRD names and triggers background inference pipeline
+// ABOUTME: Returns 202 immediately; processing (discover → infer → store) happens asynchronously
+
 /**
  * capabilities.ts - Capability scan endpoint route handler (PRD #42 M1)
  *
@@ -19,6 +22,7 @@
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { trace } from "@opentelemetry/api";
 import { ScanPayloadSchema } from "../schemas/scan-payload";
 import { CAPABILITIES_COLLECTION } from "../../vectorstore";
 import type { VectorStore } from "../../vectorstore";
@@ -142,6 +146,21 @@ export function createCapabilitiesRoute(deps: CapabilitiesRouteDeps): Hono {
 
       // Suppress progress logging in HTTP context (no stdout in a server)
       const silentProgress = () => {};
+
+      // Set custom OTel attributes on the active HTTP span (PRD #37 M5).
+      // The tracing middleware creates the span; we enrich it with
+      // scan-specific counts for observability.
+      const activeSpan = trace.getActiveSpan();
+      if (activeSpan) {
+        activeSpan.setAttribute(
+          "cluster_whisperer.sync.upsert_count",
+          payload.upserts.length
+        );
+        activeSpan.setAttribute(
+          "cluster_whisperer.sync.delete_count",
+          payload.deletes.length
+        );
+      }
 
       // Fire-and-forget: process deletes and upserts in the background.
       // The controller's job is done once it receives 202.
