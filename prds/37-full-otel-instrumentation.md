@@ -64,7 +64,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Run `weaver registry check` to validate the schema
   - Document new attribute groups in the attributes.yaml header comments
 
-- [ ] **M2**: Vector Store Instrumentation
+- [x] **M2**: Vector Store Instrumentation
   - Import `getTracer()` in `src/vectorstore/chroma-backend.ts`
   - Wrap `initialize()` in a span: `cluster-whisperer.vectorstore.initialize`
   - Wrap `store()` in a span: `cluster-whisperer.vectorstore.store`
@@ -389,3 +389,4 @@ Use OTel's `propagation.extract()` with the W3C TraceContext propagator (registe
 ## Progress Log
 
 - **2026-03-03 — M1 Complete**: Extended Weaver schema with 4 new attribute groups (vectorstore, embedding, pipeline, http). Added DB semconv refs, GenAI semconv refs, HTTP semconv refs, and custom pipeline attributes. `weaver registry check` passes. Header comments updated to document all 10 attribute groups.
+- **2026-03-03 — M2 Complete**: Wrapped all 5 ChromaBackend methods in OTel spans (initialize, store, search, keywordSearch, delete). Each span sets DB semconv attributes (db.system=chromadb, db.operation.name, db.collection.name) and custom attributes (document_count, result_count). Error paths set ERROR status and recordException. 27 new unit tests, 285 total tests pass.
