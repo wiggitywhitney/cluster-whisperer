@@ -2,9 +2,21 @@
 # Custom attributes for cluster-whisperer tracing conventions
 #
 # Categories:
-# - OTel References: gen_ai.*, process.*, error.* (imported via ref:)
+# - OTel References: gen_ai.*, process.*, error.*, db.*, http.*, url.* (imported via ref:)
 # - OpenLLMetry: traceloop.* (custom definitions for vendor conventions)
 # - Custom: cluster_whisperer.* (project-specific attributes)
+#
+# Attribute Groups:
+# - root:          Root investigation/tool spans (CLI and MCP mode)
+# - tool:          Agentic tool execution spans
+# - llm:           LLM/chat completion spans (OpenLLMetry auto-instrumented)
+# - mcp:           MCP tool execution tracking
+# - subprocess:    kubectl subprocess execution
+# - openllmetry:   Traceloop/OpenLLMetry vendor conventions
+# - vectorstore:   Vector database operation spans (ChromaDB)
+# - embedding:     Embedding generation spans (Voyage AI)
+# - pipeline:      Sync pipeline orchestration spans
+# - http:          HTTP server request spans
 
 groups:
   # ==========================================================================
@@ -244,3 +256,154 @@ groups:
         brief: Output content (content-gated)
         note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
         examples: ["The pod 'nginx-broken' is failing due to ImagePullBackOff..."]
+
+  # ==========================================================================
+  # VECTOR STORE ATTRIBUTES
+  # Used by ChromaBackend spans (src/vectorstore/chroma-backend.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.vectorstore
+    type: attribute_group
+    display_name: Vector Store Attributes
+    brief: Attributes for vector database operation spans
+    note: >
+      Set on spans wrapping ChromaBackend method calls (initialize, store, search,
+      keywordSearch, delete). Uses OTel DB semantic conventions for standard database
+      attributes and custom cluster_whisperer.vectorstore.* for domain-specific metrics.
+      SpanKind: CLIENT (outbound network calls to ChromaDB).
+    attributes:
+      # OTel DB semantic convention references
+      - ref: db.system
+      - ref: db.operation.name
+      - ref: db.collection.name
+
+      # Custom attributes
+      - id: cluster_whisperer.vectorstore.document_count
+        type: int
+        stability: development
+        brief: Number of documents in the operation (store batch size, search results)
+        examples: [10, 50, 100]
+
+      - id: cluster_whisperer.vectorstore.result_count
+        type: int
+        stability: development
+        brief: Number of results returned from a search query
+        examples: [5, 10, 20]
+
+  # ==========================================================================
+  # EMBEDDING ATTRIBUTES
+  # Used by VoyageEmbedding spans (src/vectorstore/embeddings.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.embedding
+    type: attribute_group
+    display_name: Embedding Attributes
+    brief: Attributes for embedding generation spans
+    note: >
+      Set on spans wrapping VoyageEmbedding.embed() calls. Uses OTel GenAI semantic
+      conventions for standard AI model attributes and custom cluster_whisperer.embedding.*
+      for embedding-specific metrics. SpanKind: CLIENT (outbound HTTP calls to Voyage AI).
+    attributes:
+      # OTel GenAI semantic convention references
+      - ref: gen_ai.operation.name
+      - ref: gen_ai.request.model
+
+      # Custom attributes
+      - id: cluster_whisperer.embedding.input_count
+        type: int
+        stability: development
+        brief: Number of text inputs sent for embedding
+        examples: [1, 10, 50]
+
+      - id: cluster_whisperer.embedding.dimensions
+        type: int
+        stability: development
+        brief: Dimensionality of the returned embedding vectors
+        examples: [1024]
+
+  # ==========================================================================
+  # PIPELINE ATTRIBUTES
+  # Used by sync pipeline spans (src/pipeline/runner.ts, instance-runner.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.pipeline
+    type: attribute_group
+    display_name: Pipeline Attributes
+    brief: Attributes for sync pipeline orchestration spans
+    note: >
+      Set on parent pipeline spans and child stage spans for syncCapabilities()
+      and syncInstances(). No OTel semconv exists for data pipeline orchestration;
+      uses custom cluster_whisperer.pipeline.* namespace. SpanKind: INTERNAL
+      (local orchestration, no network boundary).
+    attributes:
+      - id: cluster_whisperer.pipeline.name
+        type: string
+        stability: development
+        brief: Pipeline identifier
+        examples: ["sync-capabilities", "sync-instances"]
+
+      - id: cluster_whisperer.pipeline.stage
+        type: string
+        stability: development
+        brief: Current pipeline stage
+        examples: ["discovery", "inference", "storage", "stale-cleanup"]
+
+      - id: cluster_whisperer.pipeline.discovered_count
+        type: int
+        stability: development
+        brief: Number of resources discovered
+        examples: [15, 42]
+
+      - id: cluster_whisperer.pipeline.inferred_count
+        type: int
+        stability: development
+        brief: Number of capabilities inferred by LLM
+        examples: [8, 30]
+
+      - id: cluster_whisperer.pipeline.stored_count
+        type: int
+        stability: development
+        brief: Number of documents stored
+        examples: [8, 30]
+
+      - id: cluster_whisperer.pipeline.deleted_count
+        type: int
+        stability: development
+        brief: Number of stale documents deleted
+        examples: [2, 5]
+
+      - id: cluster_whisperer.pipeline.dry_run
+        type: boolean
+        stability: development
+        brief: Whether the pipeline ran in dry-run mode (skip storage)
+
+  # ==========================================================================
+  # HTTP SERVER ATTRIBUTES
+  # Used by Hono middleware spans (src/api/server.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.http
+    type: attribute_group
+    display_name: HTTP Server Attributes
+    brief: Attributes for HTTP server request spans
+    note: >
+      Set on spans wrapping incoming HTTP requests via Hono middleware. Uses OTel HTTP
+      semantic conventions for standard request/response attributes and custom
+      cluster_whisperer.sync.* for the instance sync endpoint. SpanKind: SERVER
+      (inbound request handling). Supports W3C Trace Context propagation from
+      upstream services (e.g., k8s-vectordb-sync controller).
+    attributes:
+      # OTel HTTP semantic convention references
+      - ref: http.request.method
+      - ref: http.response.status_code
+      - ref: http.route
+      - ref: url.path
+
+      # Custom attributes for sync endpoint
+      - id: cluster_whisperer.sync.upsert_count
+        type: int
+        stability: development
+        brief: Number of upserts in the sync payload
+        examples: [5, 20]
+
+      - id: cluster_whisperer.sync.delete_count
+        type: int
+        stability: development
+        brief: Number of deletes in the sync payload
+        examples: [2, 10]

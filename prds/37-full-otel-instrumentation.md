@@ -56,7 +56,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
 
 ## Milestones
 
-- [ ] **M1**: Extend Weaver Schema
+- [x] **M1**: Extend Weaver Schema
   - Add `registry.cluster_whisperer.vectorstore` attribute group with OTel DB semconv refs
   - Add `registry.cluster_whisperer.embedding` attribute group with GenAI semconv refs
   - Add `registry.cluster_whisperer.pipeline` attribute group with custom pipeline attributes
@@ -388,4 +388,4 @@ Use OTel's `propagation.extract()` with the W3C TraceContext propagator (registe
 
 ## Progress Log
 
-*Progress will be logged here as milestones are completed.*
+- **2026-03-03 — M1 Complete**: Extended Weaver schema with 4 new attribute groups (vectorstore, embedding, pipeline, http). Added DB semconv refs, GenAI semconv refs, HTTP semconv refs, and custom pipeline attributes. `weaver registry check` passes. Header comments updated to document all 10 attribute groups.
