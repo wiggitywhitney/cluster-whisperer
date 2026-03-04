@@ -1,666 +1,1151 @@
-{
-  "registry_url": "telemetry/registry",
-  "groups": [
-    {
-      "id": "registry.cluster_whisperer.llm",
-      "type": "attribute_group",
-      "brief": "GenAI semantic convention attributes for LLM/chat completion spans",
-      "note": "Attributes set on chat.anthropic spans created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. gen_ai.tool.definitions describes which tools were available during each LLM reasoning step. See PRD #23 M3 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-      "attributes": [
-        {
-          "name": "gen_ai.tool.definitions",
-          "type": "string",
-          "brief": "JSON array of tool definitions available to the LLM",
-          "examples": [
-            "[{\"name\":\"kubectl_get\",\"description\":\"List Kubernetes resources...\",\"parameters\":{...}}]"
-          ],
-          "requirement_level": "recommended",
-          "note": "Not yet in OTel semconv v1.37.0 registry. Datadog maps this to meta.tool_definitions in LLM Observability. Contains tool names, descriptions, and parameter schemas.\n",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        }
-      },
-      "display_name": "LLM Span Attributes"
-    },
-    {
-      "id": "registry.cluster_whisperer.mcp",
-      "type": "attribute_group",
-      "brief": "MCP tool execution attributes with GenAI semantic convention references",
-      "attributes": [
-        {
-          "name": "cluster_whisperer.mcp.tool.name",
-          "type": "string",
-          "brief": "The MCP tool name",
-          "examples": [
-            "kubectl_get",
-            "kubectl_describe",
-            "kubectl_logs",
-            "investigate"
-          ],
-          "requirement_level": "recommended",
-          "note": "OTel has MCP semantic conventions (development stability) as of 2025. See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/ This custom attribute provides MCP-specific tool identification.\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.operation.name",
-          "type": {
-            "members": [
-              {
-                "id": "chat",
-                "value": "chat",
-                "brief": "Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)",
-                "stability": "development"
-              },
-              {
-                "id": "generate_content",
-                "value": "generate_content",
-                "brief": "Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)",
-                "stability": "development"
-              },
-              {
-                "id": "text_completion",
-                "value": "text_completion",
-                "brief": "Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)",
-                "stability": "development"
-              },
-              {
-                "id": "embeddings",
-                "value": "embeddings",
-                "brief": "Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)",
-                "stability": "development"
-              },
-              {
-                "id": "create_agent",
-                "value": "create_agent",
-                "brief": "Create GenAI agent",
-                "stability": "development"
-              },
-              {
-                "id": "invoke_agent",
-                "value": "invoke_agent",
-                "brief": "Invoke GenAI agent",
-                "stability": "development"
-              },
-              {
-                "id": "execute_tool",
-                "value": "execute_tool",
-                "brief": "Execute a tool",
-                "stability": "development"
-              }
-            ]
-          },
-          "brief": "The name of the operation being performed.",
-          "requirement_level": "required",
-          "note": "If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.call.id",
-          "type": "string",
-          "brief": "The tool call identifier.",
-          "examples": [
-            "call_mszuSIzqtI65i1wAUOE8w5H4"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.name",
-          "type": "string",
-          "brief": "Name of the tool utilized by the agent.",
-          "examples": [
-            "Flights"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.type",
-          "type": "string",
-          "brief": "Type of the tool utilized by the agent",
-          "examples": [
-            "function",
-            "extension",
-            "datastore"
-          ],
-          "requirement_level": "recommended",
-          "note": "Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.\n  Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.\nFunction: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.\n  Client-side operations are actions taken on the user's end or within the client application.\nDatastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.\n",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        },
-        "attributes": {
-          "gen_ai.operation.name": {
-            "source_group": "attributes.gen_ai.common.client",
-            "inherited_fields": [
-              "brief",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.call.id": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.name": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.type": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          }
-        }
-      },
-      "display_name": "MCP Tool Attributes"
-    },
-    {
-      "id": "registry.cluster_whisperer.openllmetry",
-      "type": "attribute_group",
-      "brief": "OpenLLMetry/Traceloop attributes for LLM observability",
-      "note": "These are vendor conventions from Traceloop, not official OTel semconvs",
-      "attributes": [
-        {
-          "name": "traceloop.entity.input",
-          "type": "string",
-          "brief": "Input content (content-gated)",
-          "examples": [
-            "{\"question\":\"Find the broken pod\"}"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true",
-          "stability": "development"
-        },
-        {
-          "name": "traceloop.entity.name",
-          "type": "string",
-          "brief": "Entity identifier within the span kind",
-          "examples": [
-            "investigate",
-            "kubectl_get",
-            "kubectl_describe"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "traceloop.entity.output",
-          "type": "string",
-          "brief": "Output content (content-gated)",
-          "examples": [
-            "The pod 'nginx-broken' is failing due to ImagePullBackOff..."
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true",
-          "stability": "development"
-        },
-        {
-          "name": "traceloop.span.kind",
-          "type": {
-            "members": [
-              {
-                "id": "workflow",
-                "value": "workflow",
-                "brief": "Top-level workflow span",
-                "stability": "development"
-              },
-              {
-                "id": "tool",
-                "value": "tool",
-                "brief": "Tool execution span",
-                "stability": "development"
-              },
-              {
-                "id": "task",
-                "value": "task",
-                "brief": "Task execution span",
-                "stability": "development"
-              }
-            ]
-          },
-          "brief": "OpenLLMetry span category",
-          "requirement_level": "recommended",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        }
-      },
-      "display_name": "OpenLLMetry Attributes"
-    },
-    {
-      "id": "registry.cluster_whisperer.root",
-      "type": "attribute_group",
-      "brief": "Attributes for root investigation/tool spans",
-      "attributes": [
-        {
-          "name": "cluster_whisperer.invocation.mode",
-          "type": {
-            "members": [
-              {
-                "id": "cli",
-                "value": "cli",
-                "brief": "Invoked via CLI (node dist/index.js)",
-                "stability": "development"
-              },
-              {
-                "id": "mcp",
-                "value": "mcp",
-                "brief": "Invoked via MCP server (e.g., from Claude Code)",
-                "stability": "development"
-              }
-            ]
-          },
-          "brief": "How the agent was invoked",
-          "requirement_level": "recommended",
-          "note": "No OTel semconv exists for invocation mode. The closest analogy is faas.trigger (serverless trigger type) but that's scoped to FaaS. This custom attribute follows OTel convention of namespacing vendor-specific attributes under the service name.\n",
-          "stability": "development"
-        },
-        {
-          "name": "cluster_whisperer.service.operation",
-          "type": "string",
-          "brief": "The high-level operation type",
-          "examples": [
-            "investigate",
-            "kubectl_get",
-            "kubectl_describe",
-            "kubectl_logs"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "cluster_whisperer.user.question",
-          "type": "string",
-          "brief": "User's natural language question (content-gated)",
-          "examples": [
-            "Find the broken pod and tell me why it's failing"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.input.messages",
-          "type": "string",
-          "brief": "JSON-stringified input messages in OTel v1.37+ parts format (content-gated)",
-          "examples": [
-            "[{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"Find the broken pod\"}]}]"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format. Format: [{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"content\":\"...\"}]}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.output.messages",
-          "type": "string",
-          "brief": "JSON-stringified output messages in OTel v1.37+ parts format (content-gated)",
-          "examples": [
-            "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"The pod is failing...\"}],\"finish_reason\":\"end_turn\"}]"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format. Format: [{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"...\"}],\"finish_reason\":\"end_turn\"}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        }
-      },
-      "display_name": "Root Span Attributes"
-    },
-    {
-      "id": "registry.cluster_whisperer.subprocess",
-      "type": "attribute_group",
-      "brief": "kubectl subprocess execution attributes with Process semantic convention references",
-      "attributes": [
-        {
-          "name": "cluster_whisperer.k8s.namespace",
-          "type": "string",
-          "brief": "Kubernetes namespace from -n flag",
-          "examples": [
-            "default",
-            "kube-system",
-            "monitoring"
-          ],
-          "requirement_level": "recommended",
-          "note": "Extracted from command args when -n flag is present",
-          "stability": "development"
-        },
-        {
-          "name": "cluster_whisperer.k8s.output_size_bytes",
-          "type": "int",
-          "brief": "Byte length of kubectl stdout",
-          "examples": [
-            1234,
-            5678,
-            102400
-          ],
-          "requirement_level": "recommended",
-          "note": "Only set on successful execution. Useful for debugging large responses.",
-          "stability": "development"
-        },
-        {
-          "name": "error.type",
-          "type": {
-            "members": [
-              {
-                "id": "other",
-                "value": "_OTHER",
-                "brief": "A fallback error value to be used when the instrumentation doesn't define a custom value.\n",
-                "stability": "stable"
-              }
-            ]
-          },
-          "brief": "The full name of exception type.",
-          "examples": [
-            "System.OperationCanceledException"
-          ],
-          "requirement_level": {
-            "conditionally_required": "if and only if an error has occurred."
-          },
-          "stability": "stable"
-        },
-        {
-          "name": "process.command_args",
-          "type": "string[]",
-          "brief": "All the command arguments (including the command/executable itself) as received by the process. On Linux-based systems (and some other Unixoid systems supporting procfs), can be set according to the list of null-delimited strings extracted from `proc/[pid]/cmdline`. For libc-based executables, this would be the full argv vector passed to `main`. SHOULD NOT be collected by default unless there is sanitization that excludes sensitive data.\n",
-          "examples": [
-            [
-              "cmd/otecol",
-              "--config=config.yaml"
-            ]
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "process.executable.name",
-          "type": "string",
-          "brief": "The name of the process executable. On Linux based systems, this SHOULD be set to the base name of the target of `/proc/[pid]/exe`. On Windows, this SHOULD be set to the base name of `GetProcessImageFileNameW`.\n",
-          "examples": [
-            "otelcol"
-          ],
-          "requirement_level": "required",
-          "stability": "development"
-        },
-        {
-          "name": "process.exit.code",
-          "type": "int",
-          "brief": "The exit code of the process.\n",
-          "examples": [
-            127
-          ],
-          "requirement_level": "required",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        },
-        "attributes": {
-          "error.type": {
-            "source_group": "aspnetcore.common.authentication.metrics.attributes",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "process.command_args": {
-            "source_group": "attributes.cli.common",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "process.executable.name": {
-            "source_group": "attributes.cli.common",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "process.exit.code": {
-            "source_group": "attributes.cli.common",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          }
-        }
-      },
-      "display_name": "Subprocess Attributes"
-    },
-    {
-      "id": "registry.cluster_whisperer.tool",
-      "type": "attribute_group",
-      "brief": "GenAI semantic convention attributes for agentic tool execution spans",
-      "note": "Set by withToolTracing() on spans created by OpenLLMetry's withTool(). Both gen_ai.* (OTel GenAI semconv) and traceloop.* (OpenLLMetry) attributes coexist on the same span for ecosystem compatibility. See PRD #23 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-      "attributes": [
-        {
-          "name": "gen_ai.operation.name",
-          "type": {
-            "members": [
-              {
-                "id": "chat",
-                "value": "chat",
-                "brief": "Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)",
-                "stability": "development"
-              },
-              {
-                "id": "generate_content",
-                "value": "generate_content",
-                "brief": "Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)",
-                "stability": "development"
-              },
-              {
-                "id": "text_completion",
-                "value": "text_completion",
-                "brief": "Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)",
-                "stability": "development"
-              },
-              {
-                "id": "embeddings",
-                "value": "embeddings",
-                "brief": "Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)",
-                "stability": "development"
-              },
-              {
-                "id": "create_agent",
-                "value": "create_agent",
-                "brief": "Create GenAI agent",
-                "stability": "development"
-              },
-              {
-                "id": "invoke_agent",
-                "value": "invoke_agent",
-                "brief": "Invoke GenAI agent",
-                "stability": "development"
-              },
-              {
-                "id": "execute_tool",
-                "value": "execute_tool",
-                "brief": "Execute a tool",
-                "stability": "development"
-              }
-            ]
-          },
-          "brief": "The name of the operation being performed.",
-          "requirement_level": "required",
-          "note": "If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.call.arguments",
-          "type": "string",
-          "brief": "JSON-stringified tool input arguments (content-gated)",
-          "examples": [
-            "{\"resource\":\"pods\",\"namespace\":\"all\"}"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.call.id",
-          "type": "string",
-          "brief": "The tool call identifier.",
-          "examples": [
-            "call_mszuSIzqtI65i1wAUOE8w5H4"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.call.result",
-          "type": "string",
-          "brief": "Tool execution result as string (content-gated)",
-          "examples": [
-            "NAME  READY  STATUS  RESTARTS  AGE\nnginx  1/1  Running  0  5m"
-          ],
-          "requirement_level": "recommended",
-          "note": "Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/\n",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.description",
-          "type": "string",
-          "brief": "The tool description.",
-          "examples": [
-            "Multiply two numbers"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.name",
-          "type": "string",
-          "brief": "Name of the tool utilized by the agent.",
-          "examples": [
-            "Flights"
-          ],
-          "requirement_level": "recommended",
-          "stability": "development"
-        },
-        {
-          "name": "gen_ai.tool.type",
-          "type": "string",
-          "brief": "Type of the tool utilized by the agent",
-          "examples": [
-            "function",
-            "extension",
-            "datastore"
-          ],
-          "requirement_level": "recommended",
-          "note": "Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.\n  Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.\nFunction: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.\n  Client-side operations are actions taken on the user's end or within the client application.\nDatastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.\n",
-          "stability": "development"
-        }
-      ],
-      "lineage": {
-        "provenance": {
-          "registry_id": "cluster_whisperer",
-          "path": "telemetry/registry/attributes.yaml"
-        },
-        "attributes": {
-          "gen_ai.operation.name": {
-            "source_group": "attributes.gen_ai.common.client",
-            "inherited_fields": [
-              "brief",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.call.id": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.description": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.name": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          },
-          "gen_ai.tool.type": {
-            "source_group": "registry.gen_ai",
-            "inherited_fields": [
-              "brief",
-              "examples",
-              "note",
-              "requirement_level",
-              "stability"
-            ]
-          }
-        }
-      },
-      "display_name": "Tool Span Attributes"
-    }
-  ]
-}
+registry_url: telemetry/registry
+groups:
+- id: registry.cluster_whisperer.embedding
+  type: attribute_group
+  brief: Attributes for embedding generation spans
+  note: |
+    Set on spans wrapping VoyageEmbedding.embed() calls. Uses OTel GenAI semantic conventions for standard AI model attributes and custom cluster_whisperer.embedding.* for embedding-specific metrics. SpanKind: CLIENT (outbound HTTP calls to Voyage AI).
+  attributes:
+  - name: cluster_whisperer.embedding.dimensions
+    type: int
+    brief: Dimensionality of the returned embedding vectors
+    examples:
+    - 1024
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.embedding.input_count
+    type: int
+    brief: Number of text inputs sent for embedding
+    examples:
+    - 1
+    - 10
+    - 50
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.operation.name
+    type:
+      members:
+      - id: chat
+        value: chat
+        brief: Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)
+        stability: development
+      - id: generate_content
+        value: generate_content
+        brief: Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)
+        stability: development
+      - id: text_completion
+        value: text_completion
+        brief: Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)
+        stability: development
+      - id: embeddings
+        value: embeddings
+        brief: Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)
+        stability: development
+      - id: create_agent
+        value: create_agent
+        brief: Create GenAI agent
+        stability: development
+      - id: invoke_agent
+        value: invoke_agent
+        brief: Invoke GenAI agent
+        stability: development
+      - id: execute_tool
+        value: execute_tool
+        brief: Execute a tool
+        stability: development
+    brief: The name of the operation being performed.
+    requirement_level: required
+    note: |
+      If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+    stability: development
+  - name: gen_ai.request.model
+    type: string
+    brief: The name of the GenAI model a request is being made to.
+    examples: gpt-4
+    requirement_level:
+      conditionally_required: If available.
+    note: |
+      The name of the GenAI model a request is being made to. If the model is supplied by a vendor, then the value must be the exact name of the model requested. If the model is a fine-tuned custom model, the value should have a more specific name than the base model that's been fine-tuned.
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      gen_ai.operation.name:
+        source_group: attributes.gen_ai.common.client
+        inherited_fields:
+        - brief
+        - note
+        - requirement_level
+        - stability
+      gen_ai.request.model:
+        source_group: attributes.gen_ai.common.client
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+  display_name: Embedding Attributes
+- id: registry.cluster_whisperer.http
+  type: attribute_group
+  brief: Attributes for HTTP server request spans
+  note: |
+    Set on spans wrapping incoming HTTP requests via Hono middleware. Uses OTel HTTP semantic conventions for standard request/response attributes and custom cluster_whisperer.sync.* for the instance sync endpoint. SpanKind: SERVER (inbound request handling). Supports W3C Trace Context propagation from upstream services (e.g., k8s-vectordb-sync controller).
+  attributes:
+  - name: cluster_whisperer.sync.delete_count
+    type: int
+    brief: Number of deletes in the sync payload
+    examples:
+    - 2
+    - 10
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.sync.upsert_count
+    type: int
+    brief: Number of upserts in the sync payload
+    examples:
+    - 5
+    - 20
+    requirement_level: recommended
+    stability: development
+  - name: http.request.method
+    type:
+      members:
+      - id: connect
+        value: CONNECT
+        brief: CONNECT method.
+        stability: stable
+      - id: delete
+        value: DELETE
+        brief: DELETE method.
+        stability: stable
+      - id: get
+        value: GET
+        brief: GET method.
+        stability: stable
+      - id: head
+        value: HEAD
+        brief: HEAD method.
+        stability: stable
+      - id: options
+        value: OPTIONS
+        brief: OPTIONS method.
+        stability: stable
+      - id: patch
+        value: PATCH
+        brief: PATCH method.
+        stability: stable
+      - id: post
+        value: POST
+        brief: POST method.
+        stability: stable
+      - id: put
+        value: PUT
+        brief: PUT method.
+        stability: stable
+      - id: trace
+        value: TRACE
+        brief: TRACE method.
+        stability: stable
+      - id: other
+        value: _OTHER
+        brief: Any HTTP method that the instrumentation has no prior knowledge of.
+        stability: stable
+    brief: HTTP request method.
+    examples:
+    - GET
+    - POST
+    - HEAD
+    requirement_level: required
+    note: |
+      HTTP request method value SHOULD be "known" to the instrumentation.
+      By default, this convention defines "known" methods as the ones listed in [RFC9110](https://www.rfc-editor.org/rfc/rfc9110.html#name-methods)
+      and the PATCH method defined in [RFC5789](https://www.rfc-editor.org/rfc/rfc5789.html).
+
+      If the HTTP request method is not known to instrumentation, it MUST set the `http.request.method` attribute to `_OTHER`.
+
+      If the HTTP instrumentation could end up converting valid HTTP request methods to `_OTHER`, then it MUST provide a way to override
+      the list of known HTTP methods. If this override is done via environment variable, then the environment variable MUST be named
+      OTEL_INSTRUMENTATION_HTTP_KNOWN_METHODS and support a comma-separated list of case-sensitive known HTTP methods
+      (this list MUST be a full override of the default known method, it is not a list of known methods in addition to the defaults).
+
+      HTTP method names are case-sensitive and `http.request.method` attribute value MUST match a known HTTP method name exactly.
+      Instrumentations for specific web frameworks that consider HTTP methods to be case insensitive, SHOULD populate a canonical equivalent.
+      Tracing instrumentations that do so, MUST also set `http.request.method_original` to the original value.
+    stability: stable
+  - name: http.response.status_code
+    type: int
+    brief: '[HTTP response status code](https://tools.ietf.org/html/rfc7231#section-6).'
+    examples:
+    - 200
+    requirement_level:
+      conditionally_required: If and only if one was received/sent.
+    stability: stable
+  - name: http.route
+    type: string
+    brief: |
+      The matched route, that is, the path template in the format used by the respective server framework.
+    examples:
+    - /users/:userID?
+    - '{controller}/{action}/{id?}'
+    requirement_level:
+      conditionally_required: If and only if it's available
+    note: |
+      MUST NOT be populated when this is not supported by the HTTP server framework as the route attribute should have low-cardinality and the URI path can NOT substitute it.
+      SHOULD include the [application root](/docs/http/http-spans.md#http-server-definitions) if there is one.
+    stability: stable
+  - name: url.path
+    type: string
+    brief: |
+      The [URI path](https://www.rfc-editor.org/rfc/rfc3986#section-3.3) component
+    examples:
+    - /search
+    requirement_level: recommended
+    note: |
+      Sensitive content provided in `url.path` SHOULD be scrubbed when instrumentations can identify it.
+    stability: stable
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      http.request.method:
+        source_group: attributes.http.client
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      http.response.status_code:
+        source_group: attributes.http.client
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      http.route:
+        source_group: attributes.http.server
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      url.path:
+        source_group: registry.url
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+  display_name: HTTP Server Attributes
+- id: registry.cluster_whisperer.llm
+  type: attribute_group
+  brief: GenAI semantic convention attributes for LLM/chat completion spans
+  note: |
+    Attributes set on chat.anthropic spans created by OpenLLMetry's auto-instrumentation of the Anthropic SDK. gen_ai.tool.definitions describes which tools were available during each LLM reasoning step. See PRD #23 M3 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+  attributes:
+  - name: gen_ai.tool.definitions
+    type: string
+    brief: JSON array of tool definitions available to the LLM
+    examples:
+    - '[{"name":"kubectl_get","description":"List Kubernetes resources...","parameters":{...}}]'
+    requirement_level: recommended
+    note: |
+      Not yet in OTel semconv v1.37.0 registry. Datadog maps this to meta.tool_definitions in LLM Observability. Contains tool names, descriptions, and parameter schemas.
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+  display_name: LLM Span Attributes
+- id: registry.cluster_whisperer.mcp
+  type: attribute_group
+  brief: MCP tool execution attributes with GenAI semantic convention references
+  attributes:
+  - name: cluster_whisperer.mcp.tool.name
+    type: string
+    brief: The MCP tool name
+    examples:
+    - kubectl_get
+    - kubectl_describe
+    - kubectl_logs
+    - investigate
+    requirement_level: recommended
+    note: |
+      OTel has MCP semantic conventions (development stability) as of 2025. See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/ This custom attribute provides MCP-specific tool identification.
+    stability: development
+  - name: gen_ai.operation.name
+    type:
+      members:
+      - id: chat
+        value: chat
+        brief: Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)
+        stability: development
+      - id: generate_content
+        value: generate_content
+        brief: Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)
+        stability: development
+      - id: text_completion
+        value: text_completion
+        brief: Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)
+        stability: development
+      - id: embeddings
+        value: embeddings
+        brief: Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)
+        stability: development
+      - id: create_agent
+        value: create_agent
+        brief: Create GenAI agent
+        stability: development
+      - id: invoke_agent
+        value: invoke_agent
+        brief: Invoke GenAI agent
+        stability: development
+      - id: execute_tool
+        value: execute_tool
+        brief: Execute a tool
+        stability: development
+    brief: The name of the operation being performed.
+    requirement_level: required
+    note: |
+      If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+    stability: development
+  - name: gen_ai.tool.call.id
+    type: string
+    brief: The tool call identifier.
+    examples:
+    - call_mszuSIzqtI65i1wAUOE8w5H4
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.tool.name
+    type: string
+    brief: Name of the tool utilized by the agent.
+    examples:
+    - Flights
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.tool.type
+    type: string
+    brief: Type of the tool utilized by the agent
+    examples:
+    - function
+    - extension
+    - datastore
+    requirement_level: recommended
+    note: |
+      Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
+        Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.
+      Function: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.
+        Client-side operations are actions taken on the user's end or within the client application.
+      Datastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      gen_ai.operation.name:
+        source_group: attributes.gen_ai.common.client
+        inherited_fields:
+        - brief
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.call.id:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.name:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.type:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+  display_name: MCP Tool Attributes
+- id: registry.cluster_whisperer.openllmetry
+  type: attribute_group
+  brief: OpenLLMetry/Traceloop attributes for LLM observability
+  note: These are vendor conventions from Traceloop, not official OTel semconvs
+  attributes:
+  - name: traceloop.entity.input
+    type: string
+    brief: Input content (content-gated)
+    examples:
+    - '{"question":"Find the broken pod"}'
+    requirement_level: recommended
+    note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
+    stability: development
+  - name: traceloop.entity.name
+    type: string
+    brief: Entity identifier within the span kind
+    examples:
+    - investigate
+    - kubectl_get
+    - kubectl_describe
+    requirement_level: recommended
+    stability: development
+  - name: traceloop.entity.output
+    type: string
+    brief: Output content (content-gated)
+    examples:
+    - The pod 'nginx-broken' is failing due to ImagePullBackOff...
+    requirement_level: recommended
+    note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
+    stability: development
+  - name: traceloop.span.kind
+    type:
+      members:
+      - id: workflow
+        value: workflow
+        brief: Top-level workflow span
+        stability: development
+      - id: tool
+        value: tool
+        brief: Tool execution span
+        stability: development
+      - id: task
+        value: task
+        brief: Task execution span
+        stability: development
+    brief: OpenLLMetry span category
+    requirement_level: recommended
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+  display_name: OpenLLMetry Attributes
+- id: registry.cluster_whisperer.pipeline
+  type: attribute_group
+  brief: Attributes for sync pipeline orchestration spans
+  note: |
+    Set on parent pipeline spans and child stage spans for syncCapabilities() and syncInstances(). No OTel semconv exists for data pipeline orchestration; uses custom cluster_whisperer.pipeline.* namespace. SpanKind: INTERNAL (local orchestration, no network boundary).
+  attributes:
+  - name: cluster_whisperer.pipeline.deleted_count
+    type: int
+    brief: Number of stale documents deleted
+    examples:
+    - 2
+    - 5
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.discovered_count
+    type: int
+    brief: Number of resources discovered
+    examples:
+    - 15
+    - 42
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.dry_run
+    type: boolean
+    brief: Whether the pipeline ran in dry-run mode (skip storage)
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.inferred_count
+    type: int
+    brief: Number of capabilities inferred by LLM
+    examples:
+    - 8
+    - 30
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.name
+    type: string
+    brief: Pipeline identifier
+    examples:
+    - sync-capabilities
+    - sync-instances
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.stage
+    type: string
+    brief: Current pipeline stage
+    examples:
+    - discovery
+    - inference
+    - storage
+    - stale-cleanup
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.pipeline.stored_count
+    type: int
+    brief: Number of documents stored
+    examples:
+    - 8
+    - 30
+    requirement_level: recommended
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+  display_name: Pipeline Attributes
+- id: registry.cluster_whisperer.root
+  type: attribute_group
+  brief: Attributes for root investigation/tool spans
+  attributes:
+  - name: cluster_whisperer.invocation.mode
+    type:
+      members:
+      - id: cli
+        value: cli
+        brief: Invoked via CLI (node dist/index.js)
+        stability: development
+      - id: mcp
+        value: mcp
+        brief: Invoked via MCP server (e.g., from Claude Code)
+        stability: development
+    brief: How the agent was invoked
+    requirement_level: recommended
+    note: |
+      No OTel semconv exists for invocation mode. The closest analogy is faas.trigger (serverless trigger type) but that's scoped to FaaS. This custom attribute follows OTel convention of namespacing vendor-specific attributes under the service name.
+    stability: development
+  - name: cluster_whisperer.service.operation
+    type: string
+    brief: The high-level operation type
+    examples:
+    - investigate
+    - kubectl_get
+    - kubectl_describe
+    - kubectl_logs
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.user.question
+    type: string
+    brief: User's natural language question (content-gated)
+    examples:
+    - Find the broken pod and tell me why it's failing
+    requirement_level: recommended
+    note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.
+    stability: development
+  - name: gen_ai.input.messages
+    type: string
+    brief: JSON-stringified input messages in OTel v1.37+ parts format (content-gated)
+    examples:
+    - '[{"role":"user","parts":[{"type":"text","content":"Find the broken pod"}]}]'
+    requirement_level: recommended
+    note: |
+      Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format. Format: [{"role":"user","parts":[{"type":"text","content":"..."}]}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    stability: development
+  - name: gen_ai.output.messages
+    type: string
+    brief: JSON-stringified output messages in OTel v1.37+ parts format (content-gated)
+    examples:
+    - '[{"role":"assistant","parts":[{"type":"text","content":"The pod is failing..."}],"finish_reason":"end_turn"}]'
+    requirement_level: recommended
+    note: |
+      Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format. Format: [{"role":"assistant","parts":[{"type":"text","content":"..."}],"finish_reason":"end_turn"}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+  display_name: Root Span Attributes
+- id: registry.cluster_whisperer.subprocess
+  type: attribute_group
+  brief: kubectl subprocess execution attributes with Process semantic convention references
+  attributes:
+  - name: cluster_whisperer.k8s.namespace
+    type: string
+    brief: Kubernetes namespace from -n flag
+    examples:
+    - default
+    - kube-system
+    - monitoring
+    requirement_level: recommended
+    note: Extracted from command args when -n flag is present
+    stability: development
+  - name: cluster_whisperer.k8s.output_size_bytes
+    type: int
+    brief: Byte length of kubectl stdout
+    examples:
+    - 1234
+    - 5678
+    - 102400
+    requirement_level: recommended
+    note: Only set on successful execution. Useful for debugging large responses.
+    stability: development
+  - name: error.type
+    type:
+      members:
+      - id: other
+        value: _OTHER
+        brief: |
+          A fallback error value to be used when the instrumentation doesn't define a custom value.
+        stability: stable
+    brief: The full name of exception type.
+    examples:
+    - System.OperationCanceledException
+    requirement_level:
+      conditionally_required: if and only if an error has occurred.
+    stability: stable
+  - name: process.command_args
+    type: string[]
+    brief: |
+      All the command arguments (including the command/executable itself) as received by the process. On Linux-based systems (and some other Unixoid systems supporting procfs), can be set according to the list of null-delimited strings extracted from `proc/[pid]/cmdline`. For libc-based executables, this would be the full argv vector passed to `main`. SHOULD NOT be collected by default unless there is sanitization that excludes sensitive data.
+    examples:
+    - - cmd/otecol
+      - --config=config.yaml
+    requirement_level: recommended
+    stability: development
+  - name: process.executable.name
+    type: string
+    brief: |
+      The name of the process executable. On Linux based systems, this SHOULD be set to the base name of the target of `/proc/[pid]/exe`. On Windows, this SHOULD be set to the base name of `GetProcessImageFileNameW`.
+    examples:
+    - otelcol
+    requirement_level: required
+    stability: development
+  - name: process.exit.code
+    type: int
+    brief: |
+      The exit code of the process.
+    examples:
+    - 127
+    requirement_level: required
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      error.type:
+        source_group: aspnetcore.common.authentication.metrics.attributes
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      process.command_args:
+        source_group: attributes.cli.common
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      process.executable.name:
+        source_group: attributes.cli.common
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      process.exit.code:
+        source_group: attributes.cli.common
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+  display_name: Subprocess Attributes
+- id: registry.cluster_whisperer.tool
+  type: attribute_group
+  brief: GenAI semantic convention attributes for agentic tool execution spans
+  note: |
+    Set by withToolTracing() on spans created by OpenLLMetry's withTool(). Both gen_ai.* (OTel GenAI semconv) and traceloop.* (OpenLLMetry) attributes coexist on the same span for ecosystem compatibility. See PRD #23 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+  attributes:
+  - name: gen_ai.operation.name
+    type:
+      members:
+      - id: chat
+        value: chat
+        brief: Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)
+        stability: development
+      - id: generate_content
+        value: generate_content
+        brief: Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)
+        stability: development
+      - id: text_completion
+        value: text_completion
+        brief: Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)
+        stability: development
+      - id: embeddings
+        value: embeddings
+        brief: Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)
+        stability: development
+      - id: create_agent
+        value: create_agent
+        brief: Create GenAI agent
+        stability: development
+      - id: invoke_agent
+        value: invoke_agent
+        brief: Invoke GenAI agent
+        stability: development
+      - id: execute_tool
+        value: execute_tool
+        brief: Execute a tool
+        stability: development
+    brief: The name of the operation being performed.
+    requirement_level: required
+    note: |
+      If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+    stability: development
+  - name: gen_ai.tool.call.arguments
+    type: string
+    brief: JSON-stringified tool input arguments (content-gated)
+    examples:
+    - '{"resource":"pods","namespace":"all"}'
+    requirement_level: recommended
+    note: |
+      Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    stability: development
+  - name: gen_ai.tool.call.id
+    type: string
+    brief: The tool call identifier.
+    examples:
+    - call_mszuSIzqtI65i1wAUOE8w5H4
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.tool.call.result
+    type: string
+    brief: Tool execution result as string (content-gated)
+    examples:
+    - |-
+      NAME  READY  STATUS  RESTARTS  AGE
+      nginx  1/1  Running  0  5m
+    requirement_level: recommended
+    note: |
+      Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+    stability: development
+  - name: gen_ai.tool.description
+    type: string
+    brief: The tool description.
+    examples:
+    - Multiply two numbers
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.tool.name
+    type: string
+    brief: Name of the tool utilized by the agent.
+    examples:
+    - Flights
+    requirement_level: recommended
+    stability: development
+  - name: gen_ai.tool.type
+    type: string
+    brief: Type of the tool utilized by the agent
+    examples:
+    - function
+    - extension
+    - datastore
+    requirement_level: recommended
+    note: |
+      Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
+        Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.
+      Function: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.
+        Client-side operations are actions taken on the user's end or within the client application.
+      Datastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.
+    stability: development
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      gen_ai.operation.name:
+        source_group: attributes.gen_ai.common.client
+        inherited_fields:
+        - brief
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.call.id:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.description:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.name:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      gen_ai.tool.type:
+        source_group: registry.gen_ai
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+  display_name: Tool Span Attributes
+- id: registry.cluster_whisperer.vectorstore
+  type: attribute_group
+  brief: Attributes for vector database operation spans
+  note: |
+    Set on spans wrapping ChromaBackend method calls (initialize, store, search, keywordSearch, delete). Uses OTel DB semantic conventions for standard database attributes and custom cluster_whisperer.vectorstore.* for domain-specific metrics. SpanKind: CLIENT (outbound network calls to ChromaDB).
+  attributes:
+  - name: cluster_whisperer.vectorstore.document_count
+    type: int
+    brief: Number of documents in the operation (store batch size, search results)
+    examples:
+    - 10
+    - 50
+    - 100
+    requirement_level: recommended
+    stability: development
+  - name: cluster_whisperer.vectorstore.result_count
+    type: int
+    brief: Number of results returned from a search query
+    examples:
+    - 5
+    - 10
+    - 20
+    requirement_level: recommended
+    stability: development
+  - name: db.collection.name
+    type: string
+    brief: Cosmos DB container name.
+    examples:
+    - public.users
+    - customers
+    requirement_level:
+      conditionally_required: If available.
+    note: |
+      It is RECOMMENDED to capture the value as provided by the application
+      without attempting to do any case normalization.
+
+      The collection name SHOULD NOT be extracted from `db.query.text`,
+      when the database system supports query text with multiple collections
+      in non-batch operations.
+
+      For batch operations, if the individual operations are known to have the same
+      collection name then that collection name SHOULD be used.
+    stability: stable
+  - name: db.operation.name
+    type: string
+    brief: |
+      The name of the operation or command being executed.
+    examples:
+    - findAndModify
+    - HMSET
+    - SELECT
+    requirement_level: required
+    note: |
+      It is RECOMMENDED to capture the value as provided by the application
+      without attempting to do any case normalization.
+
+      The operation name SHOULD NOT be extracted from `db.query.text`,
+      when the database system supports query text with multiple operations
+      in non-batch operations.
+
+      If spaces can occur in the operation name, multiple consecutive spaces
+      SHOULD be normalized to a single space.
+
+      For batch operations, if the individual operations are known to have the same operation name
+      then that operation name SHOULD be used prepended by `BATCH `,
+      otherwise `db.operation.name` SHOULD be `BATCH` or some other database
+      system specific term if more applicable.
+    stability: stable
+  - name: db.system
+    type:
+      members:
+      - id: other_sql
+        value: other_sql
+        brief: Some other SQL database. Fallback only. See notes.
+        stability: development
+      - id: adabas
+        value: adabas
+        brief: Adabas (Adaptable Database System)
+        stability: development
+      - id: cache
+        value: cache
+        brief: Deprecated, use `intersystems_cache` instead.
+        stability: development
+        deprecated:
+          reason: renamed
+          renamed_to: intersystems_cache
+          note: Replaced by `intersystems_cache`.
+      - id: intersystems_cache
+        value: intersystems_cache
+        brief: InterSystems Caché
+        stability: development
+      - id: cassandra
+        value: cassandra
+        brief: Apache Cassandra
+        stability: development
+      - id: clickhouse
+        value: clickhouse
+        brief: ClickHouse
+        stability: development
+      - id: cloudscape
+        value: cloudscape
+        brief: Deprecated, use `other_sql` instead.
+        stability: development
+        deprecated:
+          reason: renamed
+          renamed_to: other_sql
+          note: Replaced by `other_sql`.
+      - id: cockroachdb
+        value: cockroachdb
+        brief: CockroachDB
+        stability: development
+      - id: coldfusion
+        value: coldfusion
+        brief: Deprecated, no replacement at this time.
+        stability: development
+        deprecated:
+          reason: obsoleted
+          note: Obsoleted.
+      - id: cosmosdb
+        value: cosmosdb
+        brief: Microsoft Azure Cosmos DB
+        stability: development
+      - id: couchbase
+        value: couchbase
+        brief: Couchbase
+        stability: development
+      - id: couchdb
+        value: couchdb
+        brief: CouchDB
+        stability: development
+      - id: db2
+        value: db2
+        brief: IBM Db2
+        stability: development
+      - id: derby
+        value: derby
+        brief: Apache Derby
+        stability: development
+      - id: dynamodb
+        value: dynamodb
+        brief: Amazon DynamoDB
+        stability: development
+      - id: edb
+        value: edb
+        brief: EnterpriseDB
+        stability: development
+      - id: elasticsearch
+        value: elasticsearch
+        brief: Elasticsearch
+        stability: development
+      - id: filemaker
+        value: filemaker
+        brief: FileMaker
+        stability: development
+      - id: firebird
+        value: firebird
+        brief: Firebird
+        stability: development
+      - id: firstsql
+        value: firstsql
+        brief: Deprecated, use `other_sql` instead.
+        stability: development
+        deprecated:
+          reason: renamed
+          renamed_to: other_sql
+          note: Replaced by `other_sql`.
+      - id: geode
+        value: geode
+        brief: Apache Geode
+        stability: development
+      - id: h2
+        value: h2
+        brief: H2
+        stability: development
+      - id: hanadb
+        value: hanadb
+        brief: SAP HANA
+        stability: development
+      - id: hbase
+        value: hbase
+        brief: Apache HBase
+        stability: development
+      - id: hive
+        value: hive
+        brief: Apache Hive
+        stability: development
+      - id: hsqldb
+        value: hsqldb
+        brief: HyperSQL DataBase
+        stability: development
+      - id: influxdb
+        value: influxdb
+        brief: InfluxDB
+        stability: development
+      - id: informix
+        value: informix
+        brief: Informix
+        stability: development
+      - id: ingres
+        value: ingres
+        brief: Ingres
+        stability: development
+      - id: instantdb
+        value: instantdb
+        brief: InstantDB
+        stability: development
+      - id: interbase
+        value: interbase
+        brief: InterBase
+        stability: development
+      - id: mariadb
+        value: mariadb
+        brief: MariaDB
+        stability: development
+      - id: maxdb
+        value: maxdb
+        brief: SAP MaxDB
+        stability: development
+      - id: memcached
+        value: memcached
+        brief: Memcached
+        stability: development
+      - id: mongodb
+        value: mongodb
+        brief: MongoDB
+        stability: development
+      - id: mssql
+        value: mssql
+        brief: Microsoft SQL Server
+        stability: development
+      - id: mssqlcompact
+        value: mssqlcompact
+        brief: Deprecated, Microsoft SQL Server Compact is discontinued.
+        stability: development
+        deprecated:
+          reason: renamed
+          renamed_to: other_sql
+          note: Replaced by `other_sql`.
+      - id: mysql
+        value: mysql
+        brief: MySQL
+        stability: development
+      - id: neo4j
+        value: neo4j
+        brief: Neo4j
+        stability: development
+      - id: netezza
+        value: netezza
+        brief: Netezza
+        stability: development
+      - id: opensearch
+        value: opensearch
+        brief: OpenSearch
+        stability: development
+      - id: oracle
+        value: oracle
+        brief: Oracle Database
+        stability: development
+      - id: pervasive
+        value: pervasive
+        brief: Pervasive PSQL
+        stability: development
+      - id: pointbase
+        value: pointbase
+        brief: PointBase
+        stability: development
+      - id: postgresql
+        value: postgresql
+        brief: PostgreSQL
+        stability: development
+      - id: progress
+        value: progress
+        brief: Progress Database
+        stability: development
+      - id: redis
+        value: redis
+        brief: Redis
+        stability: development
+      - id: redshift
+        value: redshift
+        brief: Amazon Redshift
+        stability: development
+      - id: spanner
+        value: spanner
+        brief: Cloud Spanner
+        stability: development
+      - id: sqlite
+        value: sqlite
+        brief: SQLite
+        stability: development
+      - id: sybase
+        value: sybase
+        brief: Sybase
+        stability: development
+      - id: teradata
+        value: teradata
+        brief: Teradata
+        stability: development
+      - id: trino
+        value: trino
+        brief: Trino
+        stability: development
+      - id: vertica
+        value: vertica
+        brief: Vertica
+        stability: development
+    brief: Deprecated, use `db.system.name` instead.
+    requirement_level: recommended
+    stability: development
+    deprecated:
+      reason: renamed
+      renamed_to: db.system.name
+      note: Replaced by `db.system.name`.
+  lineage:
+    provenance:
+      registry_id: cluster_whisperer
+      path: telemetry/registry/attributes.yaml
+    attributes:
+      db.collection.name:
+        source_group: attributes.azure.cosmosdb.minimal
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      db.operation.name:
+        source_group: attributes.azure.cosmosdb.minimal
+        inherited_fields:
+        - brief
+        - examples
+        - note
+        - requirement_level
+        - stability
+      db.system:
+        source_group: registry.db.deprecated
+        inherited_fields:
+        - brief
+        - deprecated
+        - note
+        - requirement_level
+        - stability
+  display_name: Vector Store Attributes

@@ -1,3 +1,5 @@
+// ABOUTME: Capability sync pipeline runner with OTel span instrumentation
+// ABOUTME: Orchestrates discover → infer → store stages with parent/child spans for observability
 /**
  * runner.ts - Sync pipeline runner (M4)
  *
@@ -14,6 +16,8 @@
  * them through so the full pipeline is testable with mocked boundaries.
  */
 
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { getTracer } from "../tracing";
 import { discoverResources } from "./discovery";
 import { inferCapabilities } from "./inference";
 import { storeCapabilities } from "./storage";
@@ -83,38 +87,114 @@ export interface SyncResult {
 export async function syncCapabilities(
   options: SyncOptions
 ): Promise<SyncResult> {
-  const onProgress = options.onProgress ?? console.log; // eslint-disable-line no-console
+  const tracer = getTracer();
 
-  // M1: Discover resources from the cluster
-  const discovered = await discoverResources({
-    ...options.discoveryOptions,
-    onProgress,
-  });
+  return tracer.startActiveSpan(
+    "cluster-whisperer.pipeline.sync-capabilities",
+    { kind: SpanKind.INTERNAL },
+    async (pipelineSpan) => {
+      try {
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.name", "sync-capabilities");
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.dry_run", options.dryRun ?? false);
 
-  // M2: Infer capabilities via LLM
-  const capabilities = await inferCapabilities(discovered, {
-    ...options.inferenceOptions,
-    onProgress,
-  });
+        const onProgress = options.onProgress ?? console.log; // eslint-disable-line no-console
 
-  // M3: Store in vector database (unless dry run)
-  let stored = 0;
-  if (!options.dryRun) {
-    await storeCapabilities(capabilities, options.vectorStore, { onProgress });
-    stored = capabilities.length;
-  } else {
-    onProgress("Dry run: skipping storage.");
-  }
+        // M1: Discover resources from the cluster
+        const discovered = await tracer.startActiveSpan(
+          "cluster-whisperer.pipeline.discovery",
+          { kind: SpanKind.INTERNAL },
+          async (stageSpan) => {
+            try {
+              stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "discovery");
+              const result = await discoverResources({
+                ...options.discoveryOptions,
+                onProgress,
+              });
+              stageSpan.setStatus({ code: SpanStatusCode.OK });
+              return result;
+            } catch (error) {
+              stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+              stageSpan.recordException(error as Error);
+              throw error;
+            } finally {
+              stageSpan.end();
+            }
+          }
+        );
 
-  const result: SyncResult = {
-    discovered: discovered.length,
-    inferred: capabilities.length,
-    stored,
-  };
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.discovered_count", discovered.length);
 
-  onProgress(
-    `Sync complete: ${result.discovered} discovered, ${result.inferred} inferred, ${result.stored} stored.`
+        // M2: Infer capabilities via LLM
+        const capabilities = await tracer.startActiveSpan(
+          "cluster-whisperer.pipeline.inference",
+          { kind: SpanKind.INTERNAL },
+          async (stageSpan) => {
+            try {
+              stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "inference");
+              const result = await inferCapabilities(discovered, {
+                ...options.inferenceOptions,
+                onProgress,
+              });
+              stageSpan.setStatus({ code: SpanStatusCode.OK });
+              return result;
+            } catch (error) {
+              stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+              stageSpan.recordException(error as Error);
+              throw error;
+            } finally {
+              stageSpan.end();
+            }
+          }
+        );
+
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.inferred_count", capabilities.length);
+
+        // M3: Store in vector database (unless dry run)
+        let stored = 0;
+        if (!options.dryRun) {
+          await tracer.startActiveSpan(
+            "cluster-whisperer.pipeline.storage",
+            { kind: SpanKind.INTERNAL },
+            async (stageSpan) => {
+              try {
+                stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "storage");
+                await storeCapabilities(capabilities, options.vectorStore, { onProgress });
+                stored = capabilities.length;
+                stageSpan.setStatus({ code: SpanStatusCode.OK });
+              } catch (error) {
+                stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+                stageSpan.recordException(error as Error);
+                throw error;
+              } finally {
+                stageSpan.end();
+              }
+            }
+          );
+        } else {
+          onProgress("Dry run: skipping storage.");
+        }
+
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.stored_count", stored);
+
+        const result: SyncResult = {
+          discovered: discovered.length,
+          inferred: capabilities.length,
+          stored,
+        };
+
+        onProgress(
+          `Sync complete: ${result.discovered} discovered, ${result.inferred} inferred, ${result.stored} stored.`
+        );
+
+        pipelineSpan.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        pipelineSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+        pipelineSpan.recordException(error as Error);
+        throw error;
+      } finally {
+        pipelineSpan.end();
+      }
+    }
   );
-
-  return result;
 }

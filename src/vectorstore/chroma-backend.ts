@@ -1,3 +1,5 @@
+// ABOUTME: Chroma implementation of the VectorStore interface with OTel span instrumentation
+// ABOUTME: Wraps all ChromaDB operations in spans with DB semconv attributes for observability
 /**
  * chroma-backend.ts - Chroma implementation of the VectorStore interface
  *
@@ -29,6 +31,8 @@ import {
   type Where,
   type WhereDocument,
 } from "chromadb";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { getTracer } from "../tracing";
 import type {
   VectorStore,
   VectorDocument,
@@ -128,17 +132,40 @@ export class ChromaBackend implements VectorStore {
     collection: string,
     options: CollectionOptions
   ): Promise<void> {
-    const chromaCollection = await suppressChromaWarnings(() =>
-      this.client.getOrCreateCollection({
-        name: collection,
-        configuration: {
-          hnsw: { space: options.distanceMetric },
-        },
-        embeddingFunction: null,
-      })
-    );
+    const tracer = getTracer();
+    return tracer.startActiveSpan(
+      "cluster-whisperer.vectorstore.initialize",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("db.system", "chromadb");
+        span.setAttribute("db.operation.name", "get_or_create_collection");
+        span.setAttribute("db.collection.name", collection);
 
-    this.collections.set(collection, chromaCollection);
+        try {
+          const chromaCollection = await suppressChromaWarnings(() =>
+            this.client.getOrCreateCollection({
+              name: collection,
+              configuration: {
+                hnsw: { space: options.distanceMetric },
+              },
+              embeddingFunction: null,
+            })
+          );
+
+          this.collections.set(collection, chromaCollection);
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   /**
@@ -158,25 +185,53 @@ export class ChromaBackend implements VectorStore {
     collection: string,
     documents: VectorDocument[]
   ): Promise<void> {
-    const chromaCollection = this.getCollection(collection);
-
     if (documents.length === 0) return;
 
-    // Process documents in chunks to stay within Voyage AI's tokens-per-request
-    // limit and Chroma's max batch size. Each chunk is embedded and upserted
-    // independently, so partial progress is preserved on large runs.
-    for (let i = 0; i < documents.length; i += UPSERT_BATCH_SIZE) {
-      const batch = documents.slice(i, i + UPSERT_BATCH_SIZE);
-      const texts = batch.map((doc) => doc.text);
-      const embeddings = await this.embedder.embed(texts);
+    const tracer = getTracer();
+    return tracer.startActiveSpan(
+      "cluster-whisperer.vectorstore.store",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("db.system", "chromadb");
+        span.setAttribute("db.operation.name", "upsert");
+        span.setAttribute("db.collection.name", collection);
+        span.setAttribute(
+          "cluster_whisperer.vectorstore.document_count",
+          documents.length
+        );
 
-      await chromaCollection.upsert({
-        ids: batch.map((doc) => doc.id),
-        embeddings,
-        documents: texts,
-        metadatas: batch.map((doc) => doc.metadata),
-      });
-    }
+        try {
+          const chromaCollection = this.getCollection(collection);
+
+          // Process documents in chunks to stay within Voyage AI's tokens-per-request
+          // limit and Chroma's max batch size. Each chunk is embedded and upserted
+          // independently, so partial progress is preserved on large runs.
+          for (let i = 0; i < documents.length; i += UPSERT_BATCH_SIZE) {
+            const batch = documents.slice(i, i + UPSERT_BATCH_SIZE);
+            const texts = batch.map((doc) => doc.text);
+            const embeddings = await this.embedder.embed(texts);
+
+            await chromaCollection.upsert({
+              ids: batch.map((doc) => doc.id),
+              embeddings,
+              documents: texts,
+              metadatas: batch.map((doc) => doc.metadata),
+            });
+          }
+
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   /**
@@ -195,43 +250,76 @@ export class ChromaBackend implements VectorStore {
     query: string,
     options?: SearchOptions
   ): Promise<SearchResult[]> {
-    const chromaCollection = this.getCollection(collection);
+    const tracer = getTracer();
 
-    // Embed the query text
-    const queryEmbeddings = await this.embedder.embed([query]);
+    return tracer.startActiveSpan(
+      "cluster-whisperer.vectorstore.search",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("db.system", "chromadb");
+        span.setAttribute("db.operation.name", "query");
+        span.setAttribute("db.collection.name", collection);
 
-    // Build query parameters
-    const results = await chromaCollection.query({
-      queryEmbeddings,
-      nResults: options?.nResults ?? 10,
-      include: ["documents", "metadatas", "distances"],
-      // Cast to Chroma's Where type — our SearchOptions.where accepts the
-      // same shape (key-value pairs for exact match, or $and/$or operators)
-      ...(options?.where ? { where: options.where as Where } : {}),
-      // whereDocument filters on document text content (e.g., { "$contains": "backup" }).
-      // When combined with queryEmbeddings, Chroma applies the substring filter first,
-      // then ranks the filtered results by vector similarity.
-      ...(options?.whereDocument
-        ? { whereDocument: options.whereDocument as WhereDocument }
-        : {}),
-    });
+        try {
+          const chromaCollection = this.getCollection(collection);
 
-    // Convert Chroma's column-oriented format to SearchResult objects.
-    //
-    // Chroma returns nested arrays because query() supports multiple
-    // queries at once. We always send one query, so we use index [0]
-    // to get the results for our single query.
-    const ids = results.ids[0] ?? [];
-    const documents = results.documents[0] ?? [];
-    const metadatas = results.metadatas[0] ?? [];
-    const distances = results.distances[0] ?? [];
+          // Embed the query text
+          const queryEmbeddings = await this.embedder.embed([query]);
 
-    return ids.map((id, i) => ({
-      id,
-      text: documents[i] ?? "",
-      metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
-      score: distances[i] ?? 0,
-    }));
+          // Build query parameters
+          const results = await chromaCollection.query({
+            queryEmbeddings,
+            nResults: options?.nResults ?? 10,
+            include: ["documents", "metadatas", "distances"],
+            // Cast to Chroma's Where type — our SearchOptions.where accepts the
+            // same shape (key-value pairs for exact match, or $and/$or operators)
+            ...(options?.where ? { where: options.where as Where } : {}),
+            // whereDocument filters on document text content (e.g., { "$contains": "backup" }).
+            // When combined with queryEmbeddings, Chroma applies the substring filter first,
+            // then ranks the filtered results by vector similarity.
+            ...(options?.whereDocument
+              ? { whereDocument: options.whereDocument as WhereDocument }
+              : {}),
+          });
+
+          // Convert Chroma's column-oriented format to SearchResult objects.
+          //
+          // Chroma returns nested arrays because query() supports multiple
+          // queries at once. We always send one query, so we use index [0]
+          // to get the results for our single query.
+          const ids = results.ids[0] ?? [];
+          const documents = results.documents[0] ?? [];
+          const metadatas = results.metadatas[0] ?? [];
+          const distances = results.distances[0] ?? [];
+
+          const searchResults = ids.map((id, i) => ({
+            id,
+            text: documents[i] ?? "",
+            metadata: (metadatas[i] ?? {}) as Record<
+              string,
+              string | number | boolean
+            >,
+            score: distances[i] ?? 0,
+          }));
+
+          span.setAttribute(
+            "cluster_whisperer.vectorstore.result_count",
+            searchResults.length
+          );
+          span.setStatus({ code: SpanStatusCode.OK });
+          return searchResults;
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   /**
@@ -253,50 +341,115 @@ export class ChromaBackend implements VectorStore {
     keyword?: string,
     options?: SearchOptions
   ): Promise<SearchResult[]> {
-    const chromaCollection = this.getCollection(collection);
+    const tracer = getTracer();
 
-    // Build document filter: prefer the explicit keyword parameter, but also
-    // honor options.whereDocument so callers can pass raw Chroma document filters.
-    // When both are present, combine with $and.
-    const keywordFilter = keyword
-      ? ({ $contains: keyword } as WhereDocument)
-      : undefined;
-    const optionsFilter = options?.whereDocument as WhereDocument | undefined;
-    let documentFilter: WhereDocument | undefined;
-    if (keywordFilter && optionsFilter) {
-      documentFilter = { $and: [keywordFilter, optionsFilter] } as unknown as WhereDocument;
-    } else {
-      documentFilter = keywordFilter ?? optionsFilter;
-    }
+    return tracer.startActiveSpan(
+      "cluster-whisperer.vectorstore.keyword_search",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("db.system", "chromadb");
+        span.setAttribute("db.operation.name", "get");
+        span.setAttribute("db.collection.name", collection);
 
-    const results = await chromaCollection.get({
-      include: ["documents", "metadatas"],
-      limit: options?.nResults ?? 10,
-      ...(documentFilter ? { whereDocument: documentFilter } : {}),
-      ...(options?.where ? { where: options.where as Where } : {}),
-    });
+        try {
+          const chromaCollection = this.getCollection(collection);
 
-    // Convert Chroma's get() response to SearchResult objects.
-    // get() returns flat arrays (not nested like query()) since there's
-    // no multi-query support. Score is -1 to indicate "no distance score."
-    const ids = results.ids ?? [];
-    const documents = results.documents ?? [];
-    const metadatas = results.metadatas ?? [];
+          // Build document filter: prefer the explicit keyword parameter, but also
+          // honor options.whereDocument so callers can pass raw Chroma document filters.
+          // When both are present, combine with $and.
+          const keywordFilter = keyword
+            ? ({ $contains: keyword } as WhereDocument)
+            : undefined;
+          const optionsFilter = options?.whereDocument as
+            | WhereDocument
+            | undefined;
+          let documentFilter: WhereDocument | undefined;
+          if (keywordFilter && optionsFilter) {
+            documentFilter = {
+              $and: [keywordFilter, optionsFilter],
+            } as unknown as WhereDocument;
+          } else {
+            documentFilter = keywordFilter ?? optionsFilter;
+          }
 
-    return ids.map((id, i) => ({
-      id,
-      text: documents[i] ?? "",
-      metadata: (metadatas[i] ?? {}) as Record<string, string | number | boolean>,
-      score: -1,
-    }));
+          const results = await chromaCollection.get({
+            include: ["documents", "metadatas"],
+            limit: options?.nResults ?? 10,
+            ...(documentFilter ? { whereDocument: documentFilter } : {}),
+            ...(options?.where ? { where: options.where as Where } : {}),
+          });
+
+          // Convert Chroma's get() response to SearchResult objects.
+          // get() returns flat arrays (not nested like query()) since there's
+          // no multi-query support. Score is -1 to indicate "no distance score."
+          const ids = results.ids ?? [];
+          const documents = results.documents ?? [];
+          const metadatas = results.metadatas ?? [];
+
+          const searchResults = ids.map((id, i) => ({
+            id,
+            text: documents[i] ?? "",
+            metadata: (metadatas[i] ?? {}) as Record<
+              string,
+              string | number | boolean
+            >,
+            score: -1,
+          }));
+
+          span.setAttribute(
+            "cluster_whisperer.vectorstore.result_count",
+            searchResults.length
+          );
+          span.setStatus({ code: SpanStatusCode.OK });
+          return searchResults;
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   /**
    * Deletes documents from a collection by ID.
    */
   async delete(collection: string, ids: string[]): Promise<void> {
-    const chromaCollection = this.getCollection(collection);
-    await chromaCollection.delete({ ids });
+    const tracer = getTracer();
+
+    return tracer.startActiveSpan(
+      "cluster-whisperer.vectorstore.delete",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("db.system", "chromadb");
+        span.setAttribute("db.operation.name", "delete");
+        span.setAttribute("db.collection.name", collection);
+        span.setAttribute(
+          "cluster_whisperer.vectorstore.document_count",
+          ids.length
+        );
+
+        try {
+          const chromaCollection = this.getCollection(collection);
+          await chromaCollection.delete({ ids });
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   /**

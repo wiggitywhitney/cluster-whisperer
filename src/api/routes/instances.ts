@@ -1,3 +1,6 @@
+// ABOUTME: Sync endpoint route handler for receiving instance data from k8s-vectordb-sync controller
+// ABOUTME: Validates payload with Zod, processes deletes then upserts, returns status codes for retry logic
+
 /**
  * instances.ts - Sync endpoint route handler (PRD #35 M2–M3)
  *
@@ -14,6 +17,7 @@
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { trace } from "@opentelemetry/api";
 import { SyncPayloadSchema } from "../schemas/sync-payload";
 import { storeInstances } from "../../pipeline/instance-storage";
 import { INSTANCES_COLLECTION } from "../../vectorstore";
@@ -74,6 +78,21 @@ export function createInstancesRoute(vectorStore: VectorStore): Hono {
         await storeInstances(instances, vectorStore, {
           onProgress: silentProgress,
         });
+
+        // Set custom OTel attributes on the active HTTP span (PRD #37 M5).
+        // The tracing middleware creates the span; we enrich it with
+        // sync-specific counts for observability.
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan) {
+          activeSpan.setAttribute(
+            "cluster_whisperer.sync.upsert_count",
+            payload.upserts.length
+          );
+          activeSpan.setAttribute(
+            "cluster_whisperer.sync.delete_count",
+            payload.deletes.length
+          );
+        }
 
         return c.json({
           status: "ok",

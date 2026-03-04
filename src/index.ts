@@ -29,7 +29,12 @@ import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
 import { getInvestigatorAgent, truncate } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
-import { syncCapabilities } from "./pipeline";
+import {
+  syncCapabilities,
+  discoverResources,
+  inferCapabilities,
+  storeCapabilities,
+} from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
 import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
 import { createApp, startServer } from "./api/server";
@@ -116,10 +121,11 @@ function validateInstanceSyncEnvironment(): void {
 /**
  * Validates environment for the serve command.
  * Needs Voyage AI for embeddings (upserts go through the embedding pipeline).
- * Does NOT need Anthropic or kubectl — the controller pushes data over HTTP.
+ * Needs Anthropic for capability inference (CRD scan triggers LLM calls).
  */
 function validateServeEnvironment(): void {
   validateVoyageKey();
+  validateAnthropicKey();
 }
 
 /**
@@ -401,7 +407,15 @@ async function main() {
         chromaUrl: options.chromaUrl,
       });
 
-      const app = createApp({ vectorStore });
+      const app = createApp({
+        vectorStore,
+        capabilities: {
+          vectorStore,
+          discoverResources,
+          inferCapabilities,
+          storeCapabilities,
+        },
+      });
       const server = startServer(app, { port });
 
       // Graceful shutdown on SIGTERM (Kubernetes sends this before killing the pod)

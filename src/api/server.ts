@@ -1,3 +1,6 @@
+// ABOUTME: HTTP server factory and startup for receiving sync payloads and health probes
+// ABOUTME: Creates a Hono app with dependency injection for testability, serves via @hono/node-server
+
 /**
  * server.ts - HTTP server for receiving instance sync payloads (PRD #35)
  *
@@ -28,6 +31,7 @@ import {
   createCapabilitiesRoute,
   type CapabilitiesRouteDeps,
 } from "./routes/capabilities";
+import { tracingMiddleware } from "./tracing-middleware";
 
 /**
  * Dependencies injected into the Hono app.
@@ -54,6 +58,10 @@ export interface ServerDependencies {
  */
 export function createApp(deps: ServerDependencies): Hono {
   const app = new Hono({ strict: false });
+
+  // OTel tracing middleware — creates a SERVER span per incoming request.
+  // When tracing is disabled, getTracer() returns a no-op tracer (zero overhead).
+  app.use("*", tracingMiddleware());
 
   /**
    * Liveness probe — "is the process alive?"

@@ -1,3 +1,5 @@
+// ABOUTME: Instance sync pipeline runner with OTel span instrumentation
+// ABOUTME: Orchestrates discover → stale-cleanup → store stages with parent/child spans for observability
 /**
  * instance-runner.ts - Instance sync pipeline runner (PRD #26 M3)
  *
@@ -14,8 +16,15 @@
  * step — it's discover → store with stale cleanup. The stale cleanup is needed
  * because resource instances come and go frequently (unlike resource types which
  * are relatively stable).
+ *
+ * OTel instrumentation (PRD #37 M4):
+ * Creates a parent span for the entire pipeline run, with child spans for each
+ * stage (discovery, stale-cleanup, storage). Pipeline attributes track counts
+ * at each stage for observability in Datadog.
  */
 
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { getTracer } from "../tracing";
 import { discoverInstances } from "./instance-discovery";
 import { storeInstances } from "./instance-storage";
 import { INSTANCES_COLLECTION } from "../vectorstore";
@@ -94,50 +103,125 @@ const MAX_EXISTING_DOCS = 10_000;
 export async function syncInstances(
   options: SyncInstancesOptions
 ): Promise<SyncInstancesResult> {
-  const onProgress = options.onProgress ?? console.log; // eslint-disable-line no-console
+  const tracer = getTracer();
 
-  // M1: Discover instances from the cluster
-  const discovered = await discoverInstances({
-    ...options.discoveryOptions,
-    onProgress,
-  });
+  return tracer.startActiveSpan(
+    "cluster-whisperer.pipeline.sync-instances",
+    { kind: SpanKind.INTERNAL },
+    async (pipelineSpan) => {
+      try {
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.name", "sync-instances");
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.dry_run", options.dryRun ?? false);
 
-  let stored = 0;
-  let deleted = 0;
+        const onProgress = options.onProgress ?? console.log; // eslint-disable-line no-console
 
-  if (!options.dryRun) {
-    // Initialize the collection before stale cleanup — on a first-ever sync,
-    // the collection doesn't exist yet and deleteStaleDocuments needs to query it.
-    // This is idempotent; storeInstances also calls initialize internally.
-    await options.vectorStore.initialize(INSTANCES_COLLECTION, {
-      distanceMetric: "cosine",
-    });
+        // M1: Discover instances from the cluster
+        const discovered = await tracer.startActiveSpan(
+          "cluster-whisperer.pipeline.discovery",
+          { kind: SpanKind.INTERNAL },
+          async (stageSpan) => {
+            try {
+              stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "discovery");
+              const result = await discoverInstances({
+                ...options.discoveryOptions,
+                onProgress,
+              });
+              stageSpan.setStatus({ code: SpanStatusCode.OK });
+              return result;
+            } catch (error) {
+              stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+              stageSpan.recordException(error as Error);
+              throw error;
+            } finally {
+              stageSpan.end();
+            }
+          }
+        );
 
-    // Delete stale documents before storing new ones
-    deleted = await deleteStaleDocuments(
-      options.vectorStore,
-      discovered.map((i) => i.id),
-      onProgress
-    );
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.discovered_count", discovered.length);
 
-    // M2: Store in vector database
-    await storeInstances(discovered, options.vectorStore, { onProgress });
-    stored = discovered.length;
-  } else {
-    onProgress("Dry run: skipping storage and stale cleanup.");
-  }
+        let stored = 0;
+        let deleted = 0;
 
-  const result: SyncInstancesResult = {
-    discovered: discovered.length,
-    stored,
-    deleted,
-  };
+        if (!options.dryRun) {
+          // Initialize the collection before stale cleanup — on a first-ever sync,
+          // the collection doesn't exist yet and deleteStaleDocuments needs to query it.
+          // This is idempotent; storeInstances also calls initialize internally.
+          await options.vectorStore.initialize(INSTANCES_COLLECTION, {
+            distanceMetric: "cosine",
+          });
 
-  onProgress(
-    `Sync complete: ${result.discovered} discovered, ${result.stored} stored, ${result.deleted} deleted.`
+          // Delete stale documents before storing new ones
+          deleted = await tracer.startActiveSpan(
+            "cluster-whisperer.pipeline.stale-cleanup",
+            { kind: SpanKind.INTERNAL },
+            async (stageSpan) => {
+              try {
+                stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "stale-cleanup");
+                const count = await deleteStaleDocuments(
+                  options.vectorStore,
+                  discovered.map((i) => i.id),
+                  onProgress
+                );
+                stageSpan.setStatus({ code: SpanStatusCode.OK });
+                return count;
+              } catch (error) {
+                stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+                stageSpan.recordException(error as Error);
+                throw error;
+              } finally {
+                stageSpan.end();
+              }
+            }
+          );
+
+          // M2: Store in vector database
+          await tracer.startActiveSpan(
+            "cluster-whisperer.pipeline.storage",
+            { kind: SpanKind.INTERNAL },
+            async (stageSpan) => {
+              try {
+                stageSpan.setAttribute("cluster_whisperer.pipeline.stage", "storage");
+                await storeInstances(discovered, options.vectorStore, { onProgress });
+                stored = discovered.length;
+                stageSpan.setStatus({ code: SpanStatusCode.OK });
+              } catch (error) {
+                stageSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+                stageSpan.recordException(error as Error);
+                throw error;
+              } finally {
+                stageSpan.end();
+              }
+            }
+          );
+        } else {
+          onProgress("Dry run: skipping storage and stale cleanup.");
+        }
+
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.stored_count", stored);
+        pipelineSpan.setAttribute("cluster_whisperer.pipeline.deleted_count", deleted);
+
+        const result: SyncInstancesResult = {
+          discovered: discovered.length,
+          stored,
+          deleted,
+        };
+
+        onProgress(
+          `Sync complete: ${result.discovered} discovered, ${result.stored} stored, ${result.deleted} deleted.`
+        );
+
+        pipelineSpan.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        pipelineSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(error) });
+        pipelineSpan.recordException(error as Error);
+        throw error;
+      } finally {
+        pipelineSpan.end();
+      }
+    }
   );
-
-  return result;
 }
 
 // ---------------------------------------------------------------------------
