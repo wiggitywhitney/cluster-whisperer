@@ -1,3 +1,5 @@
+// ABOUTME: Voyage AI embedding implementation with OTel span instrumentation
+// ABOUTME: Converts text to vectors via Voyage AI API, wrapped in GenAI semconv spans
 /**
  * embeddings.ts - Voyage AI embedding implementation
  *
@@ -20,6 +22,8 @@
  */
 
 import { VoyageAIClient } from "voyageai";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { getTracer } from "../tracing";
 import type { EmbeddingFunction } from "./types";
 
 /**
@@ -76,33 +80,64 @@ export class VoyageEmbedding implements EmbeddingFunction {
    * @throws Error if the API call fails or returns unexpected data
    */
   async embed(texts: string[]): Promise<number[][]> {
-    const response = await this.client.embed({
-      input: texts,
-      model: this.model,
-    });
+    const tracer = getTracer();
 
-    // Extract embedding vectors from the response
-    // The API returns { data: [{ embedding: number[], index: number }, ...] }
-    if (!response.data) {
-      throw new Error("Voyage AI returned no embedding data");
-    }
+    return tracer.startActiveSpan(
+      "cluster-whisperer.embedding.embed",
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        span.setAttribute("gen_ai.operation.name", "embeddings");
+        span.setAttribute("gen_ai.request.model", this.model);
+        span.setAttribute("cluster_whisperer.embedding.input_count", texts.length);
 
-    if (response.data.length !== texts.length) {
-      throw new Error(
-        `Voyage AI returned ${response.data.length} embeddings for ${texts.length} inputs`
-      );
-    }
+        try {
+          const response = await this.client.embed({
+            input: texts,
+            model: this.model,
+          });
 
-    // Sort by index to ensure order matches input order
-    const sorted = [...response.data].sort(
-      (a, b) => (a.index ?? 0) - (b.index ?? 0)
-    );
+          // Extract embedding vectors from the response
+          // The API returns { data: [{ embedding: number[], index: number }, ...] }
+          if (!response.data) {
+            throw new Error("Voyage AI returned no embedding data");
+          }
 
-    return sorted.map((item) => {
-      if (!item.embedding) {
-        throw new Error("Voyage AI returned an embedding without vector data");
+          if (response.data.length !== texts.length) {
+            throw new Error(
+              `Voyage AI returned ${response.data.length} embeddings for ${texts.length} inputs`
+            );
+          }
+
+          // Sort by index to ensure order matches input order
+          const sorted = [...response.data].sort(
+            (a, b) => (a.index ?? 0) - (b.index ?? 0)
+          );
+
+          const vectors = sorted.map((item) => {
+            if (!item.embedding) {
+              throw new Error("Voyage AI returned an embedding without vector data");
+            }
+            return item.embedding;
+          });
+
+          // Set dimensions from the first vector (all vectors have the same dimensionality)
+          if (vectors.length > 0 && vectors[0].length > 0) {
+            span.setAttribute("cluster_whisperer.embedding.dimensions", vectors[0].length);
+          }
+
+          span.setStatus({ code: SpanStatusCode.OK });
+          return vectors;
+        } catch (error) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          span.recordException(error as Error);
+          throw error;
+        } finally {
+          span.end();
+        }
       }
-      return item.embedding;
-    });
+    );
   }
 }

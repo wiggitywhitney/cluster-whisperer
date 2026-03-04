@@ -75,7 +75,7 @@ Extend the Weaver semantic convention schema with 4 new attribute groups and add
   - Set custom attributes: document count, result count
   - Set span status on errors (Chroma failures → ERROR status)
 
-- [ ] **M3**: Embedding Instrumentation
+- [x] **M3**: Embedding Instrumentation
   - Import `getTracer()` in `src/vectorstore/embeddings.ts`
   - Wrap `embed()` in a span: `cluster-whisperer.embedding.embed`
   - Set GenAI semconv attributes (`gen_ai.operation.name: "embeddings"`, `gen_ai.request.model`)
@@ -390,3 +390,4 @@ Use OTel's `propagation.extract()` with the W3C TraceContext propagator (registe
 
 - **2026-03-03 — M1 Complete**: Extended Weaver schema with 4 new attribute groups (vectorstore, embedding, pipeline, http). Added DB semconv refs, GenAI semconv refs, HTTP semconv refs, and custom pipeline attributes. `weaver registry check` passes. Header comments updated to document all 10 attribute groups.
 - **2026-03-03 — M2 Complete**: Wrapped all 5 ChromaBackend methods in OTel spans (initialize, store, search, keywordSearch, delete). Each span sets DB semconv attributes (db.system=chromadb, db.operation.name, db.collection.name) and custom attributes (document_count, result_count). Error paths set ERROR status and recordException. 27 new unit tests, 285 total tests pass.
+- **2026-03-03 — M3 Complete**: Wrapped VoyageEmbedding.embed() in a `cluster-whisperer.embedding.embed` span (kind: CLIENT). GenAI semconv attributes set (gen_ai.operation.name="embeddings", gen_ai.request.model). Custom attributes: input_count, dimensions. Error paths set ERROR status and recordException. 12 new unit tests, 297 total tests pass.
