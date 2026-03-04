@@ -340,5 +340,8 @@ describe("syncCapabilities no-op tracer (tracing disabled)", () => {
     expect(result.discovered).toBe(2);
     expect(result.inferred).toBe(2);
     expect(result.stored).toBe(2);
+
+    // No spans should be exported when tracing is disabled
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
   });
 });

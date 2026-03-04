@@ -95,8 +95,7 @@ async function createInitializedBackend(embedder?: EmbeddingFunction) {
 }
 
 /**
- * Gets finished spans from the in-memory exporter.
- * Filters out the initialize span so tests for other methods only see their own span.
+ * Gets all finished spans from the in-memory exporter.
  */
 function getSpans(): ReadableSpan[] {
   return exporter.getFinishedSpans();

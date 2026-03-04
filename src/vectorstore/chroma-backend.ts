@@ -185,8 +185,6 @@ export class ChromaBackend implements VectorStore {
     collection: string,
     documents: VectorDocument[]
   ): Promise<void> {
-    const chromaCollection = this.getCollection(collection);
-
     if (documents.length === 0) return;
 
     const tracer = getTracer();
@@ -203,6 +201,8 @@ export class ChromaBackend implements VectorStore {
         );
 
         try {
+          const chromaCollection = this.getCollection(collection);
+
           // Process documents in chunks to stay within Voyage AI's tokens-per-request
           // limit and Chroma's max batch size. Each chunk is embedded and upserted
           // independently, so partial progress is preserved on large runs.
@@ -250,7 +250,6 @@ export class ChromaBackend implements VectorStore {
     query: string,
     options?: SearchOptions
   ): Promise<SearchResult[]> {
-    const chromaCollection = this.getCollection(collection);
     const tracer = getTracer();
 
     return tracer.startActiveSpan(
@@ -262,6 +261,8 @@ export class ChromaBackend implements VectorStore {
         span.setAttribute("db.collection.name", collection);
 
         try {
+          const chromaCollection = this.getCollection(collection);
+
           // Embed the query text
           const queryEmbeddings = await this.embedder.embed([query]);
 
@@ -340,7 +341,6 @@ export class ChromaBackend implements VectorStore {
     keyword?: string,
     options?: SearchOptions
   ): Promise<SearchResult[]> {
-    const chromaCollection = this.getCollection(collection);
     const tracer = getTracer();
 
     return tracer.startActiveSpan(
@@ -352,6 +352,8 @@ export class ChromaBackend implements VectorStore {
         span.setAttribute("db.collection.name", collection);
 
         try {
+          const chromaCollection = this.getCollection(collection);
+
           // Build document filter: prefer the explicit keyword parameter, but also
           // honor options.whereDocument so callers can pass raw Chroma document filters.
           // When both are present, combine with $and.
@@ -418,7 +420,6 @@ export class ChromaBackend implements VectorStore {
    * Deletes documents from a collection by ID.
    */
   async delete(collection: string, ids: string[]): Promise<void> {
-    const chromaCollection = this.getCollection(collection);
     const tracer = getTracer();
 
     return tracer.startActiveSpan(
@@ -434,6 +435,7 @@ export class ChromaBackend implements VectorStore {
         );
 
         try {
+          const chromaCollection = this.getCollection(collection);
           await chromaCollection.delete({ ids });
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {

@@ -280,7 +280,7 @@ groups:
       - id: cluster_whisperer.vectorstore.document_count
         type: int
         stability: development
-        brief: Number of documents in the operation (store batch size, search results)
+        brief: Number of documents in the operation (store batch size, delete batch size)
         examples: [10, 50, 100]
 
       - id: cluster_whisperer.vectorstore.result_count
