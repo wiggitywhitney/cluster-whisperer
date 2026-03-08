@@ -19,7 +19,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
  * why the app is crashing and discovers the missing database.
  */
 async function main(): Promise<void> {
-  console.log("[demo-app] Starting server...");
+  console.log("[demo-app] Starting server..."); // eslint-disable-line no-console
 
   if (!DATABASE_URL) {
     console.error(
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(
+  console.log( // eslint-disable-line no-console
     `[demo-app] Connecting to database at ${DATABASE_URL}...`
   );
 
@@ -44,12 +44,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("[demo-app] Database connection established");
+  console.log("[demo-app] Database connection established"); // eslint-disable-line no-console
 
   const app = createApp({ pool });
 
   serve({ fetch: app.fetch, port: PORT }, () => {
-    console.log(`[demo-app] Server listening on port ${PORT}`);
+    console.log(`[demo-app] Server listening on port ${PORT}`); // eslint-disable-line no-console
   });
 }
 
