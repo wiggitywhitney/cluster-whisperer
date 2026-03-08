@@ -5,6 +5,10 @@ dist/
 .mcp.json
 .env
 .env.local
+.vals.yaml
+
+# Claude Code
+.claude/skills/
 
 # Chroma local storage
 data/
@@ -15,3 +19,4 @@ chroma-data/
 
 # Personal notes
 journal/
+.claude/design-decisions.md

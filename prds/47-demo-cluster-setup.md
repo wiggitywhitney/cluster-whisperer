@@ -3,6 +3,7 @@
 **Status**: Not Started
 **Priority**: High
 **Dependencies**: PRD #46 (demo app)
+**Execution Order**: 3 of 5 — Needs the demo app. Provides the test environment for PRDs #48 and #49.
 **Branch**: `feature/prd-47-demo-cluster-setup`
 
 ## Problem

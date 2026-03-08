@@ -3,6 +3,7 @@
 **Status**: Not Started
 **Priority**: High
 **Dependencies**: PRD #48 (cluster-whisperer modifications — shared tool core, --agent flag)
+**Execution Order**: 5 of 5 — Last. Depends on PRD #48's tool core and --agent flag. M1 (research) can start during PRD #48 implementation.
 **Branch**: `feature/prd-49-vercel-agent`
 
 ## Problem

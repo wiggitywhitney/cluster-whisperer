@@ -240,12 +240,14 @@ Chroma flow must continue working unchanged.
 
 ---
 
-## PRD Breakdown
+## PRD Breakdown (Execution Order)
 
-| PRD | Scope | Dependencies |
-|-----|-------|--------------|
-| Abstract rewrite | Interactive milestone — requires back-and-forth | None |
-| Demo app | Small app with DATABASE_URL dependency, Dockerfile, K8s manifests | None |
-| Demo cluster setup/teardown | Kind cluster with all components, setup/teardown scripts | Demo app |
-| Cluster-whisperer modifications | kubectl_apply tool, --tools flag, --agent flag, --vector-backend flag, Qdrant backend, OTel for Qdrant | Demo cluster for testing |
-| Vercel agent | Research phase first (AI SDK 6 ToolLoopAgent), implementation, OTel instrumentation | Cluster-whisperer modifications (shared tool core) |
+| Order | PRD | Scope | Dependencies |
+|-------|-----|-------|--------------|
+| 1 | #50 Abstract rewrite | Interactive milestone — requires back-and-forth | None |
+| 2 | #46 Demo app | Small app with DATABASE_URL dependency, Dockerfile, K8s manifests | None |
+| 3 | #47 Demo cluster setup/teardown | Kind cluster with all components, setup/teardown scripts | #46 Demo app |
+| 4 | #48 Cluster-whisperer modifications | kubectl_apply tool, --tools flag, --agent flag, --vector-backend flag, Qdrant backend, OTel for Qdrant | #47 Demo cluster for testing |
+| 5 | #49 Vercel agent | Research phase first (AI SDK 6 ToolLoopAgent), implementation, OTel instrumentation | #48 Cluster-whisperer modifications (shared tool core) |
+
+Note: PRD #49 M1 (research) can start during PRD #48 implementation.

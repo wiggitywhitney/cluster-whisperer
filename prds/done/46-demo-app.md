@@ -1,8 +1,9 @@
 # PRD #46: Demo App for Choose Your Own Adventure Talk
 
-**Status**: Not Started
+**Status**: Complete
 **Priority**: High
 **Dependencies**: None
+**Execution Order**: 2 of 5 — Build early so everything else can test against it.
 **Branch**: `feature/prd-46-demo-app`
 
 ## Problem
@@ -47,30 +48,30 @@ dead simple.
 ## Milestones
 
 ### M1: App Implementation
-- [ ] Hono web server with `DATABASE_URL` connection logic
-- [ ] Clear, agent-friendly error messages on connection failure
-- [ ] `GET /` returns connection status when database is available
-- [ ] `GET /healthz` liveness probe (returns 200 if process is running, independent of DB)
+- [x] Hono web server with `DATABASE_URL` connection logic
+- [x] Clear, agent-friendly error messages on connection failure
+- [x] `GET /` returns connection status when database is available
+- [x] `GET /healthz` liveness probe (returns 200 if process is running, independent of DB)
 
 ### M2: Container Image
-- [ ] Dockerfile (multi-stage build, small image)
-- [ ] Builds and runs locally with `docker build` and `docker run`
-- [ ] Verified: crashes without `DATABASE_URL`, runs with it
+- [x] Dockerfile (multi-stage build, small image)
+- [x] Builds and runs locally with `docker build` and `docker run`
+- [x] Verified: crashes without `DATABASE_URL`, runs with it
 
 ### M3: Kubernetes Manifests
-- [ ] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
-- [ ] Service manifest exposing the app
-- [ ] Verified: deploys to Kind cluster, enters CrashLoopBackOff
-- [ ] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
+- [x] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
+- [x] Service manifest exposing the app
+- [x] Verified: deploys to Kind cluster, enters CrashLoopBackOff
+- [x] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
 
 ### M4: Agent Investigation Test
-- [ ] Deploy app to a Kind cluster
-- [ ] Run cluster-whisperer agent against it: "Why is my app broken?"
-- [ ] Verify the agent can diagnose the missing database from kubectl output
-- [ ] Document the expected agent investigation flow
+- [x] Deploy app to a Kind cluster
+- [x] Run cluster-whisperer agent against it: "Why is my app broken?"
+- [x] Verify the agent can diagnose the missing database from kubectl output
+- [x] Document the expected agent investigation flow
 
 ### M5: Documentation
-- [ ] Update README using `/write-docs` to document the demo app and its role in the demo flow
+- [x] Update README using `/write-docs` to document the demo app and its role in the demo flow
 
 ## Technical Design
 
@@ -133,3 +134,4 @@ Minimal:
 | 2026-03-07 | Crash immediately, no retries | Want fast CrashLoopBackOff for demo pacing |
 | 2026-03-07 | Live in demo/app/ not separate repo | It's a prop for this talk, not a standalone project |
 | 2026-03-07 | PostgreSQL specifically | The demo deploys a PostgreSQL database via Crossplane Composition as the resolution |
+| 2026-03-08 | Use Kind's default kubeconfig (merge into ~/.kube/config) | Follows spider-rainbows pattern; avoids proliferating separate KUBECONFIG files. Teardown scripts must clean up context entries (delete-context, unset users/clusters) |
