@@ -48,23 +48,23 @@ jobs:
           docker build -t demo-app:latest demo/app/
           kind load docker-image demo-app:latest --name demo-app-e2e
 
-      - name: Deploy demo app to cluster
+      - name: Deploy demo app and wait for CrashLoopBackOff
         run: |
           kubectl apply -f demo/app/k8s/
-          echo "Waiting 60s for CrashLoopBackOff..."
-          sleep 60
-
-      - name: Verify CrashLoopBackOff state
-        run: |
-          POD_STATUS=$(kubectl get pods -l app=demo-app \
-            -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}')
-          echo "Pod status: $POD_STATUS"
-          if [ "$POD_STATUS" != "CrashLoopBackOff" ]; then
-            echo "::error::Pod not in CrashLoopBackOff (got: $POD_STATUS)"
-            kubectl get pods -l app=demo-app
-            kubectl logs -l app=demo-app --tail=10 || true
-            exit 1
-          fi
+          echo "Polling for CrashLoopBackOff (up to 120s)..."
+          for i in $(seq 1 24); do
+            POD_STATUS=$(kubectl get pods -l app=demo-app \
+              -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)
+            if [ "$POD_STATUS" = "CrashLoopBackOff" ]; then
+              echo "Pod is in CrashLoopBackOff after $((i * 5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Pod never reached CrashLoopBackOff within 120s"
+          kubectl get pods -l app=demo-app
+          kubectl logs -l app=demo-app --tail=10 || true
+          exit 1
 
       - name: Run agent investigation
         env:
