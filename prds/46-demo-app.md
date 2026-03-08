@@ -59,8 +59,8 @@ dead simple.
 - [x] Verified: crashes without `DATABASE_URL`, runs with it
 
 ### M3: Kubernetes Manifests
-- [ ] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
-- [ ] Service manifest exposing the app
+- [x] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
+- [x] Service manifest exposing the app
 - [ ] Verified: deploys to Kind cluster, enters CrashLoopBackOff
 - [ ] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
 
@@ -134,3 +134,4 @@ Minimal:
 | 2026-03-07 | Crash immediately, no retries | Want fast CrashLoopBackOff for demo pacing |
 | 2026-03-07 | Live in demo/app/ not separate repo | It's a prop for this talk, not a standalone project |
 | 2026-03-07 | PostgreSQL specifically | The demo deploys a PostgreSQL database via Crossplane Composition as the resolution |
+| 2026-03-08 | Use Kind's default kubeconfig (merge into ~/.kube/config) | Follows spider-rainbows pattern; avoids proliferating separate KUBECONFIG files. Teardown scripts must clean up context entries (delete-context, unset users/clusters) |

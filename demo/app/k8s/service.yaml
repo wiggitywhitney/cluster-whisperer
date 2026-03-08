@@ -1,0 +1,17 @@
+# ABOUTME: ClusterIP Service exposing the demo app on port 80, forwarding to container
+# ABOUTME: port 3000. Used to access the app from within the cluster.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  labels:
+    app: demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app: demo-app
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
