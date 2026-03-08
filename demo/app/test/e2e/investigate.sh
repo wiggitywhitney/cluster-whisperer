@@ -37,11 +37,10 @@ echo ""
 # Other processes (GKE, other clusters) may change the shared ~/.kube/config context
 # during the agent run. Using an isolated kubeconfig prevents this.
 KUBECONFIG_FILE=$(mktemp)
+OUTPUT_FILE=$(mktemp)
 kind get kubeconfig --name "$CLUSTER_NAME" > "$KUBECONFIG_FILE"
 export KUBECONFIG="$KUBECONFIG_FILE"
 trap 'rm -f "$OUTPUT_FILE" "$KUBECONFIG_FILE"' EXIT
-
-OUTPUT_FILE=$(mktemp)
 
 # Run the agent and capture output (allow non-zero exit since we check output)
 set +e
