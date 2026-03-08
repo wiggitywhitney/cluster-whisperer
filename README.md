@@ -396,7 +396,94 @@ docs/
 ├── resource-instance-sync.md        # How instance sync works
 ├── tracing-conventions.md           # Tracing architecture and design rationale
 └── vector-database.md               # Vector database architecture
+
+demo/
+└── app/                   # Demo app — intentionally broken prop for KubeCon talk
+    ├── src/               # Hono server with DATABASE_URL connection logic
+    ├── k8s/               # Deployment + Service manifests
+    └── Dockerfile         # Multi-stage build
 ```
+
+## Demo App
+
+The `demo/app/` directory contains a minimal Hono web server that requires a PostgreSQL database. It exists as a prop for the [KubeCon "Choose Your Own Adventure" demo](docs/choose-your-adventure-demo.md) — when deployed to Kubernetes without a database, it crashes immediately and enters CrashLoopBackOff. The cluster-whisperer agent then investigates why the app is broken, discovers the missing database, and deploys one.
+
+The app is intentionally simple. It connects to `DATABASE_URL` on startup: if the connection succeeds, it serves HTTP traffic; if it fails (or the variable is missing), it crashes with a clear, single-line error message designed for the agent to parse from `kubectl logs`.
+
+### Structure
+
+```text
+demo/app/
+├── src/
+│   ├── index.ts          # Entry point — reads DATABASE_URL, attempts connection, crashes or starts server
+│   ├── server.ts         # Hono app factory with GET / (DB status) and GET /healthz (liveness probe)
+│   └── server.test.ts    # Unit tests for routes, startup behavior, and error message format
+├── k8s/
+│   ├── deployment.yaml   # Deployment with DATABASE_URL pointing to a non-existent service
+│   └── service.yaml      # ClusterIP service exposing port 80 → 3000
+├── Dockerfile            # Multi-stage build (node:22-alpine)
+├── package.json
+└── tsconfig.json
+```
+
+### Build and Run
+
+Build the container image:
+
+```bash
+cd demo/app
+docker build -t demo-app:latest .
+```
+
+Without `DATABASE_URL`, the app crashes immediately:
+
+```bash
+$ docker run --rm demo-app:latest
+[demo-app] Starting server...
+[demo-app] FATAL: DATABASE_URL environment variable is required
+[demo-app] Exiting with code 1
+```
+
+With an unreachable `DATABASE_URL`, it crashes with a connection error:
+
+```bash
+$ docker run --rm -e DATABASE_URL=postgres://db-service:5432/myapp demo-app:latest
+[demo-app] Starting server...
+[demo-app] Connecting to database at postgres://db-service:5432/myapp...
+[demo-app] FATAL: Cannot connect to database at postgres://db-service:5432/myapp - getaddrinfo ENOTFOUND db-service
+[demo-app] Exiting with code 1
+```
+
+Both crash modes are intentional — this is the behavior the agent investigates during the demo.
+
+### Deploy to Kubernetes
+
+Load the image into a Kind cluster and apply the manifests:
+
+```bash
+kind load docker-image demo-app:latest --name <cluster-name>
+kubectl apply -f demo/app/k8s/
+```
+
+The Deployment sets `DATABASE_URL` to `postgres://db-service:5432/myapp` — a service that doesn't exist in the cluster. The app crashes on startup and Kubernetes restarts it, producing CrashLoopBackOff within seconds:
+
+```bash
+$ kubectl get pods -l app=demo-app
+NAME                        READY   STATUS             RESTARTS        AGE
+demo-app-748c9d8c54-8mngm   0/1     CrashLoopBackOff   41 (4m ago)    3h9m
+```
+
+The logs show the same connection error from the Build and Run section:
+
+```bash
+$ kubectl logs -l app=demo-app
+[demo-app] Starting server...
+[demo-app] Connecting to database at postgres://db-service:5432/myapp...
+[demo-app] FATAL: Cannot connect to database at postgres://db-service:5432/myapp - getaddrinfo ENOTFOUND db-service
+[demo-app] Exiting with code 1
+```
+
+This is what the cluster-whisperer agent sees when it investigates. The error messages are designed to be agent-friendly — single-line, containing the word "database" and the connection target, so the agent can diagnose the missing database from `kubectl logs` output alone.
 
 ## License
 

@@ -11,3 +11,4 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo app (PRD #46 M3 verification): Confirmed CrashLoopBackOff behavior in Kind cluster with clear agent-friendly kubectl logs and describe output
 - Demo app (PRD #46 M4): E2E agent investigation test — setup/teardown/investigate scripts, CI workflow, verified agent diagnoses missing database in 4-5 tool calls
 - Demo app (PRD #46 M4): Investigation flow documentation with expected agent steps, tool calls, and diagnosis path
+- Demo app (PRD #46 M5): README documentation — demo app section with structure, build/run instructions, and Kubernetes deployment with real CrashLoopBackOff output

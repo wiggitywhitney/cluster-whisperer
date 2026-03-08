@@ -71,7 +71,7 @@ dead simple.
 - [x] Document the expected agent investigation flow
 
 ### M5: Documentation
-- [ ] Update README using `/write-docs` to document the demo app and its role in the demo flow
+- [x] Update README using `/write-docs` to document the demo app and its role in the demo flow
 
 ## Technical Design
 
