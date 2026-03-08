@@ -54,9 +54,9 @@ dead simple.
 - [x] `GET /healthz` liveness probe (returns 200 if process is running, independent of DB)
 
 ### M2: Container Image
-- [ ] Dockerfile (multi-stage build, small image)
-- [ ] Builds and runs locally with `docker build` and `docker run`
-- [ ] Verified: crashes without `DATABASE_URL`, runs with it
+- [x] Dockerfile (multi-stage build, small image)
+- [x] Builds and runs locally with `docker build` and `docker run`
+- [x] Verified: crashes without `DATABASE_URL`, runs with it
 
 ### M3: Kubernetes Manifests
 - [ ] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
