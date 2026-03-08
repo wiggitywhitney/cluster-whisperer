@@ -1,6 +1,6 @@
 # PRD #46: Demo App for Choose Your Own Adventure Talk
 
-**Status**: Not Started
+**Status**: In Progress
 **Priority**: High
 **Dependencies**: None
 **Execution Order**: 2 of 5 — Build early so everything else can test against it.
@@ -48,10 +48,10 @@ dead simple.
 ## Milestones
 
 ### M1: App Implementation
-- [ ] Hono web server with `DATABASE_URL` connection logic
-- [ ] Clear, agent-friendly error messages on connection failure
-- [ ] `GET /` returns connection status when database is available
-- [ ] `GET /healthz` liveness probe (returns 200 if process is running, independent of DB)
+- [x] Hono web server with `DATABASE_URL` connection logic
+- [x] Clear, agent-friendly error messages on connection failure
+- [x] `GET /` returns connection status when database is available
+- [x] `GET /healthz` liveness probe (returns 200 if process is running, independent of DB)
 
 ### M2: Container Image
 - [ ] Dockerfile (multi-stage build, small image)

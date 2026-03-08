@@ -10,9 +10,6 @@ dist/
 # Claude Code
 .claude/skills/
 
-# Progress tracking
-PROGRESS.md
-
 # Chroma local storage
 data/
 chroma-data/
