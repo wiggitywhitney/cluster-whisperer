@@ -61,8 +61,8 @@ dead simple.
 ### M3: Kubernetes Manifests
 - [x] Deployment manifest with `DATABASE_URL` env var (pointing to a service that doesn't exist)
 - [x] Service manifest exposing the app
-- [ ] Verified: deploys to Kind cluster, enters CrashLoopBackOff
-- [ ] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
+- [x] Verified: deploys to Kind cluster, enters CrashLoopBackOff
+- [x] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
 
 ### M4: Agent Investigation Test
 - [ ] Deploy app to a Kind cluster
