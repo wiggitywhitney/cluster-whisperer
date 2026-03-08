@@ -65,10 +65,10 @@ dead simple.
 - [x] Verified: `kubectl logs`, `kubectl describe` output is clear and agent-friendly
 
 ### M4: Agent Investigation Test
-- [ ] Deploy app to a Kind cluster
-- [ ] Run cluster-whisperer agent against it: "Why is my app broken?"
-- [ ] Verify the agent can diagnose the missing database from kubectl output
-- [ ] Document the expected agent investigation flow
+- [x] Deploy app to a Kind cluster
+- [x] Run cluster-whisperer agent against it: "Why is my app broken?"
+- [x] Verify the agent can diagnose the missing database from kubectl output
+- [x] Document the expected agent investigation flow
 
 ### M5: Documentation
 - [ ] Update README using `/write-docs` to document the demo app and its role in the demo flow

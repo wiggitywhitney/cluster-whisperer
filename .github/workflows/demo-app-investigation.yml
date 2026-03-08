@@ -1,0 +1,69 @@
+# ABOUTME: CI workflow that tests the demo app investigation scenario end-to-end.
+# ABOUTME: Deploys the demo app to a Kind cluster and verifies the agent can diagnose the issue.
+
+name: Demo App Investigation E2E
+
+on:
+  pull_request:
+    paths:
+      - 'demo/app/**'
+      - 'src/agent/**'
+      - 'src/tools/**'
+      - 'prompts/**'
+  workflow_dispatch:
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build cluster-whisperer
+        run: npm run build
+
+      - name: Install demo app dependencies
+        run: cd demo/app && npm ci
+
+      - name: Create Kind cluster and deploy demo app
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: demo-app-e2e
+          wait: 60s
+
+      - name: Build and load demo app image
+        run: |
+          docker build -t demo-app:latest demo/app/
+          kind load docker-image demo-app:latest --name demo-app-e2e
+
+      - name: Deploy demo app to cluster
+        run: |
+          kubectl apply -f demo/app/k8s/
+          echo "Waiting 30s for CrashLoopBackOff..."
+          sleep 30
+
+      - name: Verify CrashLoopBackOff state
+        run: |
+          POD_STATUS=$(kubectl get pods -l app=demo-app \
+            -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}')
+          echo "Pod status: $POD_STATUS"
+          if [ "$POD_STATUS" != "CrashLoopBackOff" ]; then
+            echo "::warning::Pod not in CrashLoopBackOff (got: $POD_STATUS)"
+            kubectl get pods -l app=demo-app
+            kubectl logs -l app=demo-app --tail=10 || true
+          fi
+
+      - name: Run agent investigation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          demo/app/test/e2e/investigate.sh
