@@ -6,6 +6,9 @@ name: Demo App Investigation E2E
 on:
   pull_request:
     paths:
+      - '.github/workflows/demo-app-investigation.yml'
+      - 'package.json'
+      - 'package-lock.json'
       - 'demo/app/**'
       - 'src/agent/**'
       - 'src/tools/**'
@@ -57,9 +60,10 @@ jobs:
             -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}')
           echo "Pod status: $POD_STATUS"
           if [ "$POD_STATUS" != "CrashLoopBackOff" ]; then
-            echo "::warning::Pod not in CrashLoopBackOff (got: $POD_STATUS)"
+            echo "::error::Pod not in CrashLoopBackOff (got: $POD_STATUS)"
             kubectl get pods -l app=demo-app
             kubectl logs -l app=demo-app --tail=10 || true
+            exit 1
           fi
 
       - name: Run agent investigation

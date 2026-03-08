@@ -35,7 +35,7 @@ sleep 30
 
 echo "==> Verifying CrashLoopBackOff state"
 POD_STATUS=$(kubectl --context "kind-${CLUSTER_NAME}" get pods -l app=demo-app \
-  -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+  -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)
 POD_STATUS="${POD_STATUS:-unknown}"
 
 if [ "$POD_STATUS" = "CrashLoopBackOff" ]; then

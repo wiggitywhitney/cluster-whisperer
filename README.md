@@ -476,7 +476,7 @@ demo-app-748c9d8c54-8mngm   0/1     CrashLoopBackOff   41 (4m ago)    3h9m
 The logs show the same connection error from the Build and Run section:
 
 ```bash
-$ kubectl logs -l app=demo-app
+$ kubectl logs --previous -l app=demo-app
 [demo-app] Starting server...
 [demo-app] Connecting to database at postgres://db-service:5432/myapp...
 [demo-app] FATAL: Cannot connect to database at postgres://db-service:5432/myapp - getaddrinfo ENOTFOUND db-service

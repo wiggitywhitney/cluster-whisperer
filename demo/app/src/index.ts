@@ -33,7 +33,10 @@ async function main(): Promise<void> {
     `[demo-app] Connecting to database at ${DATABASE_URL}...`
   );
 
-  const pool = new pg.Pool({ connectionString: DATABASE_URL });
+  const pool = new pg.Pool({
+    connectionString: DATABASE_URL,
+    connectionTimeoutMillis: 5000,
+  });
 
   try {
     await checkDatabaseConnection(pool);
