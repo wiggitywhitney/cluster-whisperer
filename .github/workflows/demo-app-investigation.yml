@@ -51,8 +51,8 @@ jobs:
       - name: Deploy demo app to cluster
         run: |
           kubectl apply -f demo/app/k8s/
-          echo "Waiting 30s for CrashLoopBackOff..."
-          sleep 30
+          echo "Waiting 60s for CrashLoopBackOff..."
+          sleep 60
 
       - name: Verify CrashLoopBackOff state
         run: |

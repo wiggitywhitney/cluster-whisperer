@@ -30,8 +30,8 @@ kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Available=false \
   deployment/demo-app --timeout=10s 2>/dev/null || true
 
 # Give the pod time to crash and restart a few times
-echo "    Waiting 30s for CrashLoopBackOff to establish..."
-sleep 30
+echo "    Waiting 60s for CrashLoopBackOff to establish..."
+sleep 60
 
 echo "==> Verifying CrashLoopBackOff state"
 POD_STATUS=$(kubectl --context "kind-${CLUSTER_NAME}" get pods -l app=demo-app \
