@@ -35,15 +35,17 @@ sleep 30
 
 echo "==> Verifying CrashLoopBackOff state"
 POD_STATUS=$(kubectl --context "kind-${CLUSTER_NAME}" get pods -l app=demo-app \
-  -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "unknown")
+  -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+POD_STATUS="${POD_STATUS:-unknown}"
 
 if [ "$POD_STATUS" = "CrashLoopBackOff" ]; then
   echo "    Pod is in CrashLoopBackOff — demo scenario ready"
 else
-  echo "    Pod status: $POD_STATUS (expected CrashLoopBackOff)"
+  echo "    ERROR: Pod status: $POD_STATUS (expected CrashLoopBackOff)"
   echo "    Checking pod details..."
   kubectl --context "kind-${CLUSTER_NAME}" get pods -l app=demo-app
   kubectl --context "kind-${CLUSTER_NAME}" logs -l app=demo-app --tail=5 2>/dev/null || true
+  exit 1
 fi
 
 echo ""
