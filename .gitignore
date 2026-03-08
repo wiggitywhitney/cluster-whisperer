@@ -5,6 +5,13 @@ dist/
 .mcp.json
 .env
 .env.local
+.vals.yaml
+
+# Claude Code
+.claude/skills/
+
+# Progress tracking
+PROGRESS.md
 
 # Chroma local storage
 data/
@@ -15,3 +22,4 @@ chroma-data/
 
 # Personal notes
 journal/
+.claude/design-decisions.md

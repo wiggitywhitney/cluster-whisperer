@@ -3,6 +3,7 @@
 **Status**: Not Started
 **Priority**: High
 **Dependencies**: None
+**Execution Order**: 2 of 5 — Build early so everything else can test against it.
 **Branch**: `feature/prd-46-demo-app`
 
 ## Problem

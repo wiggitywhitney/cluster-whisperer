@@ -3,6 +3,7 @@
 **Status**: Not Started
 **Priority**: Medium
 **Dependencies**: None (but benefits from demo flow clarity in docs/choose-your-adventure-demo.md)
+**Execution Order**: 1 of 5 — Do first. Sharpens the narrative before building anything.
 **Branch**: N/A (docs-only, committed to main)
 
 ## Problem

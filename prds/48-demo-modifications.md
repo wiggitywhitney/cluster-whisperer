@@ -3,6 +3,7 @@
 **Status**: Not Started
 **Priority**: High
 **Dependencies**: PRD #47 (demo cluster, for end-to-end testing)
+**Execution Order**: 4 of 5 — Needs demo cluster for testing. Must complete before PRD #49 (Vercel agent uses the shared tool core and --agent flag).
 **Branch**: `feature/prd-48-demo-modifications`
 
 ## Problem
