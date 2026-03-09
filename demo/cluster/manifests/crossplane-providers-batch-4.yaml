@@ -1,0 +1,225 @@
+# GCP sub-providers batch 4
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-accessapproval
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-accessapproval:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-accesscontextmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-accesscontextmanager:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-alloydb
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-alloydb:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-apigee
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-apigee:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-beyondcorp
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-beyondcorp:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-bigquery
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-bigquery:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-bigtable
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-bigtable:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudcomposer
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudcomposer:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudfunctions
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudfunctions:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudplatform
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudplatform:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudrun
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudrun:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudscheduler
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudscheduler:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudtasks
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudtasks:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-compute
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-compute:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-container
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-container:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containerattached
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containerattached:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containeraws
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containeraws:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containerazure
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containerazure:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-datacatalog
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-datacatalog:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataflow
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataflow:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataplex
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataplex:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataproc
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataproc:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-datastream
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-datastream:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-developerconnect
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-developerconnect:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dns
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dns:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-endpoints
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-endpoints:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-firebaserules
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-firebaserules:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-gameservices
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-gameservices:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-gkehub
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-gkehub:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-healthcare
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-healthcare:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-iap
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-iap:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-identityplatform
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-identityplatform:v2.1.0

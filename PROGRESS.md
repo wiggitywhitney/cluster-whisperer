@@ -12,3 +12,6 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo app (PRD #46 M4): E2E agent investigation test — setup/teardown/investigate scripts, CI workflow, verified agent diagnoses missing database in 4-5 tool calls
 - Demo app (PRD #46 M4): Investigation flow documentation with expected agent steps, tool calls, and diagnosis path
 - Demo app (PRD #46 M5): README documentation — demo app section with structure, build/run instructions, and Kubernetes deployment with real CrashLoopBackOff output
+- Demo cluster (PRD #47 M1 partial): Kind cluster creation with dedicated KUBECONFIG, Crossplane Helm install, 148 sub-provider manifests with batched installation, CRD wait with progress indicators
+- Demo cluster (PRD #47 M6 partial): Teardown script with Kind cluster discovery (prefix pattern match) and KUBECONFIG cleanup
+- Demo cluster (PRD #47 decisions): Pivoted to GKE as first-class target — Kind single-node overwhelmed by 150 providers (41 GB RAM). Added `kind|gcp` mode design, curated provider subset for Kind

@@ -1,0 +1,1063 @@
+# Crossplane provider sub-providers for cluster-whisperer demo
+#
+# Installs ALL AWS and GCP service sub-providers to register 1,200+ CRDs.
+# The provider pods will be degraded (no ProviderConfig) but CRDs are fully
+# registered and discoverable. This is intentional — the demo only needs
+# CRDs for discovery, not actual cloud provisioning.
+#
+# Generated from the upbound/provider-aws and upbound/provider-gcp repos.
+#
+# The family providers MUST be listed first — sub-providers depend on them
+# for shared ProviderConfig handling.
+
+# Family providers (shared dependencies)
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-family-aws
+spec:
+  package: xpkg.upbound.io/upbound/provider-family-aws:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-family-gcp
+spec:
+  package: xpkg.upbound.io/upbound/provider-family-gcp:v2.1.0
+---
+# AWS sub-providers
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-acm
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-acm:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-acmpca
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-acmpca:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-amp
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-amp:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-apigateway
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-apigateway:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-apigatewayv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-apigatewayv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-apprunner
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-apprunner:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-appstream
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-appstream:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-athena
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-athena:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-autoscaling
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-autoscaling:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-backup
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-backup:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-batch
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-batch:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-bedrockagent
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-bedrockagent:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-budgets
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-budgets:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudformation
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudformation:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudfront
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudfront:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudsearch
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudsearch:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudwatch
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudwatch:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudwatchevents
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudwatchevents:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudwatchlogs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudwatchlogs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-codeartifact
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-codeartifact:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cognitoidentity
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cognitoidentity:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cognitoidp
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cognitoidp:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-connect
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-connect:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cur
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cur:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-datasync
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-datasync:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-dax
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-dax:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-devicefarm
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-devicefarm:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-directconnect
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-directconnect:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-dms
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-dms:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-docdb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-docdb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ds
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ds:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-dsql
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-dsql:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-dynamodb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-dynamodb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ebs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ebs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ec2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ec2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecr
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecr:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecrpublic
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecrpublic:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-efs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-efs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-eks
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-eks:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elasticache
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elasticache:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elbv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elbv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-firehose
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-firehose:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-fsx
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-fsx:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-gamelift
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-gamelift:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-globalaccelerator
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-globalaccelerator:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-glue
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-glue:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-grafana
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-grafana:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-iam
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-iam:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-identitystore
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-identitystore:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-iot
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-iot:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kafka
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kafka:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kafkaconnect
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kafkaconnect:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kendra
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kendra:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesis
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesis:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesisanalytics
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesisanalytics:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesisanalyticsv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesisanalyticsv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kms
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kms:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-lakeformation
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-lakeformation:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-lambda
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-lambda:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-licensemanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-licensemanager:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-medialive
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-medialive:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-memorydb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-memorydb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-mq
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-mq:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-mwaa
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-mwaa:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-neptune
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-neptune:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-networkfirewall
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-networkfirewall:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-networkmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-networkmanager:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-opensearch
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-opensearch:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-opensearchserverless
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-opensearchserverless:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-organization
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-organization:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-osis
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-osis:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-qldb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-qldb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ram
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ram:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-rds
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-rds:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-redshift
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-redshift:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-redshiftserverless
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-redshiftserverless:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-rolesanywhere
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-rolesanywhere:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-route53
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-route53:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-route53recoverycontrolconfig
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-route53recoverycontrolconfig:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-route53resolver
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-route53resolver:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-s3
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-s3:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-sagemaker
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-sagemaker:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-secretsmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-secretsmanager:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-servicecatalog
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-servicecatalog:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-servicediscovery
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-servicediscovery:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-sfn
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-sfn:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-sns
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-sns:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-sqs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-sqs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ssoadmin
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ssoadmin:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-transfer
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-transfer:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-verifiedaccess
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-verifiedaccess:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-vpclattice
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-vpclattice:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-wafv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-wafv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-accessapproval
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-accessapproval:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-accesscontextmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-accesscontextmanager:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-alloydb
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-alloydb:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-apigee
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-apigee:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-beyondcorp
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-beyondcorp:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-bigquery
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-bigquery:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-bigtable
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-bigtable:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudcomposer
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudcomposer:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudfunctions
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudfunctions:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudplatform
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudplatform:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudrun
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudrun:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudscheduler
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudscheduler:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-cloudtasks
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-cloudtasks:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-compute
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-compute:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-container
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-container:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containerattached
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containerattached:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containeraws
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containeraws:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-containerazure
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-containerazure:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-datacatalog
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-datacatalog:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataflow
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataflow:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataplex
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataplex:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dataproc
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dataproc:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-datastream
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-datastream:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-developerconnect
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-developerconnect:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-dns
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-dns:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-endpoints
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-endpoints:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-firebaserules
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-firebaserules:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-gameservices
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-gameservices:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-gkehub
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-gkehub:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-healthcare
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-healthcare:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-iap
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-iap:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-identityplatform
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-identityplatform:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-kms
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-kms:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-logging
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-logging:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-monitoring
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-monitoring:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-networksecurity
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-networksecurity:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-notebooks
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-notebooks:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-oslogin
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-oslogin:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-privateca
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-privateca:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-project
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-project:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-pubsub
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-pubsub:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-redis
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-redis:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-secretmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-secretmanager:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-servicenetworking
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-servicenetworking:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-sourcerepo
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-sourcerepo:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-spanner
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-spanner:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-sql
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-sql:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-storage
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-storage:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-storagetransfer
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-storagetransfer:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-tags
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-tags:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-tpu
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-tpu:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-vertexai
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-vertexai:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-vpcaccess
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-vpcaccess:v2.1.0

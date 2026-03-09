@@ -1,0 +1,7 @@
+# Crossplane Helm values for cluster-whisperer demo
+#
+# Minimal configuration — Crossplane itself is lightweight.
+# The heavy CRD registration comes from the providers installed separately.
+
+provider:
+  packages: []

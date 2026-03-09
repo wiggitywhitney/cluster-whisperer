@@ -1,0 +1,148 @@
+# GCP sub-providers batch 5
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-kms
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-kms:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-logging
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-logging:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-monitoring
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-monitoring:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-networksecurity
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-networksecurity:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-notebooks
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-notebooks:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-oslogin
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-oslogin:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-privateca
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-privateca:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-project
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-project:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-pubsub
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-pubsub:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-redis
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-redis:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-secretmanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-secretmanager:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-servicenetworking
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-servicenetworking:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-sourcerepo
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-sourcerepo:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-spanner
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-spanner:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-sql
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-sql:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-storage
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-storage:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-storagetransfer
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-storagetransfer:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-tags
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-tags:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-tpu
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-tpu:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-vertexai
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-vertexai:v2.1.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-gcp-vpcaccess
+spec:
+  package: xpkg.upbound.io/upbound/provider-gcp-vpcaccess:v2.1.0

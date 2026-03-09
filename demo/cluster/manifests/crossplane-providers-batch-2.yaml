@@ -1,0 +1,225 @@
+# AWS sub-providers batch 2
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-dynamodb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-dynamodb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ebs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ebs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ec2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ec2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecr
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecr:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecrpublic
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecrpublic:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ecs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-efs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-efs:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-eks
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-eks:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elasticache
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elasticache:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elb:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-elbv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-elbv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-firehose
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-firehose:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-fsx
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-fsx:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-gamelift
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-gamelift:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-globalaccelerator
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-globalaccelerator:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-glue
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-glue:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-grafana
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-grafana:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-iam
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-iam:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-identitystore
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-identitystore:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-iot
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-iot:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kafka
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kafka:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kafkaconnect
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kafkaconnect:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kendra
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kendra:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesis
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesis:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesisanalytics
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesisanalytics:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kinesisanalyticsv2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kinesisanalyticsv2:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-kms
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-kms:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-lakeformation
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-lakeformation:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-lambda
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-lambda:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-licensemanager
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-licensemanager:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-medialive
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-medialive:v2.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-memorydb
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-memorydb:v2.3.0
