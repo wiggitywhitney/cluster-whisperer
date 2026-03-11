@@ -26,9 +26,9 @@ rehearsals and the live demo; Kind is a lightweight fallback for quick local ite
 The setup script should be idempotent and the teardown script should cleanly destroy
 everything (including GKE clusters to avoid billing surprises).
 
-A key element: install all 148 individual Crossplane sub-providers (95 AWS + 53 GCP) to
-register 1,200+ CRDs without cloud credentials. On Kind, a curated subset of ~30-40
-providers keeps resource usage manageable while still providing enough CRDs for testing.
+A key element: install a curated subset of 35 Crossplane sub-providers (20 AWS + 15 GCP)
+to register ~1,000 CRDs without cloud credentials (Decision 15). Both Kind and GKE modes
+use the same subset — enough to feel overwhelming without being wasteful.
 Then define one Crossplane Composition/XRD as the platform team's approved PostgreSQL
 database — the "needle in the haystack" that the agent finds via semantic search.
 
@@ -37,8 +37,7 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - `./demo/cluster/setup.sh gcp` creates a complete demo environment on GKE
 - `./demo/cluster/setup.sh kind` creates a lightweight local environment for iteration
 - `./demo/cluster/teardown.sh` destroys all cluster-whisperer clusters (Kind and GKE)
-- After setup (GKE), `kubectl get crds | wc -l` shows 1,200+ CRDs
-- After setup (Kind), enough CRDs for semantic search testing (~400-600)
+- After setup, `kubectl get crds | wc -l` shows ~1,000 CRDs (Decision 15)
 - After setup, the demo app is in CrashLoopBackOff (missing database)
 - After setup, both Chroma and Qdrant are running and populated with CRD capabilities
 - After setup, both Jaeger and OTel Collector (with Datadog exporter) are receiving traces
@@ -58,21 +57,19 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 ### M1: Cluster Creation and Crossplane (GKE + Kind)
 - [x] `setup.sh` accepts mode argument: `kind` or `gcp` (Decision 9)
 - [x] Kind cluster creation with port mappings (Jaeger UI, OTLP receivers)
-- [x] GKE cluster creation (`demoo-ooclock`, `us-central1`, `n1-standard-4`, 3 nodes) (Decision 10)
+- [x] GKE cluster creation (`demoo-ooclock`, zonal auto-detect, `n2-standard-4`, 3 nodes) (Decisions 10, 13, 14)
 - [x] Separate prerequisites checks per mode: Kind (kind, docker) vs GCP (gcloud, gke-gcloud-auth-plugin) (Decision 9)
 - [x] KUBECONFIG isolation for Kind — dedicated `~/.kube/config-cluster-whisperer`
 - [x] KUBECONFIG isolation for GKE — set `KUBECONFIG` env var before `gcloud get-credentials` (Decision 11)
 - [x] Crossplane installation via Helm
-- [x] All 148 sub-providers manifest and batched installation logic
-- [x] Curated ~30-40 sub-provider subset for Kind mode (Decision 12)
+- [x] Curated 35 sub-provider manifest (20 AWS + 15 GCP) for both modes (Decisions 12, 15)
 - [x] Wait for CRD registration with progress indicators
-- [x] GKE: 1,200+ CRDs verified
-- [x] Kind: ~400-600 CRDs verified (curated subset)
+- [x] GKE: ~1,000 CRDs verified (Decision 15)
 
 ### M2: Platform Composition (The Right Answer)
 - [ ] Crossplane CompositeResourceDefinition (XRD) for the platform's approved PostgreSQL database
 - [ ] Crossplane Composition implementing the XRD
-- [ ] The Composition should be the "one right answer" that the agent finds among 1,200+ CRDs
+- [ ] The Composition should be the "one right answer" that the agent finds among ~1,000 CRDs
 - [ ] The XRD/Composition must produce rich enough metadata for the capability inference pipeline to generate a meaningful description
 - [ ] Verified: after capability inference, the vector DB can find this resource via "PostgreSQL database for my application"
 
@@ -125,9 +122,10 @@ demo/cluster/
 │   ├── jaeger.yaml       # Jaeger Helm values
 │   └── otel-collector.yaml  # OTel Collector Helm values (Datadog exporter)
 └── manifests/
-    ├── crossplane-providers.yaml  # Provider installations
-    ├── composition.yaml           # Platform PostgreSQL Composition
-    └── xrd.yaml                   # CompositeResourceDefinition
+    ├── crossplane-providers-batch-0.yaml  # Family providers (installed first)
+    ├── crossplane-providers-kind.yaml     # Curated 35 sub-providers (both modes)
+    ├── composition.yaml                   # Platform PostgreSQL Composition
+    └── xrd.yaml                           # CompositeResourceDefinition
 ```
 
 ### Setup Script Flow
@@ -135,10 +133,10 @@ demo/cluster/
 Usage: `./demo/cluster/setup.sh [kind|gcp]`
 
 1. Check prerequisites (mode-specific: Kind needs docker/kind, GCP needs gcloud/gke-gcloud-auth-plugin)
-2. Create cluster (Kind with port mappings, or GKE with 3× n1-standard-4 nodes)
+2. Create cluster (Kind with port mappings, or GKE zonal with 3× n2-standard-4 nodes)
 3. Write dedicated KUBECONFIG (`~/.kube/config-cluster-whisperer`)
-4. Install Crossplane via Helm
-5. Install Crossplane providers — all 148 on GKE, curated ~30-40 on Kind — wait for CRD registration
+4. Install Crossplane via Helm (2Gi memory limit for core pod)
+5. Install Crossplane providers — curated 35 sub-providers — wait for CRD registration (~1,000 CRDs)
 6. Apply platform Composition/XRD
 7. Deploy Chroma and Qdrant via Helm
 8. Deploy Jaeger and OTel Collector (with Datadog exporter) via Helm
@@ -165,18 +163,16 @@ collisions when creating/destroying clusters repeatedly during demo rehearsal.
 
 ### Crossplane Providers Without Credentials
 
-Installing the 148 individual sub-providers (95 AWS + 53 GCP) registers all CRDs
-without a ProviderConfig. The provider pods will be in a degraded state (can't
+A curated subset of 35 sub-providers (20 AWS + 15 GCP) registers ~1,000 CRDs without
+a ProviderConfig (Decision 15). The provider pods will be in a degraded state (can't
 reconcile), but the CRDs are fully registered and discoverable. This is intentional —
 the demo only needs the CRDs to exist for discovery, not to provision cloud resources.
 
 Sub-providers depend on their family providers (`provider-family-aws`,
 `provider-family-gcp`) for shared ProviderConfig handling. Family providers must be
-installed first. Providers are installed in batches of ~30 with settling pauses to
-avoid overwhelming the API server.
+installed first, then sub-providers are applied in a second batch.
 
-On Kind, only a curated subset of ~30-40 sub-providers is installed to keep resource
-usage within a single-node Docker container's limits (~400-600 CRDs).
+Both Kind and GKE modes use the same curated subset.
 
 ### The "Needle in the Haystack"
 
@@ -186,27 +182,29 @@ capability inference pipeline will analyze the XRD and generate a description li
 PostgreSQL with standard configuration." This description is what the agent finds
 when searching for "PostgreSQL database for my application."
 
-The 1,200+ CRDs from provider-aws and provider-gcp are the noise. The XRD is the signal.
+The ~1,000 CRDs from provider-aws and provider-gcp are the noise. The XRD is the signal.
 
 ### Timing Expectations
 
-**GKE mode** (first-class, all 150 providers):
+**GKE mode** (first-class target):
 - GKE cluster creation: ~5-10 minutes
 - Crossplane install: ~1 minute
-- CRD registration (all 148 sub-providers): ~5-10 minutes
+- CRD registration (35 sub-providers): ~10-15 minutes (cold start with image pulls)
 - Helm charts (Chroma, Qdrant, Jaeger, OTel Collector): ~2 minutes each
-- Capability inference pipeline: ~2-3 minutes (LLM calls for 1,200+ CRDs)
+- Capability inference pipeline: ~2-3 minutes (LLM calls for ~1,000 CRDs)
 - Instance sync: ~1-2 minutes
-- Total: approximately 20-25 minutes
+- Total: approximately 25-30 minutes
 
-**Kind mode** (lightweight, curated subset):
+**Kind mode** (lightweight fallback):
 - Kind cluster creation: ~30 seconds
 - Crossplane install: ~1 minute
-- CRD registration (~30-40 sub-providers): ~3-5 minutes
+- CRD registration (same 35 sub-providers): ~5-10 minutes
 - Remaining phases: same as GKE
-- Total: approximately 10-15 minutes
+- Total: approximately 15-20 minutes
 
-The setup script should show progress throughout.
+The setup script shows progress throughout. CRD wait timeout is 20 minutes to
+accommodate cold starts where all 37 container images (2 family + 35 sub-provider)
+must be pulled.
 
 ## Decision Log
 
@@ -222,7 +220,11 @@ The setup script should show progress throughout.
 | 2026-03-08 | Timestamped cluster names (`cluster-whisperer-YYYYMMDD-HHMMSS`) | Prevents naming collisions when creating/tearing down repeatedly. Matches spider-rainbows and kubecon-2026-gitops patterns. |
 | 2026-03-08 | GKE as first-class target, Kind as lightweight fallback | 150 provider pods overwhelm Kind (41 GB RAM, 1000%+ CPU, API server unresponsive). GKE handles this easily with real node resources. GKE is the rehearsal and live demo target. |
 | 2026-03-08 | `./setup.sh [kind\|gcp]` mode argument | Matches spider-rainbows and kubecon-2026-gitops pattern. Unified script with mode-specific functions for cluster creation, prerequisites, and provider count. |
-| 2026-03-08 | GCP config: `demoo-ooclock`, `us-central1`, `n1-standard-4`, 3 nodes | Same project/region as spider-rainbows and kubecon-2026-gitops. 3 nodes (not 1) to handle 150 provider pods. |
+| 2026-03-08 | GCP config: `demoo-ooclock`, auto-detect zone, `n2-standard-4`, 3 nodes (Decisions 13-15 updated this) | Same project as spider-rainbows and kubecon-2026-gitops. 3 zonal nodes for 35 provider pods. |
 | 2026-03-08 | KUBECONFIG isolation for both modes | Kind: copy kubeconfig. GKE: set `KUBECONFIG` env var before `gcloud get-credentials`. Both write to `~/.kube/config-cluster-whisperer`. |
 | 2026-03-08 | Kind uses curated ~30-40 sub-provider subset | All 148 sub-providers overwhelm Kind single-node cluster. Curated subset gives ~400-600 CRDs — enough for semantic search testing without killing the API server. |
-| 2026-03-08 | Individual sub-providers, not monolithic packages | Monolithic `provider-aws`/`provider-gcp` deprecated and removed from Upbound registry. Must use 148 individual sub-providers (95 AWS + 53 GCP) with family providers as dependencies. |
+| 2026-03-08 | Individual sub-providers, not monolithic packages | Monolithic `provider-aws`/`provider-gcp` deprecated and removed from Upbound registry. Must use individual sub-providers with family providers as dependencies. |
+| 2026-03-11 | n2-standard-4 machine type over n1-standard-4 | n1 is first-gen (Skylake/Broadwell), hit GCE_STOCKOUT in multiple zones. n2 (Cascade Lake) has better availability, 20% performance improvement, same price class. |
+| 2026-03-11 | Zonal cluster over regional cluster | Regional creates nodes × 3 zones (3 nodes × 3 = 9 = 36 CPUs, exceeds 32 CPU quota). Zonal gives exact node count. Demo doesn't need HA. |
+| 2026-03-11 | Curated 35 sub-providers for both modes (down from 148) | 1,900 CRDs was overkill — needed 4Gi memory, 90+ min registration, fragile. 35 providers give ~1,000 CRDs: still overwhelming for the demo narrative but needs only 2Gi memory, registers in ~15 min, and is more reliable. |
+| 2026-03-11 | Zone auto-detection via ipinfo.io timezone | Demo will be presented at KubeCon in Europe. Scripts must work in any region. `curl ipinfo.io/timezone` maps to nearest GCP zone. Override with `GCP_ZONE` env var. |

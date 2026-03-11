@@ -19,9 +19,8 @@ set -euo pipefail
 CLUSTER_NAME_PREFIX="cluster-whisperer"
 KUBECONFIG_PATH="${HOME}/.kube/config-cluster-whisperer"
 
-# GKE configuration (must match setup.sh)
+# GKE configuration
 GCP_PROJECT="demoo-ooclock"
-GCP_REGION="us-central1"
 
 # Colors
 RED='\033[0;31m'
@@ -88,7 +87,7 @@ delete_gke_cluster() {
     log_warning "This will take several minutes. The cluster incurs billing until fully deleted."
     if gcloud container clusters delete "${name}" \
         --project "${GCP_PROJECT}" \
-        --region "${zone}" \
+        --zone "${zone}" \
         --quiet; then
         log_success "GKE cluster '${name}' deleted"
     else

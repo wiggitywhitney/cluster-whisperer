@@ -1,7 +1,6 @@
-# Curated Crossplane sub-provider subset for Kind mode.
-# ~35 providers chosen for diverse, recognizable services that generate ~400-600 CRDs
-# without overwhelming a single-node Kind cluster.
-# GKE mode uses the full batch-0 through batch-5 files instead (all 148 sub-providers).
+# Curated Crossplane sub-provider subset for the cluster-whisperer demo.
+# 35 providers chosen for diverse, recognizable services that generate ~1,000 CRDs.
+# Used by both Kind and GKE modes — enough to feel overwhelming without being wasteful.
 
 # --- AWS sub-providers (20) ---
 

@@ -8,8 +8,8 @@
 # providing the "overwhelming Kubernetes environment" for the demo narrative.
 #
 # Usage:
-#   ./demo/cluster/setup.sh kind   # Local Kind cluster with curated provider subset (~400-600 CRDs)
-#   ./demo/cluster/setup.sh gcp    # GKE cluster with all 148 sub-providers (1,200+ CRDs)
+#   ./demo/cluster/setup.sh kind   # Local Kind cluster (~1,000 CRDs)
+#   ./demo/cluster/setup.sh gcp    # GKE cluster (~1,000 CRDs)
 #
 # The script uses a dedicated KUBECONFIG file (~/.kube/config-cluster-whisperer)
 # to avoid polluting the default kubeconfig.
@@ -33,8 +33,7 @@ CROSSPLANE_VERSION="2.2.0"
 
 # GKE configuration
 GCP_PROJECT="demoo-ooclock"
-GCP_REGION="us-central1"
-GKE_MACHINE_TYPE="n1-standard-4"
+GKE_MACHINE_TYPE="n2-standard-4"
 GKE_NUM_NODES=3
 
 # Colors
@@ -99,6 +98,78 @@ wait_for_pods() {
         log_error "Pods did not become ready: namespace=${namespace} label=${label}"
         return 1
     fi
+}
+
+# =============================================================================
+# GCP Zone Auto-Detection
+# =============================================================================
+
+# Detect the nearest GCP zone based on geographic location.
+# Uses ipinfo.io to geolocate, then maps to the nearest GCP region.
+# Override with GCP_ZONE environment variable: GCP_ZONE=europe-west1-b ./setup.sh gcp
+detect_gcp_zone() {
+    # Allow explicit override via environment variable
+    if [[ -n "${GCP_ZONE:-}" ]]; then
+        log_info "Using GCP zone from environment: ${GCP_ZONE}"
+        return
+    fi
+
+    log_info "Auto-detecting nearest GCP zone..."
+
+    # Geolocate via ipinfo.io (free, no API key needed, returns country/region/timezone)
+    local geo_info
+    geo_info=$(curl -s --max-time 5 https://ipinfo.io/json 2>/dev/null || true)
+
+    if [[ -z "${geo_info}" ]]; then
+        GCP_ZONE="us-central1-b"
+        log_warning "Could not detect location, defaulting to ${GCP_ZONE}"
+        return
+    fi
+
+    local timezone
+    timezone=$(echo "${geo_info}" | grep '"timezone"' | sed 's/.*: *"//;s/".*//' || true)
+
+    # Map timezone prefix to nearest GCP region with good capacity.
+    # Picks zone -b by default (avoids -a which is often most contended).
+    case "${timezone}" in
+        Europe/*)
+            GCP_ZONE="europe-west1-b"  # Belgium — low latency for most of Europe
+            ;;
+        Asia/Tokyo|Asia/Seoul)
+            GCP_ZONE="asia-northeast1-b"  # Tokyo
+            ;;
+        Asia/Shanghai|Asia/Hong_Kong|Asia/Taipei)
+            GCP_ZONE="asia-east1-b"  # Taiwan
+            ;;
+        Asia/Kolkata|Asia/Mumbai)
+            GCP_ZONE="asia-south1-b"  # Mumbai
+            ;;
+        Asia/Singapore|Asia/Jakarta)
+            GCP_ZONE="asia-southeast1-b"  # Singapore
+            ;;
+        Australia/*)
+            GCP_ZONE="australia-southeast1-b"  # Sydney
+            ;;
+        America/Sao_Paulo|America/Argentina/*)
+            GCP_ZONE="southamerica-east1-b"  # Sao Paulo
+            ;;
+        America/Los_Angeles|America/Vancouver|US/Pacific)
+            GCP_ZONE="us-west1-b"  # Oregon
+            ;;
+        America/Chicago|America/Denver|US/Central|US/Mountain)
+            GCP_ZONE="us-central1-b"  # Iowa
+            ;;
+        America/New_York|America/Toronto|US/Eastern)
+            GCP_ZONE="us-east1-b"  # South Carolina
+            ;;
+        *)
+            GCP_ZONE="us-central1-b"  # Iowa — good general default
+            ;;
+    esac
+
+    local country
+    country=$(echo "${geo_info}" | grep '"country"' | sed 's/.*: *"//;s/".*//' || true)
+    log_success "Detected location: ${country:-unknown} (${timezone:-unknown}) → ${GCP_ZONE}"
 }
 
 # =============================================================================
@@ -231,13 +302,18 @@ create_gke_cluster() {
 
     if gcloud container clusters create "${CLUSTER_NAME}" \
         --project "${GCP_PROJECT}" \
-        --region "${GCP_REGION}" \
+        --zone "${GCP_ZONE}" \
         --machine-type "${GKE_MACHINE_TYPE}" \
         --num-nodes "${GKE_NUM_NODES}" \
         --quiet; then
         log_success "GKE cluster '${CLUSTER_NAME}' created"
     else
         log_error "Failed to create GKE cluster"
+        # gcloud may leave a partial KUBECONFIG even on failure — clean it up
+        if [[ -f "${KUBECONFIG_PATH}" ]]; then
+            rm -f "${KUBECONFIG_PATH}"
+            log_info "Cleaned up partial KUBECONFIG"
+        fi
         exit 1
     fi
 
@@ -288,25 +364,15 @@ install_crossplane() {
 # =============================================================================
 
 install_crossplane_providers() {
-    if [[ "${MODE}" == "kind" ]]; then
-        log_info "Installing curated Crossplane provider subset for Kind..."
-        log_info "This registers ~400-600 CRDs. First run pulls images (slow)."
-    else
-        log_info "Installing all Crossplane providers in batches (AWS + GCP)..."
-        log_info "This registers 1,200+ CRDs. First run pulls ~150 images (slow)."
-    fi
+    log_info "Installing curated Crossplane provider subset (35 sub-providers)..."
+    log_info "This registers ~1,000 CRDs. First run pulls images (slow)."
     log_info "Subsequent runs use cached images and are much faster."
 
-    # Batch 0 is always required — family providers are shared dependencies.
+    # Batch 0 (family providers) is always required — sub-providers depend on it.
+    # Both modes use the same curated subset for fast, reliable setup.
     local batch_files
-    if [[ "${MODE}" == "kind" ]]; then
-        # Kind: family providers + curated subset only
-        batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-0.yaml" \
-                         "${SCRIPT_DIR}/manifests/crossplane-providers-kind.yaml" 2>/dev/null | sort)
-    else
-        # GKE: all batches for maximum CRD coverage
-        batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-"*.yaml 2>/dev/null | sort)
-    fi
+    batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-0.yaml" \
+                     "${SCRIPT_DIR}/manifests/crossplane-providers-kind.yaml" 2>/dev/null | sort)
 
     if [[ -z "${batch_files}" ]]; then
         log_error "No provider batch files found in ${SCRIPT_DIR}/manifests/"
@@ -347,15 +413,8 @@ install_crossplane_providers() {
 # Provider family packages install sub-providers that each register their own CRDs.
 # This is the slowest part of setup (5-10 minutes on GKE, 3-5 minutes on Kind).
 wait_for_crds() {
-    local target
-    local timeout
-    if [[ "${MODE}" == "kind" ]]; then
-        target=400   # Curated subset: ~400-600 CRDs expected
-        timeout=600  # 10 minutes — fewer providers but Kind is slower
-    else
-        target=1200  # All 148 sub-providers: 1,200+ CRDs expected
-        timeout=900  # 15 minutes — more providers but GKE has real resources
-    fi
+    local target=800   # Curated 35 sub-providers: ~1,000 CRDs expected
+    local timeout=1200 # 20 minutes — cold starts pull ~37 container images
     local elapsed=0
     local interval=10
     local prev_count=0
@@ -385,13 +444,8 @@ wait_for_crds() {
 
     # Didn't hit target but may still have enough CRDs for the demo
     local final_count
-    local min_acceptable
+    local min_acceptable=200  # Minimum CRD count to consider "good enough" for the demo
     final_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "${MODE}" == "kind" ]]; then
-        min_acceptable=200  # Kind: lower bar for curated subset
-    else
-        min_acceptable=500  # GKE: need substantial CRD count
-    fi
     if [[ $final_count -ge $min_acceptable ]]; then
         log_warning "CRD registration timed out with ${final_count} CRDs (target was ${target}+)"
         log_warning "This may be enough for the demo — check provider status:"
@@ -441,8 +495,11 @@ usage() {
     echo "Usage: $0 <kind|gcp>"
     echo ""
     echo "Modes:"
-    echo "  kind   Create a local Kind cluster with curated provider subset (~400-600 CRDs)"
-    echo "  gcp    Create a GKE cluster with all 148 sub-providers (1,200+ CRDs)"
+    echo "  kind   Create a local Kind cluster (~1,000 CRDs)"
+    echo "  gcp    Create a GKE cluster (~1,000 CRDs)"
+    echo ""
+    echo "Environment variables (gcp mode):"
+    echo "  GCP_ZONE    Override auto-detected zone (e.g., GCP_ZONE=europe-west1-b $0 gcp)"
     exit 1
 }
 
@@ -468,6 +525,7 @@ main() {
         check_prerequisites_kind
         create_kind_cluster
     else
+        detect_gcp_zone
         check_prerequisites_gcp
         create_gke_cluster
     fi
