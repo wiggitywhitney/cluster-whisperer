@@ -1,0 +1,114 @@
+# ABOUTME: Kubernetes manifests for cluster-whisperer serve mode.
+# ABOUTME: Runs the HTTP server in-cluster so k8s-vectordb-sync can push resource changes.
+
+# Service: exposes cluster-whisperer serve on port 3000 within the cluster.
+# The k8s-vectordb-sync controller sends instance sync and capability scan
+# payloads to this service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-whisperer
+  namespace: cluster-whisperer
+  labels:
+    app: cluster-whisperer
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: cluster-whisperer
+---
+# Deployment: runs cluster-whisperer in serve mode.
+# Connects to in-cluster Chroma for vector storage.
+# API keys are injected from the cluster-whisperer-keys secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-whisperer
+  namespace: cluster-whisperer
+  labels:
+    app: cluster-whisperer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-whisperer
+  template:
+    metadata:
+      labels:
+        app: cluster-whisperer
+    spec:
+      serviceAccountName: cluster-whisperer
+      containers:
+        - name: cluster-whisperer
+          image: cluster-whisperer:latest
+          imagePullPolicy: Never
+          args: ["serve", "--chroma-url", "http://chroma-chromadb.chroma:8000"]
+          ports:
+            - containerPort: 3000
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-whisperer-keys
+                  key: ANTHROPIC_API_KEY
+            - name: VOYAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-whisperer-keys
+                  key: VOYAGE_API_KEY
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+# ServiceAccount: cluster-whisperer serve needs kubectl access to run
+# kubectl explain and kubectl get for the capability and instance pipelines.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-whisperer
+  namespace: cluster-whisperer
+---
+# ClusterRole: read-only access to all resources for kubectl operations
+# within the capability inference and instance sync pipelines.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-whisperer
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+# ClusterRoleBinding: bind the read-only role to the service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-whisperer
+subjects:
+  - kind: ServiceAccount
+    name: cluster-whisperer
+    namespace: cluster-whisperer
+roleRef:
+  kind: ClusterRole
+  name: cluster-whisperer
+  apiGroup: rbac.authorization.k8s.io

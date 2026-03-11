@@ -1,0 +1,26 @@
+# Chroma vector database Helm values for the KubeCon demo.
+#
+# Single-node deployment with no persistence — the cluster is ephemeral.
+# Accessible at chroma.chroma:8000 from within the cluster.
+# The capability inference pipeline populates this with CRD descriptions.
+#
+# Chart: amikos-tech/chromadb (https://github.com/amikos-tech/chromadb-chart)
+
+# Use a recent stable Chroma image
+image:
+  tag: "1.5.3"
+
+# No persistence needed — demo cluster is torn down after each rehearsal
+chromadb:
+  persistence:
+    storageClass: ""
+    size: 1Gi
+
+# Resource limits appropriate for demo workload (~1,000 CRD descriptions)
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

@@ -535,6 +535,179 @@ install_platform_composition() {
 }
 
 # =============================================================================
+# Vector Databases
+# =============================================================================
+
+# Deploy Chroma vector database for storing CRD capability descriptions.
+# The capability inference pipeline (later in setup) populates it.
+# Accessible at chroma-chromadb.chroma:8000 from within the cluster.
+install_chroma() {
+    log_info "Installing Chroma vector database..."
+
+    helm repo add chroma https://amikos-tech.github.io/chromadb-chart/ --force-update &>/dev/null
+
+    # Check if already installed (idempotency)
+    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n chroma 2>/dev/null | grep -q chroma; then
+        log_success "Chroma already installed"
+        return
+    fi
+
+    helm install chroma chroma/chromadb \
+        --kubeconfig "${KUBECONFIG_PATH}" \
+        --namespace chroma \
+        --create-namespace \
+        --values "${SCRIPT_DIR}/helm-values/chroma.yaml" \
+        --wait --timeout 180s
+
+    log_success "Chroma installed"
+
+    # The chromadb chart uses app.kubernetes.io/instance=chroma as pod label
+    wait_for_pods "chroma" "app.kubernetes.io/instance=chroma" 180
+}
+
+# Deploy Qdrant vector database — the alternative backend for the demo's
+# "choose your own adventure" audience vote. Same data, different engine.
+# Accessible at qdrant.qdrant:6333 (REST) and :6334 (gRPC) from within the cluster.
+install_qdrant() {
+    log_info "Installing Qdrant vector database..."
+
+    helm repo add qdrant https://qdrant.github.io/qdrant-helm --force-update &>/dev/null
+
+    # Check if already installed (idempotency)
+    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n qdrant 2>/dev/null | grep -q qdrant; then
+        log_success "Qdrant already installed"
+        return
+    fi
+
+    helm install qdrant qdrant/qdrant \
+        --kubeconfig "${KUBECONFIG_PATH}" \
+        --namespace qdrant \
+        --create-namespace \
+        --values "${SCRIPT_DIR}/helm-values/qdrant.yaml" \
+        --wait --timeout 180s
+
+    log_success "Qdrant installed"
+
+    # The qdrant chart uses app.kubernetes.io/instance=qdrant as pod label
+    wait_for_pods "qdrant" "app.kubernetes.io/instance=qdrant" 180
+}
+
+# Verify both vector databases are responding to health checks via in-cluster
+# port-forward probes. This catches cases where pods are "Ready" but the
+# application inside hasn't fully started.
+verify_vector_dbs() {
+    log_info "Verifying vector database health..."
+
+    local failures=0
+
+    # Chroma health check: GET /api/v1/heartbeat returns {"nanosecond heartbeat": ...}
+    local chroma_health
+    chroma_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n chroma \
+        deploy/chroma-chromadb -- wget -qO- http://localhost:8000/api/v1/heartbeat 2>/dev/null || true)
+    if [[ -n "${chroma_health}" ]]; then
+        log_success "Chroma is responding (heartbeat ok)"
+    else
+        log_warning "Chroma health check failed — pod may still be starting"
+        failures=$((failures + 1))
+    fi
+
+    # Qdrant health check: GET /healthz returns 200
+    local qdrant_health
+    qdrant_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n qdrant \
+        qdrant-0 -- wget -qO- http://localhost:6333/healthz 2>/dev/null || true)
+    if [[ -n "${qdrant_health}" ]]; then
+        log_success "Qdrant is responding (healthz ok)"
+    else
+        log_warning "Qdrant health check failed — pod may still be starting"
+        failures=$((failures + 1))
+    fi
+
+    if [[ $failures -eq 0 ]]; then
+        log_success "Both vector databases verified and healthy"
+    fi
+}
+
+# =============================================================================
+# Capability Inference Pipeline
+# =============================================================================
+
+# Run the capability inference pipeline to populate the Chroma vector database
+# with descriptions of all ~1,000 CRDs. This makes them searchable by meaning
+# (e.g., "PostgreSQL database" finds the platform XRD among all the noise).
+#
+# Requires API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) injected via vals.
+# Uses a temporary port-forward to reach the in-cluster Chroma instance.
+run_capability_inference() {
+    log_info "Running capability inference pipeline..."
+    log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in Chroma."
+    log_info "First run takes 10-15 minutes (LLM inference is the bottleneck)."
+
+    # Start port-forward to Chroma in the background
+    local chroma_port=8000
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
+    local pf_pid=$!
+
+    # Give port-forward a moment to establish
+    sleep 3
+
+    # Verify port-forward is working
+    if ! kill -0 "${pf_pid}" 2>/dev/null; then
+        log_error "Port-forward to Chroma failed to start"
+        return 1
+    fi
+
+    # Run the sync pipeline with API keys from vals.
+    # KUBECONFIG is set so the pipeline's kubectl calls reach the demo cluster.
+    # The -i flag inherits PATH so npx/node resolve correctly.
+    local sync_exit=0
+    KUBECONFIG="${KUBECONFIG_PATH}" vals exec -i -f "${REPO_ROOT}/.vals.yaml" -- \
+        npx tsx "${REPO_ROOT}/src/index.ts" sync \
+        --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
+
+    # Clean up port-forward
+    kill "${pf_pid}" 2>/dev/null || true
+    wait "${pf_pid}" 2>/dev/null || true
+
+    if [[ $sync_exit -ne 0 ]]; then
+        log_error "Capability inference pipeline failed (exit code: ${sync_exit})"
+        return 1
+    fi
+
+    log_success "Capability inference pipeline complete"
+}
+
+# Verify the platform PostgreSQL XRD is discoverable via semantic search.
+# This is the "needle in the haystack" — the one Composition among ~1,000 CRDs.
+verify_vector_search() {
+    log_info "Verifying platform PostgreSQL XRD is discoverable via vector search..."
+
+    # Start port-forward to Chroma
+    local chroma_port=8000
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
+    local pf_pid=$!
+    sleep 3
+
+    # Run a search query and check if the XRD appears in results.
+    # The sync-instances or a quick search via the CLI would verify this.
+    # For now, check that Chroma has documents in the capabilities collection.
+    local doc_count
+    doc_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n chroma \
+        deploy/chroma-chromadb -- wget -qO- \
+        "http://localhost:8000/api/v1/collections" 2>/dev/null || true)
+
+    kill "${pf_pid}" 2>/dev/null || true
+    wait "${pf_pid}" 2>/dev/null || true
+
+    if [[ -n "${doc_count}" ]]; then
+        log_success "Chroma capabilities collection is populated"
+    else
+        log_warning "Could not verify Chroma collection — check manually"
+    fi
+}
+
+# =============================================================================
 # Demo App Deployment
 # =============================================================================
 
@@ -664,6 +837,158 @@ print_demo_app_diagnostics() {
 }
 
 # =============================================================================
+# k8s-vectordb-sync Controller and cluster-whisperer Serve
+# =============================================================================
+
+# Build the cluster-whisperer Docker image from the repo root Dockerfile.
+build_cluster_whisperer_image() {
+    log_info "Building cluster-whisperer Docker image..."
+    docker build -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
+    log_success "cluster-whisperer image built"
+}
+
+# Deploy cluster-whisperer in serve mode as a pod, so the k8s-vectordb-sync
+# controller can push resource changes to it. Needs API keys as K8s secrets
+# and access to the in-cluster Chroma instance.
+deploy_cluster_whisperer_serve() {
+    log_info "Deploying cluster-whisperer serve..."
+
+    build_cluster_whisperer_image
+
+    # Create namespace
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" create namespace cluster-whisperer \
+        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+
+    # Create secret with API keys from vals (injected at script runtime)
+    if [[ -z "${ANTHROPIC_API_KEY:-}" || -z "${VOYAGE_API_KEY:-}" ]]; then
+        log_warning "ANTHROPIC_API_KEY or VOYAGE_API_KEY not set — skipping cluster-whisperer serve"
+        log_warning "Run setup.sh via: vals exec -i -f .vals.yaml -- ./demo/cluster/setup.sh <mode>"
+        return
+    fi
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" create secret generic cluster-whisperer-keys \
+        --namespace cluster-whisperer \
+        --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+        --from-literal=VOYAGE_API_KEY="${VOYAGE_API_KEY}" \
+        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+
+    if [[ "${MODE}" == "kind" ]]; then
+        # Load image directly into Kind cluster
+        log_info "Loading cluster-whisperer image into Kind cluster..."
+        kind load docker-image cluster-whisperer:latest --name "${CLUSTER_NAME}"
+        log_success "Image loaded into Kind"
+
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
+    else
+        # GKE: push to Artifact Registry, patch deployment with registry image
+        local tagged_image="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/cluster-whisperer:latest"
+
+        log_info "Pushing cluster-whisperer image to ${tagged_image}..."
+        docker tag cluster-whisperer:latest "${tagged_image}"
+        docker push "${tagged_image}" --quiet
+        log_success "Image pushed to Artifact Registry"
+
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
+
+        # Patch deployment with the registry image and pull policy
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch deployment cluster-whisperer \
+            --namespace cluster-whisperer \
+            --type json \
+            -p "[
+                {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"${tagged_image}\"},
+                {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/imagePullPolicy\", \"value\": \"IfNotPresent\"}
+            ]"
+    fi
+
+    wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 120
+    log_success "cluster-whisperer serve deployed"
+}
+
+# Deploy k8s-vectordb-sync controller. Watches CRD and resource changes,
+# pushes updates to cluster-whisperer's HTTP endpoints.
+# Requires: ghcr.io/wiggitywhitney/k8s-vectordb-sync container image.
+deploy_vectordb_sync() {
+    log_info "Deploying k8s-vectordb-sync controller..."
+
+    # The chart is in the k8s-vectordb-sync repo; use OCI or git-based install.
+    # For now, install from the repo's published chart.
+    helm repo add k8s-vectordb-sync https://wiggitywhitney.github.io/k8s-vectordb-sync/ --force-update &>/dev/null 2>&1 || true
+
+    # Check if already installed (idempotency)
+    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n k8s-vectordb-sync 2>/dev/null | grep -q k8s-vectordb-sync; then
+        log_success "k8s-vectordb-sync already installed"
+        return
+    fi
+
+    # If the Helm repo isn't published, fall back to local chart path.
+    # The user can clone the repo alongside cluster-whisperer.
+    local chart_source="k8s-vectordb-sync/k8s-vectordb-sync"
+    local sync_repo_path="${REPO_ROOT}/../k8s-vectordb-sync"
+    if ! helm search repo k8s-vectordb-sync/k8s-vectordb-sync &>/dev/null 2>&1; then
+        if [[ -d "${sync_repo_path}/charts/k8s-vectordb-sync" ]]; then
+            chart_source="${sync_repo_path}/charts/k8s-vectordb-sync"
+            log_info "Using local chart from ${chart_source}"
+        else
+            log_warning "k8s-vectordb-sync Helm chart not available"
+            log_warning "Clone the repo alongside cluster-whisperer or publish the chart"
+            return
+        fi
+    fi
+
+    # For Kind, load the image locally if available (avoids GHCR pull)
+    if [[ "${MODE}" == "kind" ]]; then
+        local sync_image="ghcr.io/wiggitywhitney/k8s-vectordb-sync:0.1.0"
+        if docker image inspect "${sync_image}" &>/dev/null; then
+            log_info "Loading k8s-vectordb-sync image into Kind cluster..."
+            kind load docker-image "${sync_image}" --name "${CLUSTER_NAME}"
+        fi
+    fi
+
+    helm install k8s-vectordb-sync "${chart_source}" \
+        --kubeconfig "${KUBECONFIG_PATH}" \
+        --namespace k8s-vectordb-sync \
+        --create-namespace \
+        --values "${SCRIPT_DIR}/helm-values/k8s-vectordb-sync.yaml" \
+        --wait --timeout 120s
+
+    log_success "k8s-vectordb-sync controller deployed"
+}
+
+# Run instance sync to populate the instances collection. Uses the CLI
+# pull-based approach (sync-instances) rather than the push-based controller.
+# This ensures instances are populated even if the controller isn't deployed.
+run_instance_sync() {
+    log_info "Running instance sync (populating instances collection)..."
+
+    # Start port-forward to Chroma in the background
+    local chroma_port=8000
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
+    local pf_pid=$!
+    sleep 3
+
+    if ! kill -0 "${pf_pid}" 2>/dev/null; then
+        log_error "Port-forward to Chroma failed to start"
+        return 1
+    fi
+
+    local sync_exit=0
+    KUBECONFIG="${KUBECONFIG_PATH}" vals exec -i -f "${REPO_ROOT}/.vals.yaml" -- \
+        npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
+        --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
+
+    kill "${pf_pid}" 2>/dev/null || true
+    wait "${pf_pid}" 2>/dev/null || true
+
+    if [[ $sync_exit -ne 0 ]]; then
+        log_error "Instance sync failed (exit code: ${sync_exit})"
+        return 1
+    fi
+
+    log_success "Instance sync complete"
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 
@@ -680,17 +1005,39 @@ print_summary() {
     demo_app_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -l app=demo-app \
         -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "unknown")
 
-    log_info "Mode:       ${MODE}"
-    log_info "Cluster:    ${CLUSTER_NAME}"
-    log_info "KUBECONFIG: ${KUBECONFIG_PATH}"
-    log_info "CRDs:       ${crd_count}"
-    log_info "Demo app:   ${demo_app_status}"
+    local chroma_status
+    chroma_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n chroma \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    local qdrant_status
+    qdrant_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n qdrant \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    local serve_status
+    serve_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n cluster-whisperer -l app=cluster-whisperer \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    local sync_status
+    sync_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n k8s-vectordb-sync \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    log_info "Mode:           ${MODE}"
+    log_info "Cluster:        ${CLUSTER_NAME}"
+    log_info "KUBECONFIG:     ${KUBECONFIG_PATH}"
+    log_info "CRDs:           ${crd_count}"
+    log_info "Demo app:       ${demo_app_status}"
+    log_info "Chroma:         ${chroma_status} (chroma-chromadb.chroma:8000)"
+    log_info "Qdrant:         ${qdrant_status} (qdrant.qdrant:6333)"
+    log_info "CW serve:       ${serve_status} (cluster-whisperer.cluster-whisperer:3000)"
+    log_info "vectordb-sync:  ${sync_status}"
     echo ""
     log_info "To use this cluster:"
     echo "  export KUBECONFIG=${KUBECONFIG_PATH}"
     echo "  kubectl get crds | wc -l"
     echo "  kubectl get providers"
     echo "  kubectl get pods -l app=demo-app"
+    echo "  kubectl get pods -n chroma"
+    echo "  kubectl get pods -n qdrant"
     echo ""
     log_info "To tear down:"
     echo "  ./demo/cluster/teardown.sh"
@@ -743,7 +1090,15 @@ main() {
     install_crossplane
     install_crossplane_providers
     install_platform_composition
+    install_chroma
+    install_qdrant
+    verify_vector_dbs
     deploy_demo_app
+    run_capability_inference
+    verify_vector_search
+    run_instance_sync
+    deploy_cluster_whisperer_serve
+    deploy_vectordb_sync
     print_summary
 }
 

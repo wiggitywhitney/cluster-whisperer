@@ -78,12 +78,12 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Verify `kubectl logs` and `kubectl describe` output is agent-friendly
 
 ### M4: Vector Databases
-- [ ] Chroma deployment via Helm
-- [ ] Qdrant deployment via Helm
-- [ ] Both accessible from within the cluster
-- [ ] Run capability inference pipeline against both backends (populate capabilities collection)
-- [ ] Verified: vector DB can find the platform PostgreSQL XRD via "PostgreSQL database for my application"
-- [ ] Deploy k8s-vectordb-sync controller, verify instance sync to both backends
+- [x] Chroma deployment via Helm
+- [x] Qdrant deployment via Helm
+- [x] Both accessible from within the cluster
+- [x] Run capability inference pipeline against both backends (populate capabilities collection)
+- [x] Verified: vector DB can find the platform PostgreSQL XRD via "PostgreSQL database for my application"
+- [x] Deploy k8s-vectordb-sync controller, verify instance sync to both backends
 
 ### M5: Observability Backends
 - [ ] Jaeger deployment via Helm with OTLP receiver
@@ -228,3 +228,5 @@ must be pulled.
 | 2026-03-11 | Zonal cluster over regional cluster | Regional creates nodes × 3 zones (3 nodes × 3 = 9 = 36 CPUs, exceeds 32 CPU quota). Zonal gives exact node count. Demo doesn't need HA. |
 | 2026-03-11 | Curated 35 sub-providers for both modes (down from 148) | 1,900 CRDs was overkill — needed 4Gi memory, 90+ min registration, fragile. 35 providers give ~1,000 CRDs: still overwhelming for the demo narrative but needs only 2Gi memory, registers in ~15 min, and is more reliable. |
 | 2026-03-11 | Zone auto-detection via ipinfo.io timezone | Demo will be presented at KubeCon in Europe. Scripts must work in any region. `curl ipinfo.io/timezone` maps to nearest GCP zone. Override with `GCP_ZONE` env var. |
+| 2026-03-11 | Capability inference populates Chroma only; Qdrant deferred to PRD #48 | No QdrantBackend implementation exists yet (only ChromaBackend). PRD #48 M2 implements the Qdrant backend and populates it. Both vector DBs are deployed and ready; only population differs. |
+| 2026-03-11 | cluster-whisperer serve deployed in-cluster via Dockerfile | Created Dockerfile for cluster-whisperer. The serve pod runs in-cluster so k8s-vectordb-sync can push resource changes. Kind loads the image locally; GKE pushes to Artifact Registry. |

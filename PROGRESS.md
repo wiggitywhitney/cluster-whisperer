@@ -24,6 +24,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M2): 14 manifest validation tests (YAML structure, field descriptions, inference pipeline compatibility)
 
 - (2026-03-11) Demo cluster (PRD #47 M3): Demo app deployment in setup.sh — Kind builds and loads image, GKE pushes to Artifact Registry with deployment patching, CrashLoopBackOff verification, agent-friendly log/describe diagnostics
+- (2026-03-11) Demo cluster (PRD #47 M4): Chroma and Qdrant Helm chart deployments with health verification, capability inference pipeline integration via port-forward, instance sync via CLI
+- (2026-03-11) Demo cluster (PRD #47 M4): cluster-whisperer Dockerfile for in-cluster serve mode, Kubernetes manifests (Deployment, Service, RBAC), k8s-vectordb-sync controller deployment via Helm
 
 ### Changed
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
