@@ -73,9 +73,9 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] The XRD/Composition must produce rich enough metadata for the capability inference pipeline to generate a meaningful description
 
 ### M3: Demo App Deployment
-- [ ] Deploy demo app from PRD #46 into the cluster
-- [ ] Verify CrashLoopBackOff status (DATABASE_URL points to nonexistent service)
-- [ ] Verify `kubectl logs` and `kubectl describe` output is agent-friendly
+- [x] Deploy demo app from PRD #46 into the cluster
+- [x] Verify CrashLoopBackOff status (DATABASE_URL points to nonexistent service)
+- [x] Verify `kubectl logs` and `kubectl describe` output is agent-friendly
 
 ### M4: Vector Databases
 - [ ] Chroma deployment via Helm

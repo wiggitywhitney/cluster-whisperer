@@ -23,6 +23,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M2): setup.sh integration — installs function-patch-and-transform, applies XRD with CRD registration wait, then Composition
 - Demo cluster (PRD #47 M2): 14 manifest validation tests (YAML structure, field descriptions, inference pipeline compatibility)
 
+- (2026-03-11) Demo cluster (PRD #47 M3): Demo app deployment in setup.sh — Kind builds and loads image, GKE pushes to Artifact Registry with deployment patching, CrashLoopBackOff verification, agent-friendly log/describe diagnostics
+
 ### Changed
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
 - Demo cluster (PRD #47 M1): Switched to n2-standard-4 machine type (n1 hit GCE_STOCKOUT), zonal clusters (regional exceeded CPU quota), zone auto-detection via ipinfo.io timezone

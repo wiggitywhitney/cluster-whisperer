@@ -36,6 +36,11 @@ GCP_PROJECT="demoo-ooclock"
 GKE_MACHINE_TYPE="n2-standard-4"
 GKE_NUM_NODES=3
 
+# Artifact Registry for GKE demo app image
+AR_LOCATION="us"
+AR_REPO="cluster-whisperer"
+AR_IMAGE="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/demo-app"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -208,6 +213,7 @@ check_prerequisites_gcp() {
     command -v gcloud &>/dev/null || missing+=("gcloud")
     command -v kubectl &>/dev/null || missing+=("kubectl")
     command -v helm &>/dev/null || missing+=("helm")
+    command -v docker &>/dev/null || missing+=("docker")
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing[*]}"
@@ -232,6 +238,12 @@ check_prerequisites_gcp() {
     # Verify project access
     if ! gcloud projects describe "${GCP_PROJECT}" &>/dev/null; then
         log_error "Cannot access GCP project '${GCP_PROJECT}'. Check permissions."
+        exit 1
+    fi
+
+    # Verify Docker is running (needed to build and push demo app image)
+    if ! docker info &>/dev/null; then
+        log_error "Docker is not running (needed to build demo app image)"
         exit 1
     fi
 
@@ -523,6 +535,135 @@ install_platform_composition() {
 }
 
 # =============================================================================
+# Demo App Deployment
+# =============================================================================
+
+# Build the demo app Docker image from demo/app/.
+# Returns the image tag to use for kubectl apply.
+build_demo_app_image() {
+    local demo_app_dir="${REPO_ROOT}/demo/app"
+
+    log_info "Building demo app Docker image..."
+    docker build -t demo-app:latest "${demo_app_dir}" --quiet
+    log_success "Demo app image built"
+}
+
+# Deploy the demo app into the cluster. The app intentionally crashes because
+# DATABASE_URL points to a non-existent service — producing CrashLoopBackOff
+# as the starting scenario for the cluster-whisperer agent.
+deploy_demo_app() {
+    local demo_app_dir="${REPO_ROOT}/demo/app"
+
+    build_demo_app_image
+
+    if [[ "${MODE}" == "kind" ]]; then
+        deploy_demo_app_kind "${demo_app_dir}"
+    else
+        deploy_demo_app_gke "${demo_app_dir}"
+    fi
+
+    wait_for_crashloop
+    print_demo_app_diagnostics
+}
+
+# Kind: load image directly into the cluster, apply manifests as-is.
+deploy_demo_app_kind() {
+    local demo_app_dir="$1"
+
+    log_info "Loading demo app image into Kind cluster..."
+    kind load docker-image demo-app:latest --name "${CLUSTER_NAME}"
+    log_success "Image loaded into Kind"
+
+    log_info "Applying demo app manifests..."
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${demo_app_dir}/k8s/"
+    log_success "Demo app deployed (Kind)"
+}
+
+# GKE: push image to Artifact Registry, apply manifests with patched image reference.
+deploy_demo_app_gke() {
+    local demo_app_dir="$1"
+    local tagged_image="${AR_IMAGE}:latest"
+
+    # Create Artifact Registry repo if it doesn't exist (idempotent)
+    if ! gcloud artifacts repositories describe "${AR_REPO}" \
+        --project "${GCP_PROJECT}" \
+        --location "${AR_LOCATION}" &>/dev/null 2>&1; then
+        log_info "Creating Artifact Registry repository '${AR_REPO}'..."
+        gcloud artifacts repositories create "${AR_REPO}" \
+            --project "${GCP_PROJECT}" \
+            --location "${AR_LOCATION}" \
+            --repository-format docker \
+            --quiet
+        log_success "Artifact Registry repository created"
+    fi
+
+    # Configure Docker auth for Artifact Registry
+    gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --quiet 2>/dev/null
+
+    log_info "Pushing demo app image to ${tagged_image}..."
+    docker tag demo-app:latest "${tagged_image}"
+    docker push "${tagged_image}" --quiet
+    log_success "Image pushed to Artifact Registry"
+
+    # Apply manifests, then patch the deployment with the registry image.
+    # The base manifests use imagePullPolicy: Never (for Kind). GKE needs
+    # a real image reference and IfNotPresent pull policy.
+    log_info "Applying demo app manifests..."
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${demo_app_dir}/k8s/"
+
+    log_info "Patching deployment for GKE image..."
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" patch deployment demo-app \
+        --type json \
+        -p "[
+            {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"${tagged_image}\"},
+            {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/imagePullPolicy\", \"value\": \"IfNotPresent\"}
+        ]"
+    log_success "Demo app deployed (GKE)"
+}
+
+# Wait for the demo app pod to enter CrashLoopBackOff. This confirms the
+# demo scenario is ready: the app crashes because db-service doesn't exist.
+wait_for_crashloop() {
+    local timeout=120
+    local elapsed=0
+    local interval=5
+    local pod_status=""
+
+    log_info "Waiting for demo app CrashLoopBackOff (timeout: ${timeout}s)..."
+
+    while [[ $elapsed -lt $timeout ]]; do
+        pod_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -l app=demo-app \
+            -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)
+
+        if [[ "${pod_status}" == "CrashLoopBackOff" ]]; then
+            log_success "Demo app is in CrashLoopBackOff — demo scenario ready"
+            return 0
+        fi
+
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_warning "Demo app did not reach CrashLoopBackOff within ${timeout}s (got: ${pod_status:-unknown})"
+    log_warning "The pod may still be in early restart cycles — check manually"
+    return 0
+}
+
+# Print demo app logs and describe output so the user can verify they're
+# agent-friendly (single-line error messages, parseable by cluster-whisperer).
+print_demo_app_diagnostics() {
+    echo ""
+    log_info "Demo app diagnostics (verify agent-friendly output):"
+    echo ""
+    echo "--- kubectl logs ---"
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" logs -l app=demo-app --tail=10 2>/dev/null || true
+    echo ""
+    echo "--- kubectl describe pod (events) ---"
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" describe pod -l app=demo-app 2>/dev/null | tail -20 || true
+    echo ""
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 
@@ -535,15 +676,21 @@ print_summary() {
     log_success "Demo Cluster Ready (${MODE} mode)"
     log_success "=============================================="
     echo ""
+    local demo_app_status
+    demo_app_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -l app=demo-app \
+        -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "unknown")
+
     log_info "Mode:       ${MODE}"
     log_info "Cluster:    ${CLUSTER_NAME}"
     log_info "KUBECONFIG: ${KUBECONFIG_PATH}"
     log_info "CRDs:       ${crd_count}"
+    log_info "Demo app:   ${demo_app_status}"
     echo ""
     log_info "To use this cluster:"
     echo "  export KUBECONFIG=${KUBECONFIG_PATH}"
     echo "  kubectl get crds | wc -l"
     echo "  kubectl get providers"
+    echo "  kubectl get pods -l app=demo-app"
     echo ""
     log_info "To tear down:"
     echo "  ./demo/cluster/teardown.sh"
@@ -596,6 +743,7 @@ main() {
     install_crossplane
     install_crossplane_providers
     install_platform_composition
+    deploy_demo_app
     print_summary
 }
 
