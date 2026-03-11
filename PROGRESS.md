@@ -17,6 +17,12 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M6): Teardown script with Kind and GKE cluster discovery/deletion, billing warnings for GKE, KUBECONFIG cleanup
 - Demo cluster (PRD #47 decisions): Pivoted to GKE as first-class target — Kind single-node overwhelmed by 150 providers (41 GB RAM). Added `kind|gcp` mode design, curated provider subset for Kind
 
+- Demo cluster (PRD #47 M2): Platform PostgreSQL XRD (apiextensions.crossplane.io/v2) and Composition (Pipeline mode with function-patch-and-transform) — the "needle in the haystack" among ~1,000 CRDs
+- Demo cluster (PRD #47 M2): XRD defines PostgreSQLInstance with rich field descriptions (engine, version, storage, HA, backup, network) for inference pipeline discovery
+- Demo cluster (PRD #47 M2): Composition maps to AWS RDS Instance with size-to-instance-class transform, Multi-AZ, and subnet group
+- Demo cluster (PRD #47 M2): setup.sh integration — installs function-patch-and-transform, applies XRD with CRD registration wait, then Composition
+- Demo cluster (PRD #47 M2): 14 manifest validation tests (YAML structure, field descriptions, inference pipeline compatibility)
+
 ### Changed
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
 - Demo cluster (PRD #47 M1): Switched to n2-standard-4 machine type (n1 hit GCE_STOCKOUT), zonal clusters (regional exceeded CPU quota), zone auto-detection via ipinfo.io timezone

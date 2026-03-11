@@ -1,0 +1,80 @@
+# Composition implementing the platform PostgreSQL XRD using AWS RDS.
+#
+# This maps the simplified platform abstraction (PostgreSQLInstance) to
+# concrete AWS RDS resources. In the demo, no cloud credentials are
+# configured — the Composition exists to show that the platform team has
+# defined the "right answer" for how to provision a database.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: postgresqlinstance-aws-rds
+  labels:
+    provider: aws
+    service: rds
+spec:
+  compositeTypeRef:
+    apiVersion: platform.cluster-whisperer.io/v1alpha1
+    kind: PostgreSQLInstance
+  mode: Pipeline
+  pipeline:
+  - step: create-rds-instance
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: rds-instance
+        base:
+          apiVersion: rds.aws.upbound.io/v1beta2
+          kind: Instance
+          spec:
+            forProvider:
+              engine: postgres
+              publiclyAccessible: false
+              storageType: gp3
+              storageEncrypted: true
+              skipFinalSnapshot: true
+              autoMinorVersionUpgrade: true
+        patches:
+        # Map engine version from XRD to RDS
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.engineVersion
+          toFieldPath: spec.forProvider.engineVersion
+        # Map storage size from XRD to RDS
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.storageGB
+          toFieldPath: spec.forProvider.allocatedStorage
+        # Map instance size to RDS instance class via lookup
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.instanceSize
+          toFieldPath: spec.forProvider.instanceClass
+          transforms:
+          - type: map
+            map:
+              small: db.t3.micro
+              medium: db.r6g.large
+              large: db.r6g.2xlarge
+        # Map high availability to Multi-AZ
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.highAvailability
+          toFieldPath: spec.forProvider.multiAz
+        # Map backup retention
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.backupRetentionDays
+          toFieldPath: spec.forProvider.backupRetentionPeriod
+        # Write endpoint back to XRD status
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.endpoint
+          toFieldPath: status.endpoint
+      - name: subnet-group
+        base:
+          apiVersion: rds.aws.upbound.io/v1beta2
+          kind: SubnetGroup
+          spec:
+            forProvider:
+              description: Platform-managed subnet group for PostgreSQL instances
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.networkRef
+          toFieldPath: metadata.annotations[platform.cluster-whisperer.io/network-ref]

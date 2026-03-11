@@ -460,6 +460,69 @@ wait_for_crds() {
 }
 
 # =============================================================================
+# Platform Composition (The "Needle in the Haystack")
+# =============================================================================
+
+# Install the function-patch-and-transform Crossplane function, required by
+# the Composition's Pipeline mode. The function doesn't need to reconcile
+# anything — it just needs to exist so the Composition is valid.
+install_composition_function() {
+    log_info "Installing function-patch-and-transform..."
+
+    # Check if already installed (idempotency)
+    if kubectl --kubeconfig "${KUBECONFIG_PATH}" get functions.pkg.crossplane.io \
+        crossplane-contrib-function-patch-and-transform &>/dev/null 2>&1; then
+        log_success "function-patch-and-transform already installed"
+        return
+    fi
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<'EOF'
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: crossplane-contrib-function-patch-and-transform
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.12.0
+EOF
+
+    log_success "function-patch-and-transform installed"
+}
+
+# Apply the platform PostgreSQL XRD and Composition — the one resource the
+# agent should discover among ~1,000 CRDs when searching for a database.
+install_platform_composition() {
+    log_info "Applying platform PostgreSQL XRD and Composition..."
+
+    install_composition_function
+
+    # Apply XRD first — it creates the CRD that the Composition references
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
+    log_success "XRD applied (PostgreSQLInstance)"
+
+    # Wait briefly for the XRD to register its CRD
+    log_info "Waiting for XRD CRD registration..."
+    local elapsed=0
+    local timeout=60
+    while [[ $elapsed -lt $timeout ]]; do
+        if kubectl --kubeconfig "${KUBECONFIG_PATH}" get crd \
+            postgresqlinstances.platform.cluster-whisperer.io &>/dev/null 2>&1; then
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    if [[ $elapsed -ge $timeout ]]; then
+        log_warning "XRD CRD did not register within ${timeout}s — Composition may fail to validate"
+    else
+        log_success "XRD CRD registered"
+    fi
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
+    log_success "Composition applied (postgresqlinstance-aws-rds)"
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 
@@ -532,6 +595,7 @@ main() {
 
     install_crossplane
     install_crossplane_providers
+    install_platform_composition
     print_summary
 }
 

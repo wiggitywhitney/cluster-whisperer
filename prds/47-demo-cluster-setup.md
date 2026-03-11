@@ -67,10 +67,10 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] GKE: ~1,000 CRDs verified (Decision 15)
 
 ### M2: Platform Composition (The Right Answer)
-- [ ] Crossplane CompositeResourceDefinition (XRD) for the platform's approved PostgreSQL database
-- [ ] Crossplane Composition implementing the XRD
-- [ ] The Composition should be the "one right answer" that the agent finds among ~1,000 CRDs
-- [ ] The XRD/Composition must produce rich enough metadata for the capability inference pipeline to generate a meaningful description
+- [x] Crossplane CompositeResourceDefinition (XRD) for the platform's approved PostgreSQL database
+- [x] Crossplane Composition implementing the XRD
+- [x] The Composition should be the "one right answer" that the agent finds among ~1,000 CRDs
+- [x] The XRD/Composition must produce rich enough metadata for the capability inference pipeline to generate a meaningful description
 - [ ] Verified: after capability inference, the vector DB can find this resource via "PostgreSQL database for my application"
 
 ### M3: Demo App Deployment
