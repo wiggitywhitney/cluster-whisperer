@@ -66,8 +66,9 @@ config:
   processors:
     batch: {}
   exporters:
-    # Jaeger (in-cluster): forward traces via OTLP to the Jaeger service
-    otlp/jaeger:
+    # Jaeger (in-cluster): forward traces via OTLP gRPC to the Jaeger service.
+    # Uses otlp_grpc (not the deprecated "otlp" alias).
+    otlp_grpc/jaeger:
       endpoint: jaeger.jaeger.svc.cluster.local:4317
       tls:
         insecure: true
@@ -81,4 +82,4 @@ config:
       traces:
         receivers: [otlp]
         processors: [batch]
-        exporters: [otlp/jaeger, datadog]
+        exporters: [otlp_grpc/jaeger, datadog]
