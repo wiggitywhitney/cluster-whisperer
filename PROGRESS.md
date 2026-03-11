@@ -26,6 +26,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-11) Demo cluster (PRD #47 M3): Demo app deployment in setup.sh — Kind builds and loads image, GKE pushes to Artifact Registry with deployment patching, CrashLoopBackOff verification, agent-friendly log/describe diagnostics
 - (2026-03-11) Demo cluster (PRD #47 M4): Chroma and Qdrant Helm chart deployments with health verification, capability inference pipeline integration via port-forward, instance sync via CLI
 - (2026-03-11) Demo cluster (PRD #47 M4): cluster-whisperer Dockerfile for in-cluster serve mode, Kubernetes manifests (Deployment, Service, RBAC), k8s-vectordb-sync controller deployment via Helm
+- (2026-03-11) Demo cluster (PRD #47 M5): Jaeger v2 deployment via Helm with OTLP receiver and in-memory storage, OTel Collector (contrib) with fan-out to Jaeger + Datadog, cluster-whisperer serve configured with OTLP export, health check verification for both backends
+- (2026-03-11) Demo cluster (PRD #47 M5): Verified end-to-end trace pipeline on live GKE cluster — test trace visible in Jaeger UI, Datadog API key validated and trace agent running
 
 ### Changed
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
