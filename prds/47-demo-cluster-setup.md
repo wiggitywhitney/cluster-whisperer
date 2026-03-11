@@ -86,10 +86,10 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Deploy k8s-vectordb-sync controller, verify instance sync to both backends
 
 ### M5: Observability Backends
-- [ ] Jaeger deployment via Helm with OTLP receiver
-- [ ] OTel Collector (contrib) deployment with Datadog exporter — receives OTLP in-cluster, exports to datadoghq.com using DD_API_KEY from vals
-- [ ] Both receiving traces from cluster-whisperer
-- [ ] Verified: run a cluster-whisperer query, see trace in both backends
+- [x] Jaeger deployment via Helm with OTLP receiver
+- [x] OTel Collector (contrib) deployment with Datadog exporter — receives OTLP in-cluster, exports to datadoghq.com using DD_API_KEY from vals
+- [x] Both receiving traces from cluster-whisperer
+- [x] Verified: run a cluster-whisperer query, see trace in both backends
 
 ### M6: Teardown Script
 - [x] `teardown.sh` discovers and destroys Kind clusters (prefix pattern match)

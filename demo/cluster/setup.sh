@@ -628,6 +628,144 @@ verify_vector_dbs() {
 }
 
 # =============================================================================
+# Observability Backends
+# =============================================================================
+
+# Deploy Jaeger v2 for distributed tracing visualization.
+# Receives OTLP traces directly (gRPC on 4317, HTTP on 4318) and stores
+# them in memory. The Jaeger UI (port 16686) shows trace timelines.
+#
+# For Kind: NodePort service with port 30686 mapped to host 16686 via
+# Kind's extraPortMappings. Accessible at http://localhost:16686.
+# For GKE: ClusterIP service, accessible via port-forward.
+install_jaeger() {
+    log_info "Installing Jaeger v2 (tracing backend)..."
+
+    helm repo add jaegertracing https://jaegertracing.github.io/helm-charts --force-update &>/dev/null
+
+    # Check if already installed (idempotency)
+    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n jaeger 2>/dev/null | grep -q jaeger; then
+        log_success "Jaeger already installed"
+        return
+    fi
+
+    helm install jaeger jaegertracing/jaeger \
+        --kubeconfig "${KUBECONFIG_PATH}" \
+        --namespace jaeger \
+        --create-namespace \
+        --values "${SCRIPT_DIR}/helm-values/jaeger.yaml" \
+        --wait --timeout 180s
+
+    log_success "Jaeger installed"
+
+    # For Kind: patch the service to NodePort with specific port for Jaeger UI.
+    # The Kind cluster config maps host:16686 → container:30686, so the Jaeger
+    # UI is accessible at http://localhost:16686 on the host.
+    # Strategic merge patch matches ports by the "port" field.
+    if [[ "${MODE}" == "kind" ]]; then
+        log_info "Patching Jaeger service for Kind NodePort access..."
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch svc jaeger \
+            -n jaeger \
+            --type=strategic \
+            -p '{"spec":{"type":"NodePort","ports":[{"port":16686,"nodePort":30686}]}}'
+        log_success "Jaeger UI accessible at http://localhost:16686"
+    fi
+
+    wait_for_pods "jaeger" "app.kubernetes.io/instance=jaeger" 180
+}
+
+# Deploy OTel Collector (contrib distribution) with Datadog exporter.
+# Receives OTLP traces in-cluster and exports to Datadog (datadoghq.com).
+# Uses a K8s secret for DD_API_KEY, injected by vals at setup.sh runtime.
+#
+# For Kind: NodePort service with ports 30417 (gRPC) and 30418 (HTTP)
+# mapped to host ports 14317 and 14318 via Kind's extraPortMappings.
+# For GKE: ClusterIP service, accessible from within the cluster.
+install_otel_collector() {
+    log_info "Installing OTel Collector (contrib) with Datadog exporter..."
+
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update &>/dev/null
+
+    # Check if already installed (idempotency)
+    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n otel-collector 2>/dev/null | grep -q otel-collector; then
+        log_success "OTel Collector already installed"
+        return
+    fi
+
+    # Create K8s secret with DD_API_KEY from vals (injected at script runtime).
+    # The collector config references it as ${env:DD_API_KEY}.
+    if [[ -z "${DD_API_KEY:-}" ]]; then
+        log_warning "DD_API_KEY not set — skipping OTel Collector deployment"
+        log_warning "Run setup.sh via: vals exec -i -f .vals.yaml -- ./demo/cluster/setup.sh <mode>"
+        return
+    fi
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" create namespace otel-collector \
+        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" create secret generic otel-collector-datadog \
+        --namespace otel-collector \
+        --from-literal=api-key="${DD_API_KEY}" \
+        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+
+    helm install otel-collector open-telemetry/opentelemetry-collector \
+        --kubeconfig "${KUBECONFIG_PATH}" \
+        --namespace otel-collector \
+        --values "${SCRIPT_DIR}/helm-values/otel-collector.yaml" \
+        --wait --timeout 180s
+
+    log_success "OTel Collector installed"
+
+    # For Kind: patch the service to NodePort with specific ports for OTLP.
+    # The Kind cluster config maps host:14317 → container:30417 (gRPC)
+    # and host:14318 → container:30418 (HTTP).
+    if [[ "${MODE}" == "kind" ]]; then
+        log_info "Patching OTel Collector service for Kind NodePort access..."
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch svc otel-collector-opentelemetry-collector \
+            -n otel-collector \
+            --type=strategic \
+            -p '{"spec":{"type":"NodePort","ports":[{"port":4317,"nodePort":30417},{"port":4318,"nodePort":30418}]}}'
+        log_success "OTLP receivers accessible at localhost:14317 (gRPC) and localhost:14318 (HTTP)"
+    fi
+
+    wait_for_pods "otel-collector" "app.kubernetes.io/instance=otel-collector" 180
+}
+
+# Verify both observability backends are healthy and accepting traces.
+# Checks that Jaeger has an OTLP receiver and OTel Collector is running.
+verify_observability() {
+    log_info "Verifying observability backends..."
+
+    local failures=0
+
+    # Jaeger health check via the v2 healthcheck extension
+    local jaeger_health
+    jaeger_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n jaeger \
+        deploy/jaeger -- wget -qO- http://localhost:13133/status 2>/dev/null || true)
+    if [[ -n "${jaeger_health}" ]]; then
+        log_success "Jaeger is responding (health check ok)"
+    else
+        log_warning "Jaeger health check failed — pod may still be starting"
+        failures=$((failures + 1))
+    fi
+
+    # OTel Collector health check (default health extension on 13133)
+    local otel_health
+    otel_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n otel-collector \
+        deploy/otel-collector-opentelemetry-collector -- wget -qO- http://localhost:13133 2>/dev/null || true)
+    if [[ -n "${otel_health}" ]]; then
+        log_success "OTel Collector is responding (health check ok)"
+    else
+        log_warning "OTel Collector health check failed — pod may still be starting"
+        failures=$((failures + 1))
+    fi
+
+    if [[ $failures -eq 0 ]]; then
+        log_success "Both observability backends verified and healthy"
+    fi
+}
+
+# =============================================================================
 # Capability Inference Pipeline
 # =============================================================================
 
@@ -1017,6 +1155,10 @@ print_summary() {
     serve_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n cluster-whisperer -l app=cluster-whisperer \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
+    local jaeger_status
+    jaeger_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n jaeger \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
     local sync_status
     sync_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n k8s-vectordb-sync \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
@@ -1028,6 +1170,12 @@ print_summary() {
     log_info "Demo app:       ${demo_app_status}"
     log_info "Chroma:         ${chroma_status} (chroma-chromadb.chroma:8000)"
     log_info "Qdrant:         ${qdrant_status} (qdrant.qdrant:6333)"
+    local otel_collector_status
+    otel_collector_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n otel-collector \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    log_info "Jaeger:         ${jaeger_status} (jaeger.jaeger:16686)"
+    log_info "OTel Collector: ${otel_collector_status} (otel-collector-opentelemetry-collector.otel-collector:4318)"
     log_info "CW serve:       ${serve_status} (cluster-whisperer.cluster-whisperer:3000)"
     log_info "vectordb-sync:  ${sync_status}"
     echo ""
@@ -1038,6 +1186,15 @@ print_summary() {
     echo "  kubectl get pods -l app=demo-app"
     echo "  kubectl get pods -n chroma"
     echo "  kubectl get pods -n qdrant"
+    echo "  kubectl get pods -n jaeger"
+    echo "  kubectl get pods -n otel-collector"
+    echo ""
+    if [[ "${MODE}" == "kind" ]]; then
+        log_info "Jaeger UI: http://localhost:16686"
+        log_info "OTLP endpoint: http://localhost:14318 (HTTP) / localhost:14317 (gRPC)"
+    else
+        log_info "Jaeger UI: kubectl port-forward -n jaeger svc/jaeger 16686:16686"
+    fi
     echo ""
     log_info "To tear down:"
     echo "  ./demo/cluster/teardown.sh"
@@ -1093,6 +1250,9 @@ main() {
     install_chroma
     install_qdrant
     verify_vector_dbs
+    install_jaeger
+    install_otel_collector
+    verify_observability
     deploy_demo_app
     run_capability_inference
     verify_vector_search

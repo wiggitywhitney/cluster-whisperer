@@ -60,6 +60,14 @@ spec:
                 secretKeyRef:
                   name: cluster-whisperer-keys
                   key: VOYAGE_API_KEY
+            # OTel tracing: send traces to the in-cluster OTel Collector,
+            # which fans out to both Jaeger and Datadog.
+            - name: OTEL_TRACING_ENABLED
+              value: "true"
+            - name: OTEL_EXPORTER_TYPE
+              value: "otlp"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector-opentelemetry-collector.otel-collector:4318"
           livenessProbe:
             httpGet:
               path: /healthz
