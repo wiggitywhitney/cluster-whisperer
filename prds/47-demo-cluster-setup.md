@@ -71,7 +71,6 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Crossplane Composition implementing the XRD
 - [x] The Composition should be the "one right answer" that the agent finds among ~1,000 CRDs
 - [x] The XRD/Composition must produce rich enough metadata for the capability inference pipeline to generate a meaningful description
-- [ ] Verified: after capability inference, the vector DB can find this resource via "PostgreSQL database for my application"
 
 ### M3: Demo App Deployment
 - [ ] Deploy demo app from PRD #46 into the cluster
@@ -83,6 +82,7 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [ ] Qdrant deployment via Helm
 - [ ] Both accessible from within the cluster
 - [ ] Run capability inference pipeline against both backends (populate capabilities collection)
+- [ ] Verified: vector DB can find the platform PostgreSQL XRD via "PostgreSQL database for my application"
 - [ ] Deploy k8s-vectordb-sync controller, verify instance sync to both backends
 
 ### M5: Observability Backends
