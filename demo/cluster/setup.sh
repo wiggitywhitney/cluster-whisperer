@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# ABOUTME: Provisions a Kind cluster with Crossplane and 1,200+ CRDs for the KubeCon demo.
-# ABOUTME: Creates a self-contained demo environment with dedicated KUBECONFIG isolation.
+# ABOUTME: Provisions a Kind or GKE cluster with Crossplane and CRDs for the KubeCon demo.
+# ABOUTME: Accepts mode argument (kind/gcp) for local iteration or full rehearsal environments.
 
 # Setup script for cluster-whisperer KubeCon "Choose Your Own Adventure" demo
 #
-# Creates a Kind cluster with Crossplane providers that register 1,200+ CRDs,
+# Creates a Kubernetes cluster with Crossplane providers that register CRDs,
 # providing the "overwhelming Kubernetes environment" for the demo narrative.
 #
 # Usage:
-#   ./demo/cluster/setup.sh
+#   ./demo/cluster/setup.sh kind   # Local Kind cluster with curated provider subset (~400-600 CRDs)
+#   ./demo/cluster/setup.sh gcp    # GKE cluster with all 148 sub-providers (1,200+ CRDs)
 #
 # The script uses a dedicated KUBECONFIG file (~/.kube/config-cluster-whisperer)
-# to avoid polluting the default kubeconfig with Kind entries.
+# to avoid polluting the default kubeconfig.
 
 set -euo pipefail
 
@@ -29,6 +30,12 @@ KUBECONFIG_PATH="${HOME}/.kube/config-cluster-whisperer"
 
 # Crossplane version
 CROSSPLANE_VERSION="2.2.0"
+
+# GKE configuration
+GCP_PROJECT="demoo-ooclock"
+GCP_REGION="us-central1"
+GKE_MACHINE_TYPE="n1-standard-4"
+GKE_NUM_NODES=3
 
 # Colors
 RED='\033[0;31m'
@@ -95,11 +102,11 @@ wait_for_pods() {
 }
 
 # =============================================================================
-# Prerequisites Check
+# Prerequisites Check (mode-specific)
 # =============================================================================
 
-check_prerequisites() {
-    log_info "Checking prerequisites..."
+check_prerequisites_kind() {
+    log_info "Checking prerequisites for Kind mode..."
 
     local missing=()
 
@@ -119,7 +126,45 @@ check_prerequisites() {
         exit 1
     fi
 
-    log_success "All prerequisites met"
+    log_success "All prerequisites met (Kind mode)"
+}
+
+check_prerequisites_gcp() {
+    log_info "Checking prerequisites for GCP mode..."
+
+    local missing=()
+
+    command -v gcloud &>/dev/null || missing+=("gcloud")
+    command -v kubectl &>/dev/null || missing+=("kubectl")
+    command -v helm &>/dev/null || missing+=("helm")
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log_error "Missing required tools: ${missing[*]}"
+        exit 1
+    fi
+
+    # Check for gke-gcloud-auth-plugin (required for GKE auth)
+    if ! gcloud components list --filter="id=gke-gcloud-auth-plugin" --format="value(state.name)" 2>/dev/null | grep -q "Installed"; then
+        # Also check if it's available as a standalone binary
+        if ! command -v gke-gcloud-auth-plugin &>/dev/null; then
+            log_error "Missing gke-gcloud-auth-plugin. Install with: gcloud components install gke-gcloud-auth-plugin"
+            exit 1
+        fi
+    fi
+
+    # Verify gcloud is authenticated
+    if ! gcloud auth list --filter="status=ACTIVE" --format="value(account)" 2>/dev/null | grep -q .; then
+        log_error "No active gcloud account. Run: gcloud auth login"
+        exit 1
+    fi
+
+    # Verify project access
+    if ! gcloud projects describe "${GCP_PROJECT}" &>/dev/null; then
+        log_error "Cannot access GCP project '${GCP_PROJECT}'. Check permissions."
+        exit 1
+    fi
+
+    log_success "All prerequisites met (GCP mode)"
 }
 
 # =============================================================================
@@ -151,6 +196,52 @@ create_kind_cluster() {
     # Copy kubeconfig to dedicated file (not symlink, avoids Docker mount issues)
     log_info "Setting up dedicated KUBECONFIG at ${KUBECONFIG_PATH}..."
     kind get kubeconfig --name "${CLUSTER_NAME}" > "${KUBECONFIG_PATH}"
+    log_success "KUBECONFIG written to ${KUBECONFIG_PATH}"
+
+    # Verify cluster is accessible via the dedicated kubeconfig
+    if kubectl --kubeconfig "${KUBECONFIG_PATH}" cluster-info &>/dev/null; then
+        log_success "Cluster is accessible via dedicated KUBECONFIG"
+    else
+        log_error "Cannot access cluster via ${KUBECONFIG_PATH}"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# GKE Cluster
+# =============================================================================
+
+create_gke_cluster() {
+    log_info "Creating GKE cluster '${CLUSTER_NAME}' in project '${GCP_PROJECT}'..."
+
+    # Check if any cluster-whisperer cluster already exists
+    local existing
+    existing=$(gcloud container clusters list \
+        --project "${GCP_PROJECT}" \
+        --filter="name~^${CLUSTER_NAME_PREFIX}" \
+        --format="value(name)" 2>/dev/null || true)
+    if [[ -n "${existing}" ]]; then
+        log_warning "Existing cluster-whisperer GKE cluster(s) found: ${existing}"
+        log_info "Run ./demo/cluster/teardown.sh first, or use a different name"
+        exit 1
+    fi
+
+    # Set KUBECONFIG before gcloud get-credentials writes to it
+    export KUBECONFIG="${KUBECONFIG_PATH}"
+
+    if gcloud container clusters create "${CLUSTER_NAME}" \
+        --project "${GCP_PROJECT}" \
+        --region "${GCP_REGION}" \
+        --machine-type "${GKE_MACHINE_TYPE}" \
+        --num-nodes "${GKE_NUM_NODES}" \
+        --quiet; then
+        log_success "GKE cluster '${CLUSTER_NAME}' created"
+    else
+        log_error "Failed to create GKE cluster"
+        exit 1
+    fi
+
+    # gcloud create already fetches credentials when KUBECONFIG is set
     log_success "KUBECONFIG written to ${KUBECONFIG_PATH}"
 
     # Verify cluster is accessible via the dedicated kubeconfig
@@ -197,14 +288,25 @@ install_crossplane() {
 # =============================================================================
 
 install_crossplane_providers() {
-    log_info "Installing Crossplane providers in batches (AWS + GCP)..."
-    log_info "This registers 1,200+ CRDs. First run pulls ~150 images (slow)."
+    if [[ "${MODE}" == "kind" ]]; then
+        log_info "Installing curated Crossplane provider subset for Kind..."
+        log_info "This registers ~400-600 CRDs. First run pulls images (slow)."
+    else
+        log_info "Installing all Crossplane providers in batches (AWS + GCP)..."
+        log_info "This registers 1,200+ CRDs. First run pulls ~150 images (slow)."
+    fi
     log_info "Subsequent runs use cached images and are much faster."
 
-    # Install in batches to avoid overwhelming the Kind cluster.
-    # Batch 0 is the family providers (shared dependencies) — must go first.
+    # Batch 0 is always required — family providers are shared dependencies.
     local batch_files
-    batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-"*.yaml 2>/dev/null | sort)
+    if [[ "${MODE}" == "kind" ]]; then
+        # Kind: family providers + curated subset only
+        batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-0.yaml" \
+                         "${SCRIPT_DIR}/manifests/crossplane-providers-kind.yaml" 2>/dev/null | sort)
+    else
+        # GKE: all batches for maximum CRD coverage
+        batch_files=$(ls "${SCRIPT_DIR}/manifests/crossplane-providers-batch-"*.yaml 2>/dev/null | sort)
+    fi
 
     if [[ -z "${batch_files}" ]]; then
         log_error "No provider batch files found in ${SCRIPT_DIR}/manifests/"
@@ -237,16 +339,23 @@ install_crossplane_providers() {
 
     log_success "All provider batches applied"
 
-    # Wait for CRD registration with progress indicators
+    # Wait for CRD registration with mode-specific targets
     wait_for_crds
 }
 
 # Wait for Crossplane provider CRDs to register, showing progress along the way.
 # Provider family packages install sub-providers that each register their own CRDs.
-# This is the slowest part of setup (5-10 minutes).
+# This is the slowest part of setup (5-10 minutes on GKE, 3-5 minutes on Kind).
 wait_for_crds() {
-    local target=1200
-    local timeout=900  # 15 minutes — 148 sub-providers need time to pull images and register
+    local target
+    local timeout
+    if [[ "${MODE}" == "kind" ]]; then
+        target=400   # Curated subset: ~400-600 CRDs expected
+        timeout=600  # 10 minutes — fewer providers but Kind is slower
+    else
+        target=1200  # All 148 sub-providers: 1,200+ CRDs expected
+        timeout=900  # 15 minutes — more providers but GKE has real resources
+    fi
     local elapsed=0
     local interval=10
     local prev_count=0
@@ -276,8 +385,14 @@ wait_for_crds() {
 
     # Didn't hit target but may still have enough CRDs for the demo
     local final_count
+    local min_acceptable
     final_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    if [[ $final_count -ge 500 ]]; then
+    if [[ "${MODE}" == "kind" ]]; then
+        min_acceptable=200  # Kind: lower bar for curated subset
+    else
+        min_acceptable=500  # GKE: need substantial CRD count
+    fi
+    if [[ $final_count -ge $min_acceptable ]]; then
         log_warning "CRD registration timed out with ${final_count} CRDs (target was ${target}+)"
         log_warning "This may be enough for the demo — check provider status:"
         kubectl --kubeconfig "${KUBECONFIG_PATH}" get providers 2>/dev/null || true
@@ -300,9 +415,10 @@ print_summary() {
 
     echo ""
     log_success "=============================================="
-    log_success "Demo Cluster Ready (M1: Kind + Crossplane)"
+    log_success "Demo Cluster Ready (${MODE} mode)"
     log_success "=============================================="
     echo ""
+    log_info "Mode:       ${MODE}"
     log_info "Cluster:    ${CLUSTER_NAME}"
     log_info "KUBECONFIG: ${KUBECONFIG_PATH}"
     log_info "CRDs:       ${crd_count}"
@@ -321,14 +437,41 @@ print_summary() {
 # Main
 # =============================================================================
 
-main() {
+usage() {
+    echo "Usage: $0 <kind|gcp>"
     echo ""
-    log_info "Cluster Whisperer Demo Setup"
+    echo "Modes:"
+    echo "  kind   Create a local Kind cluster with curated provider subset (~400-600 CRDs)"
+    echo "  gcp    Create a GKE cluster with all 148 sub-providers (1,200+ CRDs)"
+    exit 1
+}
+
+main() {
+    # Validate mode argument
+    if [[ $# -lt 1 ]]; then
+        usage
+    fi
+
+    MODE="$1"
+    if [[ "${MODE}" != "kind" && "${MODE}" != "gcp" ]]; then
+        log_error "Invalid mode: '${MODE}'"
+        usage
+    fi
+
+    echo ""
+    log_info "Cluster Whisperer Demo Setup (${MODE} mode)"
     log_info "============================"
     echo ""
 
-    check_prerequisites
-    create_kind_cluster
+    # Mode-specific prerequisites and cluster creation
+    if [[ "${MODE}" == "kind" ]]; then
+        check_prerequisites_kind
+        create_kind_cluster
+    else
+        check_prerequisites_gcp
+        create_gke_cluster
+    fi
+
     install_crossplane
     install_crossplane_providers
     print_summary

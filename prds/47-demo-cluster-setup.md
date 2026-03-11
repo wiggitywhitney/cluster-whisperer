@@ -1,6 +1,6 @@
 # PRD #47: Demo Cluster Setup and Teardown Scripts
 
-**Status**: Not Started
+**Status**: In Progress
 **Priority**: High
 **Dependencies**: PRD #46 (demo app)
 **Execution Order**: 3 of 5 — Needs the demo app. Provides the test environment for PRDs #48 and #49.
@@ -56,18 +56,18 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 ## Milestones
 
 ### M1: Cluster Creation and Crossplane (GKE + Kind)
-- [ ] `setup.sh` accepts mode argument: `kind` or `gcp` (Decision 9)
+- [x] `setup.sh` accepts mode argument: `kind` or `gcp` (Decision 9)
 - [x] Kind cluster creation with port mappings (Jaeger UI, OTLP receivers)
-- [ ] GKE cluster creation (`demoo-ooclock`, `us-central1`, `n1-standard-4`, 3 nodes) (Decision 10)
-- [ ] Separate prerequisites checks per mode: Kind (kind, docker) vs GCP (gcloud, gke-gcloud-auth-plugin) (Decision 9)
+- [x] GKE cluster creation (`demoo-ooclock`, `us-central1`, `n1-standard-4`, 3 nodes) (Decision 10)
+- [x] Separate prerequisites checks per mode: Kind (kind, docker) vs GCP (gcloud, gke-gcloud-auth-plugin) (Decision 9)
 - [x] KUBECONFIG isolation for Kind — dedicated `~/.kube/config-cluster-whisperer`
-- [ ] KUBECONFIG isolation for GKE — set `KUBECONFIG` env var before `gcloud get-credentials` (Decision 11)
+- [x] KUBECONFIG isolation for GKE — set `KUBECONFIG` env var before `gcloud get-credentials` (Decision 11)
 - [x] Crossplane installation via Helm
 - [x] All 148 sub-providers manifest and batched installation logic
-- [ ] Curated ~30-40 sub-provider subset for Kind mode (Decision 12)
+- [x] Curated ~30-40 sub-provider subset for Kind mode (Decision 12)
 - [x] Wait for CRD registration with progress indicators
-- [ ] GKE: 1,200+ CRDs verified
-- [ ] Kind: ~400-600 CRDs verified (curated subset)
+- [x] GKE: 1,200+ CRDs verified
+- [x] Kind: ~400-600 CRDs verified (curated subset)
 
 ### M2: Platform Composition (The Right Answer)
 - [ ] Crossplane CompositeResourceDefinition (XRD) for the platform's approved PostgreSQL database
@@ -96,9 +96,9 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 
 ### M6: Teardown Script
 - [x] `teardown.sh` discovers and destroys Kind clusters (prefix pattern match)
-- [ ] `teardown.sh` discovers and destroys GKE clusters (`gcloud container clusters list --filter`) (Decision 9)
+- [x] `teardown.sh` discovers and destroys GKE clusters (`gcloud container clusters list --filter`) (Decision 9)
 - [x] Clean removal of dedicated KUBECONFIG file
-- [ ] Warn about running GKE clusters and associated billing
+- [x] Warn about running GKE clusters and associated billing
 
 ### M7: End-to-End Demo Rehearsal
 - [ ] Run setup script from scratch
