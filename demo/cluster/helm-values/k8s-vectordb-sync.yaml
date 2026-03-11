@@ -4,10 +4,10 @@
 # cluster-whisperer's HTTP endpoints for vector database synchronization.
 #
 # Chart: wiggitywhitney/k8s-vectordb-sync (from the separate repo)
-# Image: ghcr.io/wiggitywhitney/k8s-vectordb-sync
+# Image: wiggitywhitney/k8s-vectordb-sync (Docker Hub)
 
 image:
-  repository: ghcr.io/wiggitywhitney/k8s-vectordb-sync
+  repository: wiggitywhitney/k8s-vectordb-sync
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 

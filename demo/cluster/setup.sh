@@ -906,7 +906,7 @@ deploy_cluster_whisperer_serve() {
 
 # Deploy k8s-vectordb-sync controller. Watches CRD and resource changes,
 # pushes updates to cluster-whisperer's HTTP endpoints.
-# Requires: ghcr.io/wiggitywhitney/k8s-vectordb-sync container image.
+# Requires: wiggitywhitney/k8s-vectordb-sync container image.
 deploy_vectordb_sync() {
     log_info "Deploying k8s-vectordb-sync controller..."
 
@@ -937,7 +937,7 @@ deploy_vectordb_sync() {
 
     # For Kind, load the image locally if available (avoids GHCR pull)
     if [[ "${MODE}" == "kind" ]]; then
-        local sync_image="ghcr.io/wiggitywhitney/k8s-vectordb-sync:0.1.0"
+        local sync_image="wiggitywhitney/k8s-vectordb-sync:0.1.0"
         if docker image inspect "${sync_image}" &>/dev/null; then
             log_info "Loading k8s-vectordb-sync image into Kind cluster..."
             kind load docker-image "${sync_image}" --name "${CLUSTER_NAME}"
