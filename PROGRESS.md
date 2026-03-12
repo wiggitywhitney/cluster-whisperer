@@ -29,8 +29,18 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-11) Demo cluster (PRD #47 M5): Jaeger v2 deployment via Helm with OTLP receiver and in-memory storage, OTel Collector (contrib) with fan-out to Jaeger + Datadog, cluster-whisperer serve configured with OTLP export, health check verification for both backends
 - (2026-03-11) Demo cluster (PRD #47 M5): Verified end-to-end trace pipeline on live GKE cluster — test trace visible in Jaeger UI, Datadog API key validated and trace agent running
 
+- (2026-03-12) Demo cluster (PRD #47 M7): NGINX Ingress Controller with nip.io wildcard DNS for external access — cluster-whisperer and Jaeger accessible via `<service>.<ip>.nip.io`
+- (2026-03-12) Demo cluster (PRD #47 M7): End-to-end setup.sh gcp passes on first try — GKE cluster creation, Crossplane (828+ CRDs), Chroma, Qdrant, Jaeger, OTel Collector, demo app, capability inference (1095 resources), instance sync (1189 instances), cluster-whisperer serve, k8s-vectordb-sync
+
 ### Changed
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
 - Demo cluster (PRD #47 M1): Switched to n2-standard-4 machine type (n1 hit GCE_STOCKOUT), zonal clusters (regional exceeded CPU quota), zone auto-detection via ipinfo.io timezone
 - Demo cluster (PRD #47 M1): Reduced Crossplane memory 4Gi → 2Gi, increased CRD wait timeout 10min → 20min for cold image pulls
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi
+
+### Fixed
+- (2026-03-12) Demo cluster (PRD #47 M7): Eliminated double-rollout for GKE deployments — sed inline image replacement instead of apply+patch, avoiding ImagePullBackOff delay
+- (2026-03-12) Demo cluster (PRD #47 M7): Fixed helm search repo fallback — `helm search repo` returns exit 0 with "No results found", now checks stdout for actual matches
+- (2026-03-12) Demo cluster (PRD #47 M7): Fixed health checks for Chroma (v2 API, StatefulSet target), OTel Collector (0.0.0.0 bind), all using port-forward + local curl
+- (2026-03-12) Demo cluster (PRD #47 M7): Increased k8s-vectordb-sync memory from 128Mi to 1Gi (OOMKilled watching 1000+ CRDs)
+- (2026-03-12) Demo cluster (PRD #47 M7): Architecture-aware Dockerfile kubectl download (arm64 vs amd64), `--platform linux/amd64` for GKE builds

@@ -98,10 +98,10 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Warn about running GKE clusters and associated billing
 
 ### M7: End-to-End Demo Rehearsal
-- [ ] Run setup script from scratch
+- [x] Run setup script from scratch
 - [ ] Execute the full demo flow (all 4 acts) against the cluster
-- [ ] Run teardown script
-- [ ] Run setup script again to verify reproducibility
+- [x] Run teardown script
+- [x] Run setup script again to verify reproducibility
 
 ### M8: Documentation
 - [ ] Update README using `/write-docs` to document the demo cluster setup/teardown
@@ -187,13 +187,15 @@ The ~1,000 CRDs from provider-aws and provider-gcp are the noise. The XRD is the
 ### Timing Expectations
 
 **GKE mode** (first-class target):
-- GKE cluster creation: ~5-10 minutes
+- GKE cluster creation: ~7-10 minutes
+- NGINX Ingress Controller + LoadBalancer IP: ~2 minutes
 - Crossplane install: ~1 minute
-- CRD registration (35 sub-providers): ~10-15 minutes (cold start with image pulls)
-- Helm charts (Chroma, Qdrant, Jaeger, OTel Collector): ~2 minutes each
-- Capability inference pipeline: ~2-3 minutes (LLM calls for ~1,000 CRDs)
-- Instance sync: ~1-2 minutes
-- Total: approximately 25-30 minutes
+- CRD registration (35 sub-providers): ~20-25 minutes (cold start with 37 image pulls)
+- Helm charts (Chroma, Qdrant, Jaeger, OTel Collector): ~1-2 minutes each
+- Capability inference pipeline: ~10-15 minutes (LLM calls for ~1,100 resources)
+- Instance sync: ~2-3 minutes
+- cluster-whisperer serve + k8s-vectordb-sync: ~2-3 minutes
+- Total: approximately 45-55 minutes
 
 **Kind mode** (lightweight fallback):
 - Kind cluster creation: ~30 seconds
@@ -232,3 +234,10 @@ must be pulled.
 | 2026-03-11 | cluster-whisperer serve deployed in-cluster via Dockerfile | Created Dockerfile for cluster-whisperer. The serve pod runs in-cluster so k8s-vectordb-sync can push resource changes. Kind loads the image locally; GKE pushes to Artifact Registry. |
 | 2026-03-11 | OTel Collector as trace fan-out hub | cluster-whisperer → OTel Collector → {Jaeger, Datadog}. Single OTLP endpoint for the app; collector handles routing to both backends. Avoids dual-export complexity in the app. Jaeger v2 with in-memory storage for demo. |
 | 2026-03-11 | Jaeger v2 (not v1) | Jaeger v1 EOL Dec 2025. v2 uses OTel Collector config syntax natively. OTLP receiver is built-in (no env var toggle needed). All-in-one mode with memory storage for demo use. |
+| 2026-03-12 | Health checks via port-forward + local curl (not kubectl exec) | Container images (Chroma, Qdrant, OTel Collector) don't include wget/curl. Jaeger happened to have wget, masking the problem. Port-forward to unique local ports avoids dependency on container tooling. |
+| 2026-03-12 | Chroma v2 API (`/api/v2/heartbeat`) | Chroma v1.5.3 deprecated the v1 API; `/api/v1/heartbeat` returns 410 Gone. Must use `/api/v2/heartbeat`. |
+| 2026-03-12 | OTel Collector health check binds to `0.0.0.0:13133` | Helm chart default binds to `${env:MY_POD_IP}`, which breaks port-forward (connects to localhost, nothing listening). Explicit `0.0.0.0` in values override. |
+| 2026-03-12 | Inline image replacement for GKE (no apply+patch double-rollout) | Applying base manifest with `imagePullPolicy: Never` on GKE creates a pod in ImagePullBackOff, then patching triggers a second rollout. Piping through `sed` sets the correct AR image and `IfNotPresent` before applying. |
+| 2026-03-12 | k8s-vectordb-sync needs 1Gi memory for large CRD clusters | Controller watches 1000+ API resources and caches informer metadata. 128Mi and 512Mi both OOMKill. 1Gi is sufficient for ~830 CRDs. |
+| 2026-03-12 | NGINX Ingress Controller + nip.io for external access | Single LoadBalancer routes to all services via host-based ingress rules. `<service>.<external-ip>.nip.io` provides DNS without registration. Pattern borrowed from spider-rainbows repo. |
+| 2026-03-12 | CRD timeout 1800s with transient failure tolerance | Cold starts pull ~37 container images. 1800s (30 min) timeout. `|| crd_count=0` fallback prevents pipefail from killing the script on transient API server errors. |

@@ -22,7 +22,10 @@ config:
 resources:
   requests:
     cpu: 10m
-    memory: 64Mi
+    memory: 128Mi
   limits:
     cpu: 500m
-    memory: 128Mi
+    # The controller watches 1000+ CRDs and caches informer metadata for each.
+    # 128Mi and 512Mi both trigger OOMKilled on clusters with large CRD counts
+    # (e.g., 35 Crossplane sub-providers registering ~830 CRDs).
+    memory: 1Gi

@@ -1121,19 +1121,18 @@ deploy_demo_app_gke() {
     docker push "${tagged_image}" --quiet
     log_success "Image pushed to Artifact Registry"
 
-    # Apply manifests, then patch the deployment with the registry image.
-    # The base manifests use imagePullPolicy: Never (for Kind). GKE needs
-    # a real image reference and IfNotPresent pull policy.
+    # Apply manifests with the correct image inline to avoid a double rollout.
+    # The base manifests use imagePullPolicy: Never (for Kind). Applying
+    # unmodified on GKE creates a pod in ImagePullBackOff, then patching
+    # triggers a second rollout. Piping through sed avoids this.
     log_info "Applying demo app manifests..."
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${demo_app_dir}/k8s/"
-
-    log_info "Patching deployment for GKE image..."
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" patch deployment demo-app \
-        --type json \
-        -p "[
-            {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"${tagged_image}\"},
-            {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/imagePullPolicy\", \"value\": \"IfNotPresent\"}
-        ]"
+    for manifest in "${demo_app_dir}"/k8s/*.yaml; do
+        sed \
+            -e "s|image: demo-app:latest|image: ${tagged_image}|" \
+            -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
+            "${manifest}" \
+            | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+    done
     log_success "Demo app deployed (GKE)"
 }
 
@@ -1231,19 +1230,19 @@ deploy_cluster_whisperer_serve() {
         docker push "${tagged_image}" --quiet
         log_success "Image pushed to Artifact Registry"
 
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
-
-        # Patch deployment with the registry image and pull policy
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch deployment cluster-whisperer \
-            --namespace cluster-whisperer \
-            --type json \
-            -p "[
-                {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"${tagged_image}\"},
-                {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/imagePullPolicy\", \"value\": \"IfNotPresent\"}
-            ]"
+        # Apply manifest with the correct image inline to avoid a double rollout.
+        # The base manifest uses imagePullPolicy: Never (for Kind). Applying it
+        # unmodified on GKE creates a pod that immediately enters ImagePullBackOff,
+        # and the subsequent patch triggers a second rollout — adding minutes of
+        # unnecessary delay while the old pod terminates.
+        sed \
+            -e "s|image: cluster-whisperer:latest|image: ${tagged_image}|" \
+            -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
+            "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml" \
+            | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
     fi
 
-    wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 300
+    wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600
     log_success "cluster-whisperer serve deployed"
 }
 
@@ -1267,7 +1266,11 @@ deploy_vectordb_sync() {
     # The user can clone the repo alongside cluster-whisperer.
     local chart_source="k8s-vectordb-sync/k8s-vectordb-sync"
     local sync_repo_path="${REPO_ROOT}/../k8s-vectordb-sync"
-    if ! helm search repo k8s-vectordb-sync/k8s-vectordb-sync &>/dev/null 2>&1; then
+    # helm search repo returns exit 0 even with no results (prints "No results
+    # found"), so we must check stdout for actual chart matches.
+    local search_results
+    search_results=$(helm search repo k8s-vectordb-sync/k8s-vectordb-sync 2>/dev/null || true)
+    if ! echo "${search_results}" | grep -q "k8s-vectordb-sync"; then
         if [[ -d "${sync_repo_path}/charts/k8s-vectordb-sync" ]]; then
             chart_source="${sync_repo_path}/charts/k8s-vectordb-sync"
             log_info "Using local chart from ${chart_source}"
