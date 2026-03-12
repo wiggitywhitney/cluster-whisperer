@@ -1042,7 +1042,7 @@ verify_vector_search() {
     # The sync-instances or a quick search via the CLI would verify this.
     # For now, check that Chroma has documents in the capabilities collection.
     local doc_count
-    doc_count=$(curl -sf "http://localhost:${chroma_port}/api/v1/collections" 2>/dev/null || true)
+    doc_count=$(curl -sf "http://localhost:${chroma_port}/api/v2/collections" 2>/dev/null || true)
 
     kill "${pf_pid}" 2>/dev/null || true
     wait "${pf_pid}" 2>/dev/null || true
