@@ -207,7 +207,7 @@ The ~1,000 CRDs from provider-aws and provider-gcp are the noise. The XRD is the
 - Remaining phases: same as GKE
 - Total: approximately 15-20 minutes
 
-The setup script shows progress throughout. CRD wait timeout is 20 minutes to
+The setup script shows progress throughout. CRD wait timeout is 30 minutes to
 accommodate cold starts where all 37 container images (2 family + 35 sub-provider)
 must be pulled.
 
