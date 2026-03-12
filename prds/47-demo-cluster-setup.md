@@ -87,14 +87,14 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 
 ### M5: Observability Backends
 - [x] Jaeger deployment via Helm with OTLP receiver
-- [x] OTel Collector (contrib) deployment with Datadog exporter — receives OTLP in-cluster, exports to datadoghq.com using DD_API_KEY from vals
+- [x] OTel Collector (contrib) deployment with Datadog exporter — receives OTLP in-cluster, exports to datadoghq.com using DD_API_KEY from environment (Decision 27)
 - [x] Both receiving traces from cluster-whisperer
 - [x] Verified: run a cluster-whisperer query, see trace in both backends
 
 ### M6: Teardown Script
 - [x] `teardown.sh` discovers and destroys Kind clusters (prefix pattern match)
 - [x] `teardown.sh` discovers and destroys GKE clusters (`gcloud container clusters list --filter`) (Decision 9)
-- [x] Clean removal of dedicated KUBECONFIG file
+- [x] Surgical removal of per-cluster kubeconfig entries; delete file only if empty (Decision 26)
 - [x] Warn about running GKE clusters and associated billing
 
 ### M7: End-to-End Demo Rehearsal
@@ -104,7 +104,8 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Run setup script again to verify reproducibility
 
 ### M8: Documentation
-- [ ] Update README using `/write-docs` to document the demo cluster setup/teardown
+- [ ] Validate refactored scripts via full teardown + setup cycle (Decision 28)
+- [ ] Update README using `/write-docs` to document the demo cluster setup/teardown (GKE only; Kind deferred to separate PRD)
 
 ## Technical Design
 
@@ -149,14 +150,16 @@ Usage: `./demo/cluster/setup.sh [kind|gcp]`
 
 ### KUBECONFIG Isolation
 
-The setup script uses a dedicated kubeconfig file (`~/.kube/config-cluster-whisperer`)
-to avoid polluting the default `~/.kube/config`. Both modes write to this file:
-- **Kind**: `kind get kubeconfig` output is copied (not symlinked) to the dedicated file
-- **GKE**: `KUBECONFIG=~/.kube/config-cluster-whisperer` is set before
-  `gcloud container clusters get-credentials`, directing gcloud to write there
+The setup script uses a dedicated kubeconfig file (`~/.kube/config-cluster-whisperer`).
+Credentials are merged (not overwritten) so multiple clusters can coexist:
+- **Kind**: `kind export kubeconfig --kubeconfig <path>` merges into the dedicated file
+- **GKE**: `export KUBECONFIG=<path>` before `gcloud container clusters create`,
+  which merges credentials into the file
 
-All subsequent kubectl commands use `--kubeconfig` or the `KUBECONFIG` env var.
-The teardown script removes this file.
+After cluster creation, `export KUBECONFIG` is set for the rest of the script — all
+kubectl/helm commands use it automatically without `--kubeconfig` flags (Decision 25).
+The teardown script surgically removes per-cluster context/cluster/user entries rather
+than deleting the file (Decision 26).
 
 Cluster names are timestamped (`cluster-whisperer-YYYYMMDD-HHMMSS`) to prevent
 collisions when creating/destroying clusters repeatedly during demo rehearsal.
@@ -242,3 +245,9 @@ must be pulled.
 | 2026-03-12 | NGINX Ingress Controller + nip.io for external access | Single LoadBalancer routes to all services via host-based ingress rules. `<service>.<external-ip>.nip.io` provides DNS without registration. Pattern borrowed from spider-rainbows repo. |
 | 2026-03-12 | CRD timeout 1800s with transient failure tolerance | Cold starts pull ~37 container images. 1800s (30 min) timeout. `|| crd_count=0` fallback prevents pipefail from killing the script on transient API server errors. |
 | 2026-03-12 | Defer "full demo flow" validation to PRDs #48/#49 | The 4-act demo flow requires PRD #48 (demo modifications) and PRD #49 (Vercel agent), which aren't implemented yet. Setup/teardown scripts are proven reliable; demo flow validation belongs in the PRDs that implement the flow. |
+| 2026-03-12 | Export KUBECONFIG, drop `--kubeconfig` flags (Decision 25) | Every kubectl/helm command had `--kubeconfig "${KUBECONFIG_PATH}"` (~80 occurrences). Exporting KUBECONFIG after cluster creation lets all commands use it automatically. Cleaner script, same isolation. Matches how spider-rainbows handles it. |
+| 2026-03-12 | Surgical kubeconfig cleanup in teardown (Decision 26) | Teardown removes per-cluster context/cluster/user entries via `kubectl config delete-*` instead of deleting the file. Supports multiple clusters coexisting in the dedicated kubeconfig. File only deleted when no contexts remain. |
+| 2026-03-12 | Plain env vars, no vals dependency in setup.sh (Decision 27) | Other users can't use vals (Whitney-specific GCP Secrets Manager refs). Setup.sh reads API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY, DD_API_KEY) from environment. Auto-sources `.env` from repo root if present. `.env.example` documents required keys. |
+| 2026-03-12 | Validate refactored scripts via full teardown + setup before documenting (Decision 28) | Kubeconfig refactor touched ~80 lines. Running full cycle validates the changes and captures real output for README documentation in one pass. |
+| 2026-03-12 | Kind mode deferred to separate PRD | Kind mode (`setup.sh kind`) has never been validated end-to-end. README documents GKE only. Separate PRD to validate and fix Kind support. |
+| 2026-03-12 | Kubeconfig merges credentials (additive, not overwrite) | `kind export kubeconfig` and `gcloud get-credentials` both merge into the dedicated file. Multiple cluster contexts can coexist. Previous approach overwrote the file on each cluster creation. |

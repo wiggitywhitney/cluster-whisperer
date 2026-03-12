@@ -11,8 +11,10 @@
 #   ./demo/cluster/setup.sh kind   # Local Kind cluster (~1,000 CRDs)
 #   ./demo/cluster/setup.sh gcp    # GKE cluster (~1,000 CRDs)
 #
-# The script uses a dedicated KUBECONFIG file (~/.kube/config-cluster-whisperer)
-# to avoid polluting the default kubeconfig.
+# The script uses a dedicated KUBECONFIG file (~/.kube/config-cluster-whisperer).
+# Credentials are merged into this file (not overwritten), so multiple clusters
+# can coexist. KUBECONFIG is exported early so all kubectl/helm commands use it
+# automatically.
 
 set -euo pipefail
 
@@ -22,6 +24,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Load .env if present (for API keys: ANTHROPIC_API_KEY, VOYAGE_API_KEY, DD_API_KEY)
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
 
 CLUSTER_NAME_PREFIX="cluster-whisperer"
 CLUSTER_NAME="${CLUSTER_NAME_PREFIX}-$(date +%Y%m%d-%H%M%S)"
@@ -86,7 +95,7 @@ wait_for_pods() {
     local elapsed=0
     local interval=5
     while [[ $elapsed -lt $timeout ]]; do
-        if kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n "${namespace}" -l "${label}" --no-headers 2>/dev/null | grep -q .; then
+        if kubectl get pods -n "${namespace}" -l "${label}" --no-headers 2>/dev/null | grep -q .; then
             break
         fi
         sleep $interval
@@ -99,7 +108,7 @@ wait_for_pods() {
     fi
 
     local remaining=$((timeout - elapsed))
-    if kubectl --kubeconfig "${KUBECONFIG_PATH}" wait --for=condition=ready pod \
+    if kubectl wait --for=condition=ready pod \
         -l "${label}" \
         -n "${namespace}" \
         --timeout="${remaining}s" &>/dev/null; then
@@ -282,13 +291,14 @@ create_kind_cluster() {
         exit 1
     fi
 
-    # Copy kubeconfig to dedicated file (not symlink, avoids Docker mount issues)
-    log_info "Setting up dedicated KUBECONFIG at ${KUBECONFIG_PATH}..."
-    kind get kubeconfig --name "${CLUSTER_NAME}" > "${KUBECONFIG_PATH}"
+    # Merge kubeconfig into dedicated file (additive, preserves other contexts)
+    log_info "Merging credentials into ${KUBECONFIG_PATH}..."
+    kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG_PATH}"
+    export KUBECONFIG="${KUBECONFIG_PATH}"
     log_success "KUBECONFIG written to ${KUBECONFIG_PATH}"
 
-    # Verify cluster is accessible via the dedicated kubeconfig
-    if kubectl --kubeconfig "${KUBECONFIG_PATH}" cluster-info &>/dev/null; then
+    # Verify cluster is accessible
+    if kubectl cluster-info &>/dev/null; then
         log_success "Cluster is accessible via dedicated KUBECONFIG"
     else
         log_error "Cannot access cluster via ${KUBECONFIG_PATH}"
@@ -315,7 +325,7 @@ create_gke_cluster() {
         exit 1
     fi
 
-    # Set KUBECONFIG before gcloud get-credentials writes to it
+    # Set KUBECONFIG so gcloud merges credentials into the dedicated file
     export KUBECONFIG="${KUBECONFIG_PATH}"
 
     if gcloud container clusters create "${CLUSTER_NAME}" \
@@ -327,19 +337,14 @@ create_gke_cluster() {
         log_success "GKE cluster '${CLUSTER_NAME}' created"
     else
         log_error "Failed to create GKE cluster"
-        # gcloud may leave a partial KUBECONFIG even on failure — clean it up
-        if [[ -f "${KUBECONFIG_PATH}" ]]; then
-            rm -f "${KUBECONFIG_PATH}"
-            log_info "Cleaned up partial KUBECONFIG"
-        fi
         exit 1
     fi
 
     # gcloud create already fetches credentials when KUBECONFIG is set
-    log_success "KUBECONFIG written to ${KUBECONFIG_PATH}"
+    log_success "Credentials merged into ${KUBECONFIG_PATH}"
 
-    # Verify cluster is accessible via the dedicated kubeconfig
-    if kubectl --kubeconfig "${KUBECONFIG_PATH}" cluster-info &>/dev/null; then
+    # Verify cluster is accessible
+    if kubectl cluster-info &>/dev/null; then
         log_success "Cluster is accessible via dedicated KUBECONFIG"
     else
         log_error "Cannot access cluster via ${KUBECONFIG_PATH}"
@@ -357,7 +362,7 @@ create_gke_cluster() {
 install_kind_ingress() {
     log_info "Installing NGINX Ingress Controller for Kind..."
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f \
+    kubectl apply -f \
         "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
 
     wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
@@ -372,7 +377,7 @@ install_kind_ingress() {
 install_gcp_ingress() {
     log_info "Installing NGINX Ingress Controller for GKE..."
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f \
+    kubectl apply -f \
         "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"
 
     wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
@@ -384,7 +389,7 @@ install_gcp_ingress() {
     local interval=5
 
     for ((i=1; i<=attempts; i++)); do
-        external_ip=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get svc ingress-nginx-controller \
+        external_ip=$(kubectl get svc ingress-nginx-controller \
             -n ingress-nginx \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
 
@@ -400,7 +405,7 @@ install_gcp_ingress() {
 
     if [[ -z "${external_ip}" ]]; then
         log_error "LoadBalancer external IP not assigned after $((attempts * interval))s"
-        log_error "Check: kubectl --kubeconfig ${KUBECONFIG_PATH} get svc -n ingress-nginx"
+        log_error "Check: kubectl get svc -n ingress-nginx"
         return 1
     fi
 
@@ -425,7 +430,7 @@ create_ingress_resources() {
     log_info "Creating Ingress resources (base domain: ${BASE_DOMAIN})..."
 
     # cluster-whisperer Ingress
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<EOF
+    kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -452,7 +457,7 @@ EOF
     log_success "Ingress created: http://cluster-whisperer.${BASE_DOMAIN}"
 
     # Jaeger UI Ingress
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<EOF
+    kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -487,13 +492,13 @@ install_crossplane() {
     helm repo add crossplane-stable https://charts.crossplane.io/stable --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n crossplane-system 2>/dev/null | grep -q crossplane; then
+    if helm list -n crossplane-system 2>/dev/null | grep -q crossplane; then
         log_success "Crossplane already installed"
         return
     fi
 
     helm install crossplane crossplane-stable/crossplane \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace crossplane-system \
         --create-namespace \
         --version "${CROSSPLANE_VERSION}" \
@@ -535,7 +540,7 @@ install_crossplane_providers() {
         count=$(grep -c 'kind: Provider' "${batch_file}")
         log_info "Batch $((batch_num + 1))/${total_batches}: applying ${count} providers..."
 
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${batch_file}"
+        kubectl apply -f "${batch_file}"
         log_success "Batch $((batch_num + 1)) applied (${count} providers)"
 
         # Give the API server time to settle between batches.
@@ -572,7 +577,7 @@ wait_for_crds() {
         local crd_count
         # Tolerate transient kubectl failures during CRD registration (API server
         # may be briefly unavailable while providers register many CRDs)
-        crd_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || crd_count=0
+        crd_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || crd_count=0
 
         # Show progress when count changes
         if [[ $crd_count -ne $prev_count ]]; then
@@ -594,17 +599,17 @@ wait_for_crds() {
     # Didn't hit target but may still have enough CRDs for the demo
     local final_count
     local min_acceptable=200  # Minimum CRD count to consider "good enough" for the demo
-    final_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
+    final_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
     if [[ $final_count -ge $min_acceptable ]]; then
         log_warning "CRD registration timed out with ${final_count} CRDs (target was ${target}+)"
         log_warning "This may be enough for the demo — check provider status:"
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" get providers 2>/dev/null || true
+        kubectl get providers 2>/dev/null || true
         return 0
     fi
 
     log_error "CRD registration failed: only ${final_count} CRDs after ${timeout}s"
     log_error "Check provider status:"
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" get providers 2>/dev/null || true
+    kubectl get providers 2>/dev/null || true
     return 1
 }
 
@@ -619,13 +624,13 @@ install_composition_function() {
     log_info "Installing function-patch-and-transform..."
 
     # Check if already installed (idempotency)
-    if kubectl --kubeconfig "${KUBECONFIG_PATH}" get functions.pkg.crossplane.io \
+    if kubectl get functions.pkg.crossplane.io \
         crossplane-contrib-function-patch-and-transform &>/dev/null 2>&1; then
         log_success "function-patch-and-transform already installed"
         return
     fi
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<'EOF'
+    kubectl apply -f - <<'EOF'
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function
 metadata:
@@ -645,7 +650,7 @@ install_platform_composition() {
     install_composition_function
 
     # Apply XRD first — it creates the CRD that the Composition references
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
     log_success "XRD applied (PostgreSQLInstance)"
 
     # Wait briefly for the XRD to register its CRD
@@ -653,7 +658,7 @@ install_platform_composition() {
     local elapsed=0
     local timeout=60
     while [[ $elapsed -lt $timeout ]]; do
-        if kubectl --kubeconfig "${KUBECONFIG_PATH}" get crd \
+        if kubectl get crd \
             postgresqlinstances.platform.cluster-whisperer.io &>/dev/null 2>&1; then
             break
         fi
@@ -667,7 +672,7 @@ install_platform_composition() {
         log_success "XRD CRD registered"
     fi
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
+    kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
     log_success "Composition applied (postgresqlinstance-aws-rds)"
 }
 
@@ -684,13 +689,13 @@ install_chroma() {
     helm repo add chroma https://amikos-tech.github.io/chromadb-chart/ --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n chroma 2>/dev/null | grep -q chroma; then
+    if helm list -n chroma 2>/dev/null | grep -q chroma; then
         log_success "Chroma already installed"
         return
     fi
 
     helm install chroma chroma/chromadb \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace chroma \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/chroma.yaml" \
@@ -711,13 +716,13 @@ install_qdrant() {
     helm repo add qdrant https://qdrant.github.io/qdrant-helm --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n qdrant 2>/dev/null | grep -q qdrant; then
+    if helm list -n qdrant 2>/dev/null | grep -q qdrant; then
         log_success "Qdrant already installed"
         return
     fi
 
     helm install qdrant qdrant/qdrant \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace qdrant \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/qdrant.yaml" \
@@ -744,7 +749,7 @@ verify_vector_dbs() {
     local chroma_ok=false
     for ((i=1; i<=retries; i++)); do
         local chroma_health
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n chroma \
+        kubectl port-forward -n chroma \
             svc/chroma-chromadb 18000:8000 &>/dev/null &
         local pf_pid=$!
         sleep 2
@@ -771,7 +776,7 @@ verify_vector_dbs() {
     local qdrant_ok=false
     for ((i=1; i<=retries; i++)); do
         local qdrant_health
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n qdrant \
+        kubectl port-forward -n qdrant \
             qdrant-0 16333:6333 &>/dev/null &
         local pf_pid=$!
         sleep 2
@@ -815,13 +820,13 @@ install_jaeger() {
     helm repo add jaegertracing https://jaegertracing.github.io/helm-charts --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n jaeger 2>/dev/null | grep -q jaeger; then
+    if helm list -n jaeger 2>/dev/null | grep -q jaeger; then
         log_success "Jaeger already installed"
         return
     fi
 
     helm install jaeger jaegertracing/jaeger \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace jaeger \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/jaeger.yaml" \
@@ -835,7 +840,7 @@ install_jaeger() {
     # Strategic merge patch matches ports by the "port" field.
     if [[ "${MODE}" == "kind" ]]; then
         log_info "Patching Jaeger service for Kind NodePort access..."
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch svc jaeger \
+        kubectl patch svc jaeger \
             -n jaeger \
             --type=strategic \
             -p '{"spec":{"type":"NodePort","ports":[{"port":16686,"nodePort":30686}]}}'
@@ -847,7 +852,7 @@ install_jaeger() {
 
 # Deploy OTel Collector (contrib distribution) with Datadog exporter.
 # Receives OTLP traces in-cluster and exports to Datadog (datadoghq.com).
-# Uses a K8s secret for DD_API_KEY, injected by vals at setup.sh runtime.
+# Uses a K8s secret for DD_API_KEY (must be set in the environment).
 #
 # For Kind: NodePort service with ports 30417 (gRPC) and 30418 (HTTP)
 # mapped to host ports 14317 and 14318 via Kind's extraPortMappings.
@@ -858,29 +863,29 @@ install_otel_collector() {
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n otel-collector 2>/dev/null | grep -q otel-collector; then
+    if helm list -n otel-collector 2>/dev/null | grep -q otel-collector; then
         log_success "OTel Collector already installed"
         return
     fi
 
-    # Create K8s secret with DD_API_KEY from vals (injected at script runtime).
+    # Create K8s secret with DD_API_KEY from the environment.
     # The collector config references it as ${env:DD_API_KEY}.
     if [[ -z "${DD_API_KEY:-}" ]]; then
         log_warning "DD_API_KEY not set — skipping OTel Collector deployment"
-        log_warning "Run setup.sh via: vals exec -i -f .vals.yaml -- ./demo/cluster/setup.sh <mode>"
+        log_warning "Export DD_API_KEY before running setup.sh"
         return
     fi
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" create namespace otel-collector \
-        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+    kubectl create namespace otel-collector \
+        --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" create secret generic otel-collector-datadog \
+    kubectl create secret generic otel-collector-datadog \
         --namespace otel-collector \
         --from-literal=api-key="${DD_API_KEY}" \
-        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+        --dry-run=client -o yaml | kubectl apply -f -
 
     helm install otel-collector open-telemetry/opentelemetry-collector \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace otel-collector \
         --values "${SCRIPT_DIR}/helm-values/otel-collector.yaml" \
         --wait --timeout 180s
@@ -892,7 +897,7 @@ install_otel_collector() {
     # and host:14318 → container:30418 (HTTP).
     if [[ "${MODE}" == "kind" ]]; then
         log_info "Patching OTel Collector service for Kind NodePort access..."
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" patch svc otel-collector-opentelemetry-collector \
+        kubectl patch svc otel-collector-opentelemetry-collector \
             -n otel-collector \
             --type=strategic \
             -p '{"spec":{"type":"NodePort","ports":[{"port":4317,"nodePort":30417},{"port":4318,"nodePort":30418}]}}'
@@ -916,7 +921,7 @@ verify_observability() {
     local jaeger_ok=false
     for ((i=1; i<=retries; i++)); do
         local jaeger_health
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n jaeger \
+        kubectl port-forward -n jaeger \
             deploy/jaeger 13133:13133 &>/dev/null &
         local pf_pid=$!
         sleep 2
@@ -943,7 +948,7 @@ verify_observability() {
     local otel_ok=false
     for ((i=1; i<=retries; i++)); do
         local otel_health
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n otel-collector \
+        kubectl port-forward -n otel-collector \
             deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
         local pf_pid=$!
         sleep 2
@@ -978,7 +983,7 @@ verify_observability() {
 # with descriptions of all ~1,000 CRDs. This makes them searchable by meaning
 # (e.g., "PostgreSQL database" finds the platform XRD among all the noise).
 #
-# Requires API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) injected via vals.
+# Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
 # Uses a temporary port-forward to reach the in-cluster Chroma instance.
 run_capability_inference() {
     log_info "Running capability inference pipeline..."
@@ -987,7 +992,7 @@ run_capability_inference() {
 
     # Start port-forward to Chroma in the background
     local chroma_port=8000
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+    kubectl port-forward \
         -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
     local pf_pid=$!
 
@@ -1000,12 +1005,9 @@ run_capability_inference() {
         return 1
     fi
 
-    # Run the sync pipeline with API keys from vals.
-    # KUBECONFIG is set so the pipeline's kubectl calls reach the demo cluster.
-    # The -i flag inherits PATH so npx/node resolve correctly.
+    # Run the sync pipeline. Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
     local sync_exit=0
-    KUBECONFIG="${KUBECONFIG_PATH}" vals exec -i -f "${REPO_ROOT}/.vals.yaml" -- \
-        npx tsx "${REPO_ROOT}/src/index.ts" sync \
+    npx tsx "${REPO_ROOT}/src/index.ts" sync \
         --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
 
     # Clean up port-forward
@@ -1027,7 +1029,7 @@ verify_vector_search() {
 
     # Start port-forward to Chroma
     local chroma_port=8000
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+    kubectl port-forward \
         -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
     local pf_pid=$!
     sleep 3
@@ -1036,7 +1038,7 @@ verify_vector_search() {
     # The sync-instances or a quick search via the CLI would verify this.
     # For now, check that Chroma has documents in the capabilities collection.
     local doc_count
-    doc_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n chroma \
+    doc_count=$(kubectl exec -n chroma \
         deploy/chroma-chromadb -- wget -qO- \
         "http://localhost:8000/api/v1/collections" 2>/dev/null || true)
 
@@ -1091,7 +1093,7 @@ deploy_demo_app_kind() {
     log_success "Image loaded into Kind"
 
     log_info "Applying demo app manifests..."
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${demo_app_dir}/k8s/"
+    kubectl apply -f "${demo_app_dir}/k8s/"
     log_success "Demo app deployed (Kind)"
 }
 
@@ -1131,7 +1133,7 @@ deploy_demo_app_gke() {
             -e "s|image: demo-app:latest|image: ${tagged_image}|" \
             -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
             "${manifest}" \
-            | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+            | kubectl apply -f -
     done
     log_success "Demo app deployed (GKE)"
 }
@@ -1147,7 +1149,7 @@ wait_for_crashloop() {
     log_info "Waiting for demo app CrashLoopBackOff (timeout: ${timeout}s)..."
 
     while [[ $elapsed -lt $timeout ]]; do
-        pod_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -l app=demo-app \
+        pod_status=$(kubectl get pods -l app=demo-app \
             -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)
 
         if [[ "${pod_status}" == "CrashLoopBackOff" ]]; then
@@ -1171,10 +1173,10 @@ print_demo_app_diagnostics() {
     log_info "Demo app diagnostics (verify agent-friendly output):"
     echo ""
     echo "--- kubectl logs ---"
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" logs -l app=demo-app --tail=10 2>/dev/null || true
+    kubectl logs -l app=demo-app --tail=10 2>/dev/null || true
     echo ""
     echo "--- kubectl describe pod (events) ---"
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" describe pod -l app=demo-app 2>/dev/null | tail -20 || true
+    kubectl describe pod -l app=demo-app 2>/dev/null | tail -20 || true
     echo ""
 }
 
@@ -1198,21 +1200,21 @@ deploy_cluster_whisperer_serve() {
     build_cluster_whisperer_image
 
     # Create namespace
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" create namespace cluster-whisperer \
-        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+    kubectl create namespace cluster-whisperer \
+        --dry-run=client -o yaml | kubectl apply -f -
 
-    # Create secret with API keys from vals (injected at script runtime)
+    # Create secret with API keys from the environment
     if [[ -z "${ANTHROPIC_API_KEY:-}" || -z "${VOYAGE_API_KEY:-}" ]]; then
         log_warning "ANTHROPIC_API_KEY or VOYAGE_API_KEY not set — skipping cluster-whisperer serve"
-        log_warning "Run setup.sh via: vals exec -i -f .vals.yaml -- ./demo/cluster/setup.sh <mode>"
+        log_warning "Export ANTHROPIC_API_KEY and VOYAGE_API_KEY before running setup.sh"
         return
     fi
 
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" create secret generic cluster-whisperer-keys \
+    kubectl create secret generic cluster-whisperer-keys \
         --namespace cluster-whisperer \
         --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
         --from-literal=VOYAGE_API_KEY="${VOYAGE_API_KEY}" \
-        --dry-run=client -o yaml | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+        --dry-run=client -o yaml | kubectl apply -f -
 
     if [[ "${MODE}" == "kind" ]]; then
         # Load image directly into Kind cluster
@@ -1220,7 +1222,7 @@ deploy_cluster_whisperer_serve() {
         kind load docker-image cluster-whisperer:latest --name "${CLUSTER_NAME}"
         log_success "Image loaded into Kind"
 
-        kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
+        kubectl apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
     else
         # GKE: push to Artifact Registry, patch deployment with registry image
         local tagged_image="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/cluster-whisperer:latest"
@@ -1239,7 +1241,7 @@ deploy_cluster_whisperer_serve() {
             -e "s|image: cluster-whisperer:latest|image: ${tagged_image}|" \
             -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
             "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml" \
-            | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f -
+            | kubectl apply -f -
     fi
 
     wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600
@@ -1257,7 +1259,7 @@ deploy_vectordb_sync() {
     helm repo add k8s-vectordb-sync https://wiggitywhitney.github.io/k8s-vectordb-sync/ --force-update &>/dev/null 2>&1 || true
 
     # Check if already installed (idempotency)
-    if helm list --kubeconfig "${KUBECONFIG_PATH}" -n k8s-vectordb-sync 2>/dev/null | grep -q k8s-vectordb-sync; then
+    if helm list -n k8s-vectordb-sync 2>/dev/null | grep -q k8s-vectordb-sync; then
         log_success "k8s-vectordb-sync already installed"
         return
     fi
@@ -1291,7 +1293,7 @@ deploy_vectordb_sync() {
     fi
 
     helm install k8s-vectordb-sync "${chart_source}" \
-        --kubeconfig "${KUBECONFIG_PATH}" \
+        \
         --namespace k8s-vectordb-sync \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/k8s-vectordb-sync.yaml" \
@@ -1308,7 +1310,7 @@ run_instance_sync() {
 
     # Start port-forward to Chroma in the background
     local chroma_port=8000
-    kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward \
+    kubectl port-forward \
         -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
     local pf_pid=$!
     sleep 3
@@ -1319,8 +1321,7 @@ run_instance_sync() {
     fi
 
     local sync_exit=0
-    KUBECONFIG="${KUBECONFIG_PATH}" vals exec -i -f "${REPO_ROOT}/.vals.yaml" -- \
-        npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
+    npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
         --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
 
     kill "${pf_pid}" 2>/dev/null || true
@@ -1340,7 +1341,7 @@ run_instance_sync() {
 
 print_summary() {
     local crd_count
-    crd_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    crd_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
 
     echo ""
     log_success "=============================================="
@@ -1348,27 +1349,27 @@ print_summary() {
     log_success "=============================================="
     echo ""
     local demo_app_status
-    demo_app_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -l app=demo-app \
+    demo_app_status=$(kubectl get pods -l app=demo-app \
         -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "unknown")
 
     local chroma_status
-    chroma_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n chroma \
+    chroma_status=$(kubectl get pods -n chroma \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     local qdrant_status
-    qdrant_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n qdrant \
+    qdrant_status=$(kubectl get pods -n qdrant \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     local serve_status
-    serve_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n cluster-whisperer -l app=cluster-whisperer \
+    serve_status=$(kubectl get pods -n cluster-whisperer -l app=cluster-whisperer \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     local jaeger_status
-    jaeger_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n jaeger \
+    jaeger_status=$(kubectl get pods -n jaeger \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     local sync_status
-    sync_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n k8s-vectordb-sync \
+    sync_status=$(kubectl get pods -n k8s-vectordb-sync \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     log_info "Mode:           ${MODE}"
@@ -1379,13 +1380,13 @@ print_summary() {
     log_info "Chroma:         ${chroma_status} (chroma-chromadb.chroma:8000)"
     log_info "Qdrant:         ${qdrant_status} (qdrant.qdrant:6333)"
     local otel_collector_status
-    otel_collector_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n otel-collector \
+    otel_collector_status=$(kubectl get pods -n otel-collector \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 
     log_info "Jaeger:         ${jaeger_status} (jaeger.jaeger:16686)"
     log_info "OTel Collector: ${otel_collector_status} (otel-collector-opentelemetry-collector.otel-collector:4318)"
     local ingress_status
-    ingress_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n ingress-nginx \
+    ingress_status=$(kubectl get pods -n ingress-nginx \
         -l app.kubernetes.io/component=controller \
         -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
 

@@ -32,7 +32,12 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-12) Demo cluster (PRD #47 M7): NGINX Ingress Controller with nip.io wildcard DNS for external access — cluster-whisperer and Jaeger accessible via `<service>.<ip>.nip.io`
 - (2026-03-12) Demo cluster (PRD #47 M7): End-to-end setup.sh gcp passes on first try — GKE cluster creation, Crossplane (828+ CRDs), Chroma, Qdrant, Jaeger, OTel Collector, demo app, capability inference (1095 resources), instance sync (1189 instances), cluster-whisperer serve, k8s-vectordb-sync
 
+- (2026-03-12) Demo cluster (PRD #47 M8 prep): `.env.example` documenting required API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY, DD_API_KEY)
+
 ### Changed
+- (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
+- (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored teardown.sh — surgical removal of per-cluster kubeconfig entries via `kubectl config delete-*` instead of deleting the file
+- (2026-03-12) Demo cluster (PRD #47 M8 prep): Removed vals dependency from setup.sh — reads API keys from plain env vars, auto-sources `.env` from repo root if present
 - Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
 - Demo cluster (PRD #47 M1): Switched to n2-standard-4 machine type (n1 hit GCE_STOCKOUT), zonal clusters (regional exceeded CPU quota), zone auto-detection via ipinfo.io timezone
 - Demo cluster (PRD #47 M1): Reduced Crossplane memory 4Gi → 2Gi, increased CRD wait timeout 10min → 20min for cold image pulls

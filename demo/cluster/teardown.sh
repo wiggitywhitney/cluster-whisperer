@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# ABOUTME: Destroys Kind and GKE clusters created by setup.sh and cleans up the dedicated KUBECONFIG.
+# ABOUTME: Destroys Kind and GKE clusters created by setup.sh and cleans up kubeconfig entries.
 # ABOUTME: Pattern-matches cluster names with the cluster-whisperer prefix across both providers.
 
 # Teardown script for cluster-whisperer KubeCon demo
 #
 # Finds and deletes all Kind and GKE clusters matching the cluster-whisperer
-# prefix, then removes the dedicated KUBECONFIG file.
+# prefix, then surgically removes their entries from the dedicated KUBECONFIG.
 #
 # Usage:
 #   ./demo/cluster/teardown.sh
@@ -49,6 +49,34 @@ log_error() {
     echo -e "${RED}[error]${NC} $1"
 }
 
+# Remove context, cluster, and user entries from the dedicated KUBECONFIG.
+# If no contexts remain afterward, delete the file entirely.
+cleanup_kubeconfig_entries() {
+    local context_name=$1
+
+    if [[ ! -f "${KUBECONFIG_PATH}" ]]; then
+        return
+    fi
+
+    export KUBECONFIG="${KUBECONFIG_PATH}"
+
+    # Remove context, cluster, and user entries (each may or may not exist)
+    kubectl config delete-context "${context_name}" &>/dev/null && \
+        log_success "Removed kubeconfig context: ${context_name}" || true
+    kubectl config delete-cluster "${context_name}" &>/dev/null && \
+        log_success "Removed kubeconfig cluster: ${context_name}" || true
+    kubectl config delete-user "${context_name}" &>/dev/null && \
+        log_success "Removed kubeconfig user: ${context_name}" || true
+
+    # If no contexts remain, delete the file
+    local remaining
+    remaining=$(kubectl config get-contexts -o name 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "${remaining}" -eq 0 ]]; then
+        rm -f "${KUBECONFIG_PATH}"
+        log_success "No contexts remain — removed ${KUBECONFIG_PATH}"
+    fi
+}
+
 # =============================================================================
 # Find and Delete Clusters
 # =============================================================================
@@ -65,6 +93,8 @@ delete_kind_cluster() {
     log_info "Deleting Kind cluster '${name}'..."
     if kind delete cluster --name "${name}"; then
         log_success "Kind cluster '${name}' deleted"
+        # Kind context names follow the pattern: kind-<cluster-name>
+        cleanup_kubeconfig_entries "kind-${name}"
     else
         log_error "Failed to delete Kind cluster '${name}'"
     fi
@@ -90,6 +120,8 @@ delete_gke_cluster() {
         --zone "${zone}" \
         --quiet; then
         log_success "GKE cluster '${name}' deleted"
+        # GKE context names follow the pattern: gke_<project>_<zone>_<cluster-name>
+        cleanup_kubeconfig_entries "gke_${GCP_PROJECT}_${zone}_${name}"
     else
         log_error "Failed to delete GKE cluster '${name}'"
     fi
@@ -153,15 +185,6 @@ main() {
 
     if [[ "${found_any}" == "false" ]]; then
         log_warning "No clusters found matching prefix '${CLUSTER_NAME_PREFIX}'"
-    fi
-
-    # Clean up dedicated KUBECONFIG file
-    if [[ -f "${KUBECONFIG_PATH}" ]]; then
-        log_info "Removing dedicated KUBECONFIG: ${KUBECONFIG_PATH}"
-        rm -f "${KUBECONFIG_PATH}"
-        log_success "KUBECONFIG removed"
-    else
-        log_info "No dedicated KUBECONFIG file found at ${KUBECONFIG_PATH}"
     fi
 
     echo ""
