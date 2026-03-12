@@ -205,6 +205,8 @@ check_prerequisites_kind() {
     command -v kubectl &>/dev/null || missing+=("kubectl")
     command -v helm &>/dev/null || missing+=("helm")
     command -v docker &>/dev/null || missing+=("docker")
+    command -v node &>/dev/null || missing+=("node")
+    command -v npx &>/dev/null || missing+=("npx (npm)")
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing[*]}"
@@ -229,6 +231,8 @@ check_prerequisites_gcp() {
     command -v kubectl &>/dev/null || missing+=("kubectl")
     command -v helm &>/dev/null || missing+=("helm")
     command -v docker &>/dev/null || missing+=("docker")
+    command -v node &>/dev/null || missing+=("node")
+    command -v npx &>/dev/null || missing+=("npx (npm)")
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing[*]}"

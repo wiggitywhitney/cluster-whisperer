@@ -77,4 +77,4 @@ spec:
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.networkRef
-          toFieldPath: metadata.annotations[platform.cluster-whisperer.io/network-ref]
+          toFieldPath: metadata.annotations["platform.cluster-whisperer.io/network-ref"]
