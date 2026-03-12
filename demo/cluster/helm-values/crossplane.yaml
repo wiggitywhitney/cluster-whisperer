@@ -1,0 +1,16 @@
+# Crossplane Helm values for cluster-whisperer demo
+#
+# The demo installs 35 curated sub-providers registering ~1,000 CRDs.
+# Crossplane core needs more memory than the default 256Mi to manage
+# the provider packages and their CRDs without OOMKill.
+
+provider:
+  packages: []
+
+resourcesCrossplane:
+  limits:
+    cpu: "1"
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi

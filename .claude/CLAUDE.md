@@ -25,6 +25,11 @@ Keep production dependencies minimal:
 - Use targeted OTel packages, NOT auto-instrumentations
 - Regularly audit package size: `du -sh node_modules/` and `npm ls --prod`
 
+## Infrastructure Safety
+
+- **NEVER run `teardown.sh` or delete Kind/GKE clusters without explicit human approval.** Always confirm with the user before executing any destructive infrastructure commands.
+- Do not run `setup.sh` without confirming the target mode (kind/gcp) with the user — GKE creates billable resources.
+
 ## Secrets Management
 
 This project uses vals for secrets. See `.vals.yaml` for available secrets.

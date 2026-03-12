@@ -1,0 +1,23 @@
+# Qdrant vector database Helm values for the KubeCon demo.
+#
+# Single-node deployment with minimal persistence — the cluster is ephemeral.
+# Accessible at qdrant.qdrant:6333 (REST) and :6334 (gRPC) from within the cluster.
+# The capability inference pipeline populates this with CRD descriptions.
+#
+# Chart: qdrant/qdrant (https://github.com/qdrant/qdrant-helm)
+
+# Single replica for demo
+replicaCount: 1
+
+# Resource limits appropriate for demo workload (~1,000 CRD descriptions)
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Minimal persistence — demo cluster is ephemeral
+persistence:
+  size: 1Gi

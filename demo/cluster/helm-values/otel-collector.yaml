@@ -1,0 +1,90 @@
+# OTel Collector (contrib) Helm values for KubeCon demo cluster
+#
+# Central trace hub: receives OTLP from cluster-whisperer and fans out to
+# both Jaeger (in-cluster) and Datadog (datadoghq.com). This lets the demo
+# audience choose which UI to view traces in without code changes.
+#
+# Architecture: cluster-whisperer → OTel Collector → {Jaeger, Datadog}
+#
+# The collector runs as a Deployment (not DaemonSet) since it's a centralized
+# receiver, not a per-node agent.
+
+mode: deployment
+
+# Use the contrib distribution — includes the Datadog exporter
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+# Single replica — demo environment
+replicaCount: 1
+
+# Inject DD_API_KEY from a Kubernetes secret created by setup.sh.
+# The collector config references it as ${env:DD_API_KEY}.
+extraEnvs:
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: otel-collector-datadog
+        key: api-key
+
+# Port configuration — only enable what we need.
+# OTLP gRPC and HTTP for receiving traces from cluster-whisperer.
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    protocol: TCP
+    appProtocol: grpc
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    protocol: TCP
+  # Disable unused default ports
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+# Collector pipeline configuration.
+# OTLP receiver → batch processor → fan-out to Jaeger + Datadog.
+# cluster-whisperer sends OTLP to this collector; the collector handles
+# routing to both backends so the app only needs one endpoint.
+config:
+  extensions:
+    # Bind health check to all interfaces so port-forward health probes work.
+    # The Helm chart default binds to ${env:MY_POD_IP} which rejects localhost.
+    health_check:
+      endpoint: 0.0.0.0:13133
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  processors:
+    batch: {}
+  exporters:
+    # Jaeger (in-cluster): forward traces via OTLP gRPC to the Jaeger service.
+    # Uses otlp_grpc (not the deprecated "otlp" alias).
+    otlp_grpc/jaeger:
+      endpoint: jaeger.jaeger.svc.cluster.local:4317
+      tls:
+        insecure: true
+    # Datadog: export traces to datadoghq.com using DD_API_KEY
+    datadog:
+      api:
+        key: ${env:DD_API_KEY}
+        site: datadoghq.com
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp_grpc/jaeger, datadog]

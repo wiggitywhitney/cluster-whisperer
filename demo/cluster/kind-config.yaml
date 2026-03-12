@@ -1,0 +1,36 @@
+# Kind cluster configuration for cluster-whisperer KubeCon demo
+#
+# Single control-plane node with port mappings for observability UIs.
+# Cluster name is provided via --name flag at creation time.
+#
+# OTLP ports use 14317/14318 on the host to avoid conflicts with the
+# host-level Datadog Agent (Enterprise IT) that binds 4317/4318.
+# cluster-whisperer must be configured to send OTLP to localhost:14318
+# when using this demo cluster.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      # NGINX Ingress Controller HTTP/HTTPS
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # Jaeger UI
+      - containerPort: 30686
+        hostPort: 16686
+        protocol: TCP
+      # OTel Collector OTLP HTTP receiver (host:14318 → node:30418)
+      - containerPort: 30418
+        hostPort: 14318
+        protocol: TCP
+      # OTel Collector OTLP gRPC receiver (host:14317 → node:30417)
+      - containerPort: 30417
+        hostPort: 14317
+        protocol: TCP

@@ -1,0 +1,47 @@
+# Jaeger v2 Helm values for KubeCon demo cluster
+#
+# Jaeger v2 uses OpenTelemetry Collector configuration syntax.
+# This deploys an all-in-one instance with in-memory storage and OTLP receiver,
+# suitable for demo/development use (data is ephemeral — lost on restart).
+#
+# The OTLP receiver lets cluster-whisperer send traces directly via the
+# standard OpenTelemetry protocol (gRPC on 4317, HTTP on 4318).
+
+# Single replica — demo environment, no HA needed
+replicaCount: 1
+
+# Jaeger v2 configuration using OTel Collector syntax.
+# The pipeline: OTLP receiver → batch processor → in-memory storage exporter.
+config:
+  extensions:
+    healthcheckv2:
+      use_v2: true
+      http:
+        endpoint: 0.0.0.0:13133
+    jaeger_storage:
+      backends:
+        primary_store:
+          memory:
+            max_traces: 100000
+    jaeger_query:
+      storage:
+        traces: primary_store
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  processors:
+    batch: {}
+  exporters:
+    jaeger_storage_exporter:
+      trace_storage: primary_store
+  service:
+    extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [jaeger_storage_exporter]

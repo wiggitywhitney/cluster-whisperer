@@ -1,0 +1,31 @@
+# k8s-vectordb-sync controller Helm values for the KubeCon demo.
+#
+# Watches CRD and resource changes in the cluster, pushes updates to
+# cluster-whisperer's HTTP endpoints for vector database synchronization.
+#
+# Chart: wiggitywhitney/k8s-vectordb-sync (from the separate repo)
+# Image: wiggitywhitney/k8s-vectordb-sync (Docker Hub)
+
+image:
+  repository: wiggitywhitney/k8s-vectordb-sync
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+config:
+  # cluster-whisperer serve endpoints (deployed as a pod in the cluster)
+  instancesEndpoint: "http://cluster-whisperer.cluster-whisperer:3000/api/v1/instances/sync"
+  capabilitiesEndpoint: "http://cluster-whisperer.cluster-whisperer:3000/api/v1/capabilities/scan"
+  # Shorter resync for demo — 5 minutes instead of 24 hours
+  resyncIntervalMin: 5
+  logLevel: "info"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    # The controller watches 1000+ CRDs and caches informer metadata for each.
+    # 128Mi and 512Mi both trigger OOMKilled on clusters with large CRD counts
+    # (e.g., 35 Crossplane sub-providers registering ~830 CRDs).
+    memory: 1Gi
