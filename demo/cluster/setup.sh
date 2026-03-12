@@ -28,6 +28,12 @@ CLUSTER_NAME="${CLUSTER_NAME_PREFIX}-$(date +%Y%m%d-%H%M%S)"
 CLUSTER_CONFIG="${SCRIPT_DIR}/kind-config.yaml"
 KUBECONFIG_PATH="${HOME}/.kube/config-cluster-whisperer"
 
+# Ingress NGINX Controller version (kubernetes/ingress-nginx, Kind-specific manifest)
+INGRESS_NGINX_VERSION="v1.12.1"
+
+# Base domain for ingress URLs (populated during ingress install)
+BASE_DOMAIN=""
+
 # Crossplane version
 CROSSPLANE_VERSION="2.2.0"
 
@@ -342,6 +348,135 @@ create_gke_cluster() {
 }
 
 # =============================================================================
+# Ingress Controller
+# =============================================================================
+
+# Install NGINX Ingress Controller using the Kind-specific manifest.
+# The Kind cluster config maps host:80 → container:80 and host:443 → container:443,
+# so ingress is accessible directly on localhost.
+install_kind_ingress() {
+    log_info "Installing NGINX Ingress Controller for Kind..."
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f \
+        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
+
+    wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
+
+    BASE_DOMAIN="127.0.0.1.nip.io"
+    log_success "NGINX Ingress Controller installed (Kind)"
+    log_success "Base domain: ${BASE_DOMAIN}"
+}
+
+# Install NGINX Ingress Controller on GKE using the cloud manifest.
+# Polls for the LoadBalancer external IP, then sets BASE_DOMAIN.
+install_gcp_ingress() {
+    log_info "Installing NGINX Ingress Controller for GKE..."
+
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f \
+        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"
+
+    wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
+
+    # Poll for LoadBalancer external IP
+    log_info "Waiting for LoadBalancer external IP (up to 5 minutes)..."
+    local external_ip=""
+    local attempts=60
+    local interval=5
+
+    for ((i=1; i<=attempts; i++)); do
+        external_ip=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get svc ingress-nginx-controller \
+            -n ingress-nginx \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+        if [[ -n "${external_ip}" ]]; then
+            break
+        fi
+
+        if [[ $((i % 6)) -eq 0 ]]; then
+            echo -e "  ${BLUE}[${i}/${attempts}]${NC} Still waiting for external IP..."
+        fi
+        sleep $interval
+    done
+
+    if [[ -z "${external_ip}" ]]; then
+        log_error "LoadBalancer external IP not assigned after $((attempts * interval))s"
+        log_error "Check: kubectl --kubeconfig ${KUBECONFIG_PATH} get svc -n ingress-nginx"
+        return 1
+    fi
+
+    BASE_DOMAIN="${external_ip}.nip.io"
+    log_success "NGINX Ingress Controller installed (GKE)"
+    log_success "External IP: ${external_ip}"
+    log_success "Base domain: ${BASE_DOMAIN}"
+}
+
+# Dispatcher: install the ingress controller for the current mode.
+install_ingress_controller() {
+    if [[ "${MODE}" == "kind" ]]; then
+        install_kind_ingress
+    else
+        install_gcp_ingress
+    fi
+}
+
+# Create Ingress resources for cluster-whisperer and Jaeger UI.
+# Called after the services exist so the Ingress has valid backends.
+create_ingress_resources() {
+    log_info "Creating Ingress resources (base domain: ${BASE_DOMAIN})..."
+
+    # cluster-whisperer Ingress
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cluster-whisperer
+  namespace: cluster-whisperer
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: cluster-whisperer.${BASE_DOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cluster-whisperer
+            port:
+              number: 3000
+EOF
+
+    log_success "Ingress created: http://cluster-whisperer.${BASE_DOMAIN}"
+
+    # Jaeger UI Ingress
+    kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jaeger
+  namespace: jaeger
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: jaeger.${BASE_DOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jaeger
+            port:
+              number: 16686
+EOF
+
+    log_success "Ingress created: http://jaeger.${BASE_DOMAIN}"
+}
+
+# =============================================================================
 # Crossplane Installation
 # =============================================================================
 
@@ -426,7 +561,7 @@ install_crossplane_providers() {
 # This is the slowest part of setup (5-10 minutes on GKE, 3-5 minutes on Kind).
 wait_for_crds() {
     local target=800   # Curated 35 sub-providers: ~1,000 CRDs expected
-    local timeout=1200 # 20 minutes — cold starts pull ~37 container images
+    local timeout=1800 # 30 minutes — cold starts pull ~37 container images
     local elapsed=0
     local interval=10
     local prev_count=0
@@ -435,7 +570,9 @@ wait_for_crds() {
 
     while [[ $elapsed -lt $timeout ]]; do
         local crd_count
-        crd_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
+        # Tolerate transient kubectl failures during CRD registration (API server
+        # may be briefly unavailable while providers register many CRDs)
+        crd_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || crd_count=0
 
         # Show progress when count changes
         if [[ $crd_count -ne $prev_count ]]; then
@@ -457,7 +594,7 @@ wait_for_crds() {
     # Didn't hit target but may still have enough CRDs for the demo
     local final_count
     local min_acceptable=200  # Minimum CRD count to consider "good enough" for the demo
-    final_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    final_count=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
     if [[ $final_count -ge $min_acceptable ]]; then
         log_warning "CRD registration timed out with ${final_count} CRDs (target was ${target}+)"
         log_warning "This may be enough for the demo — check provider status:"
@@ -599,26 +736,60 @@ verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
     local failures=0
+    local retries=6
+    local retry_interval=10
 
-    # Chroma health check: GET /api/v1/heartbeat returns {"nanosecond heartbeat": ...}
-    local chroma_health
-    chroma_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n chroma \
-        deploy/chroma-chromadb -- wget -qO- http://localhost:8000/api/v1/heartbeat 2>/dev/null || true)
-    if [[ -n "${chroma_health}" ]]; then
-        log_success "Chroma is responding (heartbeat ok)"
-    else
-        log_warning "Chroma health check failed — pod may still be starting"
+    # Chroma health check with retries: GET /api/v1/heartbeat
+    # Uses port-forward + local curl because the container image may lack wget/curl.
+    local chroma_ok=false
+    for ((i=1; i<=retries; i++)); do
+        local chroma_health
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n chroma \
+            svc/chroma-chromadb 18000:8000 &>/dev/null &
+        local pf_pid=$!
+        sleep 2
+        chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
+        kill $pf_pid 2>/dev/null || true
+        wait $pf_pid 2>/dev/null || true
+        if [[ -n "${chroma_health}" ]]; then
+            log_success "Chroma is responding (heartbeat ok)"
+            chroma_ok=true
+            break
+        fi
+        if [[ $i -lt $retries ]]; then
+            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Chroma not ready, retrying in ${retry_interval}s..."
+            sleep $retry_interval
+        fi
+    done
+    if [[ "${chroma_ok}" != "true" ]]; then
+        log_warning "Chroma health check failed after ${retries} attempts"
         failures=$((failures + 1))
     fi
 
-    # Qdrant health check: GET /healthz returns 200
-    local qdrant_health
-    qdrant_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n qdrant \
-        qdrant-0 -- wget -qO- http://localhost:6333/healthz 2>/dev/null || true)
-    if [[ -n "${qdrant_health}" ]]; then
-        log_success "Qdrant is responding (healthz ok)"
-    else
-        log_warning "Qdrant health check failed — pod may still be starting"
+    # Qdrant health check with retries: GET /healthz
+    # Uses port-forward + local curl because the container image may lack wget/curl.
+    local qdrant_ok=false
+    for ((i=1; i<=retries; i++)); do
+        local qdrant_health
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n qdrant \
+            qdrant-0 16333:6333 &>/dev/null &
+        local pf_pid=$!
+        sleep 2
+        qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
+        kill $pf_pid 2>/dev/null || true
+        wait $pf_pid 2>/dev/null || true
+        if [[ -n "${qdrant_health}" ]]; then
+            log_success "Qdrant is responding (healthz ok)"
+            qdrant_ok=true
+            break
+        fi
+        if [[ $i -lt $retries ]]; then
+            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Qdrant not ready, retrying in ${retry_interval}s..."
+            sleep $retry_interval
+        fi
+    done
+    if [[ "${qdrant_ok}" != "true" ]]; then
+        log_warning "Qdrant health check failed after ${retries} attempts"
         failures=$((failures + 1))
     fi
 
@@ -737,26 +908,60 @@ verify_observability() {
     log_info "Verifying observability backends..."
 
     local failures=0
+    local retries=6
+    local retry_interval=10
 
-    # Jaeger health check via the v2 healthcheck extension
-    local jaeger_health
-    jaeger_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n jaeger \
-        deploy/jaeger -- wget -qO- http://localhost:13133/status 2>/dev/null || true)
-    if [[ -n "${jaeger_health}" ]]; then
-        log_success "Jaeger is responding (health check ok)"
-    else
-        log_warning "Jaeger health check failed — pod may still be starting"
+    # Jaeger health check with retries via the v2 healthcheck extension
+    # Uses port-forward + local curl for consistency with other health checks.
+    local jaeger_ok=false
+    for ((i=1; i<=retries; i++)); do
+        local jaeger_health
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n jaeger \
+            deploy/jaeger 13133:13133 &>/dev/null &
+        local pf_pid=$!
+        sleep 2
+        jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
+        kill $pf_pid 2>/dev/null || true
+        wait $pf_pid 2>/dev/null || true
+        if [[ -n "${jaeger_health}" ]]; then
+            log_success "Jaeger is responding (health check ok)"
+            jaeger_ok=true
+            break
+        fi
+        if [[ $i -lt $retries ]]; then
+            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Jaeger not ready, retrying in ${retry_interval}s..."
+            sleep $retry_interval
+        fi
+    done
+    if [[ "${jaeger_ok}" != "true" ]]; then
+        log_warning "Jaeger health check failed after ${retries} attempts"
         failures=$((failures + 1))
     fi
 
-    # OTel Collector health check (default health extension on 13133)
-    local otel_health
-    otel_health=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" exec -n otel-collector \
-        deploy/otel-collector-opentelemetry-collector -- wget -qO- http://localhost:13133 2>/dev/null || true)
-    if [[ -n "${otel_health}" ]]; then
-        log_success "OTel Collector is responding (health check ok)"
-    else
-        log_warning "OTel Collector health check failed — pod may still be starting"
+    # OTel Collector health check with retries (default health extension on 13133)
+    # Uses port-forward + local curl because the collector image is distroless.
+    local otel_ok=false
+    for ((i=1; i<=retries; i++)); do
+        local otel_health
+        kubectl --kubeconfig "${KUBECONFIG_PATH}" port-forward -n otel-collector \
+            deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
+        local pf_pid=$!
+        sleep 2
+        otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
+        kill $pf_pid 2>/dev/null || true
+        wait $pf_pid 2>/dev/null || true
+        if [[ -n "${otel_health}" ]]; then
+            log_success "OTel Collector is responding (health check ok)"
+            otel_ok=true
+            break
+        fi
+        if [[ $i -lt $retries ]]; then
+            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} OTel Collector not ready, retrying in ${retry_interval}s..."
+            sleep $retry_interval
+        fi
+    done
+    if [[ "${otel_ok}" != "true" ]]; then
+        log_warning "OTel Collector health check failed after ${retries} attempts"
         failures=$((failures + 1))
     fi
 
@@ -855,7 +1060,7 @@ build_demo_app_image() {
     local demo_app_dir="${REPO_ROOT}/demo/app"
 
     log_info "Building demo app Docker image..."
-    docker build -t demo-app:latest "${demo_app_dir}" --quiet
+    docker build --platform linux/amd64 -t demo-app:latest "${demo_app_dir}" --quiet
     log_success "Demo app image built"
 }
 
@@ -981,7 +1186,7 @@ print_demo_app_diagnostics() {
 # Build the cluster-whisperer Docker image from the repo root Dockerfile.
 build_cluster_whisperer_image() {
     log_info "Building cluster-whisperer Docker image..."
-    docker build -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
+    docker build --platform linux/amd64 -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
     log_success "cluster-whisperer image built"
 }
 
@@ -1038,7 +1243,7 @@ deploy_cluster_whisperer_serve() {
             ]"
     fi
 
-    wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 120
+    wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 300
     log_success "cluster-whisperer serve deployed"
 }
 
@@ -1176,8 +1381,21 @@ print_summary() {
 
     log_info "Jaeger:         ${jaeger_status} (jaeger.jaeger:16686)"
     log_info "OTel Collector: ${otel_collector_status} (otel-collector-opentelemetry-collector.otel-collector:4318)"
+    local ingress_status
+    ingress_status=$(kubectl --kubeconfig "${KUBECONFIG_PATH}" get pods -n ingress-nginx \
+        -l app.kubernetes.io/component=controller \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "not installed")
+
+    log_info "Ingress NGINX: ${ingress_status}"
     log_info "CW serve:       ${serve_status} (cluster-whisperer.cluster-whisperer:3000)"
     log_info "vectordb-sync:  ${sync_status}"
+    echo ""
+    if [[ -n "${BASE_DOMAIN}" ]]; then
+        echo ""
+        log_info "Ingress URLs:"
+        log_info "  cluster-whisperer: http://cluster-whisperer.${BASE_DOMAIN}"
+        log_info "  Jaeger UI:         http://jaeger.${BASE_DOMAIN}"
+    fi
     echo ""
     log_info "To use this cluster:"
     echo "  export KUBECONFIG=${KUBECONFIG_PATH}"
@@ -1188,12 +1406,10 @@ print_summary() {
     echo "  kubectl get pods -n qdrant"
     echo "  kubectl get pods -n jaeger"
     echo "  kubectl get pods -n otel-collector"
+    echo "  kubectl get pods -n ingress-nginx"
     echo ""
     if [[ "${MODE}" == "kind" ]]; then
-        log_info "Jaeger UI: http://localhost:16686"
         log_info "OTLP endpoint: http://localhost:14318 (HTTP) / localhost:14317 (gRPC)"
-    else
-        log_info "Jaeger UI: kubectl port-forward -n jaeger svc/jaeger 16686:16686"
     fi
     echo ""
     log_info "To tear down:"
@@ -1244,6 +1460,7 @@ main() {
         create_gke_cluster
     fi
 
+    install_ingress_controller
     install_crossplane
     install_crossplane_providers
     install_platform_composition
@@ -1258,6 +1475,7 @@ main() {
     verify_vector_search
     run_instance_sync
     deploy_cluster_whisperer_serve
+    create_ingress_resources
     deploy_vectordb_sync
     print_summary
 }
