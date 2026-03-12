@@ -104,7 +104,7 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 - [x] Run setup script again to verify reproducibility
 
 ### M8: Documentation
-- [ ] Validate refactored scripts via full teardown + setup cycle (Decision 28)
+- [x] Validate refactored scripts via full teardown + setup cycle (Decision 28)
 - [ ] Update README using `/write-docs` to document the demo cluster setup/teardown (GKE only; Kind deferred to separate PRD)
 
 ## Technical Design

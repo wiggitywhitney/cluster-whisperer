@@ -33,6 +33,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-12) Demo cluster (PRD #47 M7): End-to-end setup.sh gcp passes on first try — GKE cluster creation, Crossplane (828+ CRDs), Chroma, Qdrant, Jaeger, OTel Collector, demo app, capability inference (1095 resources), instance sync (1189 instances), cluster-whisperer serve, k8s-vectordb-sync
 
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): `.env.example` documenting required API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY, DD_API_KEY)
+- (2026-03-12) Demo cluster (PRD #47 M8): Validated refactored scripts via full teardown + setup cycle — teardown surgically removed kubeconfig entries, setup completed end-to-end on GKE (1,041 CRDs, all components running, .env auto-loading works)
 
 ### Changed
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
