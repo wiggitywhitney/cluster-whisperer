@@ -541,7 +541,7 @@ install_crossplane_providers() {
 
     for batch_file in ${batch_files}; do
         local count
-        count=$(grep -c 'kind: Provider' "${batch_file}")
+        count=$(grep -c 'kind: Provider' "${batch_file}" || true)
         log_info "Batch $((batch_num + 1))/${total_batches}: applying ${count} providers..."
 
         kubectl apply -f "${batch_file}"

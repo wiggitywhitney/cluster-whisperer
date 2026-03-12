@@ -22,11 +22,14 @@ FROM node:22-slim
 # kubectl is needed for the capability inference and instance sync pipelines
 # (kubectl api-resources, kubectl explain, kubectl get)
 # Detect architecture from the build platform (amd64 or arm64)
+ARG KUBECTL_VERSION=v1.29.0
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && ARCH=$(dpkg --print-architecture) \
-    && curl --retry 3 -fsSL -o kubectl "https://dl.k8s.io/release/$(curl --retry 3 -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/${ARCH}/kubectl" \
+    && curl --retry 3 -fsSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" \
+    && curl --retry 3 -fsSL -o kubectl.sha256 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl.sha256" \
+    && echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check \
     && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
-    && rm kubectl \
+    && rm kubectl kubectl.sha256 \
     && apt-get remove -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
