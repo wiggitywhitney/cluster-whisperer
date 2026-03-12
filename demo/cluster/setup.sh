@@ -994,6 +994,12 @@ run_capability_inference() {
     log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in Chroma."
     log_info "First run takes 10-15 minutes (LLM inference is the bottleneck)."
 
+    if [[ -z "${ANTHROPIC_API_KEY:-}" || -z "${VOYAGE_API_KEY:-}" ]]; then
+        log_warning "ANTHROPIC_API_KEY or VOYAGE_API_KEY not set — skipping capability inference"
+        log_warning "Export both keys before running setup.sh to populate vector DB"
+        return
+    fi
+
     # Start port-forward to Chroma in the background
     local chroma_port=8000
     kubectl port-forward \
