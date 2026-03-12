@@ -99,7 +99,7 @@ database — the "needle in the haystack" that the agent finds via semantic sear
 
 ### M7: End-to-End Demo Rehearsal
 - [x] Run setup script from scratch
-- [ ] Execute the full demo flow (all 4 acts) against the cluster
+- [ ] ~~Execute the full demo flow (all 4 acts) against the cluster~~ — Deferred: blocked on PRDs #48/#49; will validate as part of those PRDs
 - [x] Run teardown script
 - [x] Run setup script again to verify reproducibility
 
@@ -241,3 +241,4 @@ must be pulled.
 | 2026-03-12 | k8s-vectordb-sync needs 1Gi memory for large CRD clusters | Controller watches 1000+ API resources and caches informer metadata. 128Mi and 512Mi both OOMKill. 1Gi is sufficient for ~830 CRDs. |
 | 2026-03-12 | NGINX Ingress Controller + nip.io for external access | Single LoadBalancer routes to all services via host-based ingress rules. `<service>.<external-ip>.nip.io` provides DNS without registration. Pattern borrowed from spider-rainbows repo. |
 | 2026-03-12 | CRD timeout 1800s with transient failure tolerance | Cold starts pull ~37 container images. 1800s (30 min) timeout. `|| crd_count=0` fallback prevents pipefail from killing the script on transient API server errors. |
+| 2026-03-12 | Defer "full demo flow" validation to PRDs #48/#49 | The 4-act demo flow requires PRD #48 (demo modifications) and PRD #49 (Vercel agent), which aren't implemented yet. Setup/teardown scripts are proven reliable; demo flow validation belongs in the PRDs that implement the flow. |
