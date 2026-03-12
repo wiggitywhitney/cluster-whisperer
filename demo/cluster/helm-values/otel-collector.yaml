@@ -56,6 +56,11 @@ ports:
 # cluster-whisperer sends OTLP to this collector; the collector handles
 # routing to both backends so the app only needs one endpoint.
 config:
+  extensions:
+    # Bind health check to all interfaces so port-forward health probes work.
+    # The Helm chart default binds to ${env:MY_POD_IP} which rejects localhost.
+    health_check:
+      endpoint: 0.0.0.0:13133
   receivers:
     otlp:
       protocols:
