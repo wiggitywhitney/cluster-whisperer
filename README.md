@@ -398,10 +398,16 @@ docs/
 └── vector-database.md               # Vector database architecture
 
 demo/
-└── app/                   # Demo app — intentionally broken prop for KubeCon talk
-    ├── src/               # Hono server with DATABASE_URL connection logic
-    ├── k8s/               # Deployment + Service manifests
-    └── Dockerfile         # Multi-stage build
+├── app/                   # Demo app — intentionally broken prop for KubeCon talk
+│   ├── src/               # Hono server with DATABASE_URL connection logic
+│   ├── k8s/               # Deployment + Service manifests
+│   └── Dockerfile         # Multi-stage build
+└── cluster/               # Demo cluster provisioning (GKE)
+    ├── setup.sh           # Create cluster with all demo components
+    ├── teardown.sh        # Destroy clusters and clean up kubeconfig
+    ├── kind-config.yaml   # Kind cluster configuration (experimental)
+    ├── helm-values/       # Helm values for Crossplane, Chroma, Qdrant, Jaeger, OTel Collector
+    └── manifests/         # Crossplane providers, XRD, Composition
 ```
 
 ## Demo App
@@ -484,6 +490,86 @@ $ kubectl logs --previous -l app=demo-app
 ```
 
 This is what the cluster-whisperer agent sees when it investigates. The error messages are designed to be agent-friendly — single-line, containing the word "database" and the connection target, so the agent can diagnose the missing database from `kubectl logs` output alone.
+
+## Demo Cluster
+
+The `demo/cluster/` directory contains scripts to provision a complete demo environment on GKE. A single command creates a Kubernetes cluster with ~1,000 Crossplane CRDs, two vector databases, two observability backends, the demo app in CrashLoopBackOff, and a live cluster-whisperer instance — everything needed for the KubeCon "Choose Your Own Adventure" demo.
+
+### Prerequisites
+
+- [Google Cloud SDK](https://cloud.google.com/sdk) (`gcloud`) with `gke-gcloud-auth-plugin`
+- [Helm](https://helm.sh/) 3.x
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- Docker (for building container images)
+- Node.js 18+ (for the capability inference pipeline)
+- API keys in a `.env` file at the repo root (see `.env.example`):
+  - `ANTHROPIC_API_KEY` — for capability inference
+  - `VOYAGE_API_KEY` — for vector embeddings
+  - `DD_API_KEY` — for Datadog trace export (optional)
+
+### Setup
+
+```bash
+./demo/cluster/setup.sh gcp
+```
+
+The script auto-detects the nearest GCP zone (override with `GCP_ZONE=europe-west1-b`). It creates a 3-node GKE cluster, installs all components, runs the capability inference pipeline, and prints a summary when complete:
+
+```text
+[ok] ==============================================
+[ok] Demo Cluster Ready (gcp mode)
+[ok] ==============================================
+
+==> Mode:           gcp
+==> Cluster:        cluster-whisperer-20260312-155916
+==> KUBECONFIG:     /Users/whitney.lee/.kube/config-cluster-whisperer
+==> CRDs:           1041
+==> Demo app:       CrashLoopBackOff
+==> Chroma:         Running
+==> Qdrant:         Running
+==> Jaeger:         Running
+==> OTel Collector: Running
+==> Ingress NGINX:  Running
+==> CW serve:       Running
+==> vectordb-sync:  Running
+
+==> Ingress URLs:
+==>   cluster-whisperer: http://cluster-whisperer.34.123.173.28.nip.io
+==>   Jaeger UI:         http://jaeger.34.123.173.28.nip.io
+
+==> To use this cluster:
+  export KUBECONFIG=/Users/whitney.lee/.kube/config-cluster-whisperer
+```
+
+The setup script writes credentials to `~/.kube/config-cluster-whisperer`. Your default kubeconfig is also modified during setup; teardown removes those entries.
+
+Setup takes approximately 45-55 minutes on a cold start (GKE creation ~8 min, CRD registration ~23 min, capability inference ~12 min).
+
+### What Gets Created
+
+| Component | Namespace | Purpose |
+|-----------|-----------|---------|
+| GKE cluster (3x n2-standard-4) | — | Kubernetes environment |
+| Crossplane + 35 sub-providers | `crossplane-system` | ~1,000 CRDs for discovery |
+| Platform PostgreSQL XRD/Composition | `crossplane-system` | The "needle in the haystack" |
+| Chroma | `chroma` | Vector database (capabilities + instances) |
+| Qdrant | `qdrant` | Vector database |
+| Jaeger v2 | `jaeger` | Trace UI backend |
+| OTel Collector | `otel-collector` | OTLP to Jaeger + Datadog fan-out |
+| Demo app | `default` | Intentionally broken (CrashLoopBackOff) |
+| cluster-whisperer serve | `cluster-whisperer` | REST API for live sync |
+| k8s-vectordb-sync | `k8s-vectordb-sync` | Controller pushing resource changes |
+| NGINX Ingress | `ingress-nginx` | External access via nip.io DNS |
+
+The setup script also runs the **capability inference pipeline**, which analyzes all ~1,000 CRDs via LLM and stores natural-language descriptions in Chroma. This is what enables semantic search — when the agent searches for "PostgreSQL database for my application", it finds the platform Composition among ~1,000 CRDs because the pipeline generated a description like "Platform-approved PostgreSQL database for application teams."
+
+### Teardown
+
+```bash
+./demo/cluster/teardown.sh
+```
+
+Discovers and deletes all cluster-whisperer clusters (both Kind and GKE), removes their kubeconfig entries, and cleans up the dedicated kubeconfig file if empty. GKE clusters incur billing until fully deleted.
 
 ## License
 
