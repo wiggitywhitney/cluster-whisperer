@@ -98,6 +98,8 @@ metadata:
 ---
 # ClusterRole: read-only access to all resources for kubectl operations
 # within the capability inference and instance sync pipelines.
+# NOTE: Wildcard grants are acceptable for this ephemeral demo cluster.
+# For production, scope to specific API groups and exclude secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
