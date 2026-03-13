@@ -1,5 +1,5 @@
 // ABOUTME: ReAct agent that answers Kubernetes questions using kubectl and vector search tools.
-// ABOUTME: Implements the agentic loop with extended thinking and configurable recursion limit.
+// ABOUTME: Implements the agentic loop with extended thinking, recursion limit, and graceful exit.
 
 /**
  * investigator.ts - The agentic loop that answers questions about Kubernetes
@@ -105,6 +105,9 @@ function getSystemPrompt(): string {
       console.error(`Error: Could not load system prompt from ${promptPath}`);
       console.error("");
       console.error("Make sure prompts/investigator.md exists in the project root.");
+      // process.exit(1) is intentional here: getSystemPrompt is synchronous and
+      // this is a fatal startup error — no traces are in flight yet, so losing
+      // the flush is acceptable. Using async gracefulExit would race with callers.
       process.exit(1);
     }
   }

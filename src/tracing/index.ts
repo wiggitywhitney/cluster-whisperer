@@ -1,3 +1,6 @@
+// ABOUTME: OpenTelemetry initialization for cluster-whisperer with graceful shutdown.
+// ABOUTME: Configures tracing exporters and provides gracefulExit to flush spans before exit.
+
 /**
  * tracing/index.ts - OpenTelemetry initialization for cluster-whisperer
  *
@@ -67,6 +70,13 @@ const exporterOtlpProto = loadExporterOtlpProto();
  * for this learning-focused project.
  */
 const SERVICE_NAME = "cluster-whisperer";
+
+/**
+ * Module-level reference to the traceloop SDK after initialization.
+ * Used by gracefulExit() to flush pending spans before process.exit().
+ * null when tracing is disabled or SDK is absent.
+ */
+let initializedTraceloop: typeof traceloop | null = null;
 
 /**
  * Check if tracing is enabled via environment variable.
@@ -209,6 +219,9 @@ if (isTracingEnabled) {
       processor: new ToolDefinitionsProcessor(),
     });
 
+    // Store reference for gracefulExit() to use
+    initializedTraceloop = traceloop;
+
     console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`); // eslint-disable-line no-console
     console.log("[OTel] OpenLLMetry initialized for LLM instrumentation"); // eslint-disable-line no-console
 
@@ -282,6 +295,30 @@ export function withTool<T>(
     return traceloop.withTool(config, fn);
   }
   return fn();
+}
+
+/**
+ * Flush pending OTel spans and exit the process.
+ *
+ * Why this exists:
+ * process.exit() bypasses signal handlers, so the SIGTERM/SIGINT handlers
+ * that call forceFlush() never run. Any call site that uses process.exit()
+ * loses in-flight traces. This helper ensures spans are exported before exit.
+ *
+ * When tracing is disabled or the SDK is absent, this just calls process.exit()
+ * immediately — no flush needed since there are no spans.
+ *
+ * @param code - Exit code (default: 1)
+ */
+export async function gracefulExit(code: number = 1): Promise<never> {
+  if (initializedTraceloop) {
+    try {
+      await initializedTraceloop.forceFlush();
+    } catch (error) {
+      console.error("[OTel] Error flushing traces before exit:", error);
+    }
+  }
+  process.exit(code);
 }
 
 /**
