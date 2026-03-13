@@ -94,9 +94,9 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Verified: agent produces equivalent search results from both backends
 
 ### M7: OTel Instrumentation for Qdrant Backend
-- [ ] Every QdrantBackend operation wrapped in spans (matching ChromaBackend's pattern)
-- [ ] Span attributes: `db.system: "qdrant"`, `db.operation.name`, `db.collection.name`, custom counts
-- [ ] Unit tests verifying span creation (using in-memory OTel exporter, same pattern as ChromaBackend tests)
+- [x] Every QdrantBackend operation wrapped in spans (matching ChromaBackend's pattern)
+- [x] Span attributes: `db.system: "qdrant"`, `db.operation.name`, `db.collection.name`, custom counts
+- [x] Unit tests verifying span creation (using in-memory OTel exporter, same pattern as ChromaBackend tests)
 - [ ] Verified: traces appear in Jaeger/Datadog when using Qdrant backend
 
 ### M8: End-to-End Demo Flow Test
