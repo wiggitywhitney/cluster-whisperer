@@ -31,7 +31,9 @@ import { gracefulExit } from "./tracing";
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
-import { getInvestigatorAgent, truncate, RECURSION_LIMIT } from "./agent/investigator";
+import { truncate, RECURSION_LIMIT } from "./agent/investigator";
+import { createAgent } from "./agent/agent-factory";
+import { parseAgentType, DEFAULT_AGENT_TYPE } from "./agent/agent-types";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import { parseToolGroups, DEFAULT_TOOL_GROUPS } from "./tools/tool-groups";
 import {
@@ -156,7 +158,11 @@ async function main() {
       "--tools <groups>",
       `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`,
     )
-    .action(async (question: string, options: { tools?: string }) => {
+    .option(
+      "--agent <type>",
+      `Agent framework: langgraph, vercel (default: ${DEFAULT_AGENT_TYPE})`,
+    )
+    .action(async (question: string, options: { tools?: string; agent?: string }) => {
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
 
@@ -164,6 +170,11 @@ async function main() {
       const toolGroups = options.tools
         ? parseToolGroups(options.tools)
         : DEFAULT_TOOL_GROUPS;
+
+      // Parse agent type from --agent flag (or use default)
+      const agentType = options.agent
+        ? parseAgentType(options.agent)
+        : DEFAULT_AGENT_TYPE;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -196,7 +207,7 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = getInvestigatorAgent({ toolGroups }).streamEvents(
+        const eventStream = createAgent({ agentType, toolGroups }).streamEvents(
           { messages: [new HumanMessage(question)] },
           { version: "v2", recursionLimit: RECURSION_LIMIT }
         );

@@ -74,10 +74,10 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Unit tests for tool-set parsing and filtering
 
 ### M4: Agent Selection Flag (--agent flag)
-- [ ] `--agent` CLI flag accepting `langgraph` (default) or `vercel`
-- [ ] Agent factory that constructs the right agent based on the flag
-- [ ] Initially only `langgraph` works; `vercel` returns "not yet implemented" error
-- [ ] Plumbing ready for PRD #49 to plug in the Vercel implementation
+- [x] `--agent` CLI flag accepting `langgraph` (default) or `vercel`
+- [x] Agent factory that constructs the right agent based on the flag
+- [x] Initially only `langgraph` works; `vercel` returns "not yet implemented" error
+- [x] Plumbing ready for PRD #49 to plug in the Vercel implementation
 
 ### M5: Qdrant VectorStore Backend
 - [ ] `QdrantBackend` implementing `VectorStore` interface (`src/vectorstore/qdrant-backend.ts`)
