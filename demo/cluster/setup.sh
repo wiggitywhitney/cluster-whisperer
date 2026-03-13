@@ -1216,16 +1216,19 @@ verify_trace_pipeline() {
 # Capability Inference Pipeline
 # =============================================================================
 
-# Run the capability inference pipeline to populate the Chroma vector database
-# with descriptions of all ~1,000 CRDs. This makes them searchable by meaning
-# (e.g., "PostgreSQL database" finds the platform XRD among all the noise).
+# Run the capability inference pipeline to populate both Chroma and Qdrant
+# vector databases with descriptions of all ~1,000 CRDs. This makes them
+# searchable by meaning (e.g., "PostgreSQL database" finds the platform XRD).
+#
+# Uses MultiBackendVectorStore: a single pipeline run populates both backends,
+# avoiding duplicate LLM inference costs.
 #
 # Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
-# Uses the Chroma ingress URL to reach the in-cluster Chroma instance.
+# Uses ingress URLs to reach in-cluster Chroma and Qdrant.
 # Requires create_ingress_resources to have run first.
 run_capability_inference() {
     log_info "Running capability inference pipeline..."
-    log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in Chroma."
+    log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in both Chroma and Qdrant."
     log_info "First run takes 10-15 minutes (LLM inference is the bottleneck)."
 
     if [[ -z "${ANTHROPIC_API_KEY:-}" || -z "${VOYAGE_API_KEY:-}" ]]; then
@@ -1235,37 +1238,53 @@ run_capability_inference() {
     fi
 
     local chroma_url="http://chroma.${BASE_DOMAIN}"
-    log_info "Using Chroma at ${chroma_url}"
+    local qdrant_url="http://qdrant.${BASE_DOMAIN}"
+    log_info "Using Chroma at ${chroma_url}, Qdrant at ${qdrant_url}"
 
-    # Run the sync pipeline. Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
+    # Run the sync pipeline with both URLs — CLI auto-detects multi-backend mode
     local sync_exit=0
     npx tsx "${REPO_ROOT}/src/index.ts" sync \
-        --chroma-url "${chroma_url}" || sync_exit=$?
+        --chroma-url "${chroma_url}" \
+        --qdrant-url "${qdrant_url}" || sync_exit=$?
 
     if [[ $sync_exit -ne 0 ]]; then
         log_error "Capability inference pipeline failed (exit code: ${sync_exit})"
         return 1
     fi
 
-    log_success "Capability inference pipeline complete"
+    log_success "Capability inference pipeline complete (both Chroma and Qdrant)"
 }
 
-# Verify the platform PostgreSQL XRD is discoverable via semantic search.
-# This is the "needle in the haystack" — the one Composition among ~1,000 CRDs.
-# Uses the Chroma ingress URL (requires create_ingress_resources to have run).
+# Verify both Chroma and Qdrant have documents after sync.
+# Uses ingress URLs (requires create_ingress_resources to have run).
 verify_vector_search() {
-    log_info "Verifying platform PostgreSQL XRD is discoverable via vector search..."
+    log_info "Verifying vector databases are populated..."
 
     local chroma_url="http://chroma.${BASE_DOMAIN}"
+    local qdrant_url="http://qdrant.${BASE_DOMAIN}"
 
-    # Check that Chroma has documents in the capabilities collection.
-    local doc_count
-    doc_count=$(curl -sf "${chroma_url}/api/v2/collections" 2>/dev/null || true)
-
-    if [[ -n "${doc_count}" ]]; then
+    # Check Chroma has documents in the capabilities collection
+    local chroma_collections
+    chroma_collections=$(curl -sf "${chroma_url}/api/v2/collections" 2>/dev/null || true)
+    if [[ -n "${chroma_collections}" ]]; then
         log_success "Chroma capabilities collection is populated"
     else
         log_warning "Could not verify Chroma collection — check manually"
+    fi
+
+    # Check Qdrant has documents in the capabilities collection
+    local qdrant_collections
+    qdrant_collections=$(curl -sf "${qdrant_url}/collections/capabilities" 2>/dev/null || true)
+    if [[ -n "${qdrant_collections}" ]] && echo "${qdrant_collections}" | grep -q '"points_count"'; then
+        local qdrant_count
+        qdrant_count=$(echo "${qdrant_collections}" | grep -o '"points_count":[0-9]*' | grep -o '[0-9]*')
+        if [[ -n "${qdrant_count}" && "${qdrant_count}" -gt 0 ]]; then
+            log_success "Qdrant capabilities collection is populated (${qdrant_count} points)"
+        else
+            log_warning "Qdrant capabilities collection exists but has 0 points"
+        fi
+    else
+        log_warning "Could not verify Qdrant collection — check manually"
     fi
 }
 
@@ -1519,25 +1538,28 @@ deploy_vectordb_sync() {
     log_success "k8s-vectordb-sync controller deployed"
 }
 
-# Run instance sync to populate the instances collection. Uses the CLI
-# pull-based approach (sync-instances) rather than the push-based controller.
+# Run instance sync to populate the instances collection in both Chroma and Qdrant.
+# Uses the CLI pull-based approach (sync-instances) with multi-backend mode.
 # This ensures instances are populated even if the controller isn't deployed.
 run_instance_sync() {
-    log_info "Running instance sync (populating instances collection)..."
+    log_info "Running instance sync (populating instances collection in both backends)..."
 
     local chroma_url="http://chroma.${BASE_DOMAIN}"
-    log_info "Using Chroma at ${chroma_url}"
+    local qdrant_url="http://qdrant.${BASE_DOMAIN}"
+    log_info "Using Chroma at ${chroma_url}, Qdrant at ${qdrant_url}"
 
+    # Run sync-instances with both URLs — CLI auto-detects multi-backend mode
     local sync_exit=0
     npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
-        --chroma-url "${chroma_url}" || sync_exit=$?
+        --chroma-url "${chroma_url}" \
+        --qdrant-url "${qdrant_url}" || sync_exit=$?
 
     if [[ $sync_exit -ne 0 ]]; then
         log_error "Instance sync failed (exit code: ${sync_exit})"
         return 1
     fi
 
-    log_success "Instance sync complete"
+    log_success "Instance sync complete (both Chroma and Qdrant)"
 }
 
 # =============================================================================

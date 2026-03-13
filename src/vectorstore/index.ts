@@ -42,6 +42,7 @@ export {
   type VectorBackendType,
 } from "./backend-types";
 export { createVectorStore, type CreateVectorStoreOptions } from "./backend-factory";
+export { MultiBackendVectorStore } from "./multi-backend";
 
 /**
  * Collection name for capability descriptions.

@@ -131,15 +131,15 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
 
 ### M9: Multi-Backend Sync Pipeline
-- [ ] `MultiBackendVectorStore` class implementing `VectorStore` interface (`src/vectorstore/multi-backend.ts`)
-- [ ] Writes (`initialize`, `store`, `delete`) delegate to all backends in parallel via `Promise.all`
-- [ ] Reads (`search`, `keywordSearch`) delegate to first backend (wrapper is for sync writes only; demo agent reads from the audience-chosen backend via `CLUSTER_WHISPERER_VECTOR_BACKEND`)
-- [ ] Fail-fast: if any backend errors, the whole operation rejects
-- [ ] Unit tests for all delegated methods (`src/vectorstore/multi-backend.test.ts`)
-- [ ] Sync commands (`sync`, `sync-instances`) default to both backends when both URLs are available
-- [ ] Setup script: single sync invocation populates both Chroma and Qdrant
-- [ ] Setup script: verify Chroma has expected document count after sync
-- [ ] Setup script: verify Qdrant has expected document count after sync
+- [x] `MultiBackendVectorStore` class implementing `VectorStore` interface (`src/vectorstore/multi-backend.ts`)
+- [x] Writes (`initialize`, `store`, `delete`) delegate to all backends in parallel via `Promise.all`
+- [x] Reads (`search`, `keywordSearch`) delegate to first backend (wrapper is for sync writes only; demo agent reads from the audience-chosen backend via `CLUSTER_WHISPERER_VECTOR_BACKEND`)
+- [x] Fail-fast: if any backend errors, the whole operation rejects
+- [x] Unit tests for all delegated methods (`src/vectorstore/multi-backend.test.ts`)
+- [x] Sync commands (`sync`, `sync-instances`) default to both backends when both URLs are available
+- [x] Setup script: single sync invocation populates both Chroma and Qdrant
+- [x] Setup script: verify Chroma has expected document count after sync
+- [x] Setup script: verify Qdrant has expected document count after sync
 - [ ] Verified: single `sync` invocation populates both backends with identical document counts
 
 ### M10: Full Demo Rehearsal

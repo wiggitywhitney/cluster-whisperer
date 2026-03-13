@@ -50,6 +50,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-13) Demo modifications (PRD #48 M8): Infrastructure ingress rules — Chroma, Qdrant, and OTel Collector ingress via nip.io in setup.sh. Demo `.env` generation with resolved infrastructure URLs (KUBECONFIG, vector DB URLs, OTel endpoint). Serve manifest updated with `--qdrant-url`.
 - (2026-03-13) Demo modifications (PRD #48 M7/M8): Verified all 3 M8 verification items on live GKE cluster — kubeconfig governance (kubectl fails, agent succeeds), traces in Jaeger (64 spans via OTel Collector ingress), Qdrant traces (7 spans with db.system:"qdrant" attributes) in Jaeger
 
+- (2026-03-13) Demo modifications (PRD #48 M9): MultiBackendVectorStore — VectorStore wrapper that writes to all backends in parallel via Promise.all, reads from first backend. 15 unit tests. Sync commands auto-detect multi-backend mode when both Chroma and Qdrant URLs provided. Setup script updated for dual-backend sync and verification.
+
 ### Changed
 - (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning
 - (2026-03-13) Demo modifications (PRD #48): Updated demo flow with two-question Act 2 (investigation + CRD wall follow-up), restructured PRD milestones (added M9 multi-backend sync, M10 full rehearsal)

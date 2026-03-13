@@ -41,7 +41,9 @@ import {
   DEFAULT_VECTOR_BACKEND,
   createVectorStore,
   VoyageEmbedding,
+  MultiBackendVectorStore,
 } from "./vectorstore";
+import type { VectorStore } from "./vectorstore";
 import {
   syncCapabilities,
   discoverResources,
@@ -138,6 +140,51 @@ async function validateInstanceSyncEnvironment(): Promise<void> {
 async function validateServeEnvironment(): Promise<void> {
   await validateVoyageKey();
   await validateAnthropicKey();
+}
+
+/**
+ * Creates a VectorStore for sync operations.
+ *
+ * When no explicit --vector-backend is set and both chroma-url and qdrant-url
+ * are available, creates a MultiBackendVectorStore that writes to both backends
+ * from a single pipeline run — avoiding duplicate LLM inference costs.
+ *
+ * When --vector-backend is explicitly set, or only one URL is available,
+ * creates a single-backend VectorStore (existing behavior).
+ */
+function createSyncVectorStore(options: {
+  vectorBackend?: string;
+  chromaUrl?: string;
+  qdrantUrl?: string;
+}): VectorStore {
+  const embedder = new VoyageEmbedding();
+
+  // Explicit backend selection — use single backend
+  if (options.vectorBackend) {
+    const backendType = parseVectorBackend(options.vectorBackend);
+    return createVectorStore(embedder, backendType, {
+      chromaUrl: options.chromaUrl,
+      qdrantUrl: options.qdrantUrl,
+    });
+  }
+
+  // Both URLs available — use multi-backend to populate both at once
+  if (options.chromaUrl && options.qdrantUrl) {
+    console.log("Both Chroma and Qdrant URLs detected — syncing to both backends");
+    const chroma = createVectorStore(embedder, "chroma", {
+      chromaUrl: options.chromaUrl,
+    });
+    const qdrant = createVectorStore(embedder, "qdrant", {
+      qdrantUrl: options.qdrantUrl,
+    });
+    return new MultiBackendVectorStore([chroma, qdrant]);
+  }
+
+  // Default — single backend (backwards compatible)
+  return createVectorStore(embedder, DEFAULT_VECTOR_BACKEND, {
+    chromaUrl: options.chromaUrl,
+    qdrantUrl: options.qdrantUrl,
+  });
 }
 
 /**
@@ -347,17 +394,7 @@ async function main() {
     .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateSyncEnvironment();
 
-      // Parse vector backend from --vector-backend flag (or use default)
-      const backendType = options.vectorBackend
-        ? parseVectorBackend(options.vectorBackend)
-        : DEFAULT_VECTOR_BACKEND;
-
-      // Create the vector store with Voyage AI embeddings
-      const embedder = new VoyageEmbedding();
-      const vectorStore = createVectorStore(embedder, backendType, {
-        chromaUrl: options.chromaUrl,
-        qdrantUrl: options.qdrantUrl,
-      });
+      const vectorStore = createSyncVectorStore(options);
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
 
@@ -412,17 +449,7 @@ async function main() {
     .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateInstanceSyncEnvironment();
 
-      // Parse vector backend from --vector-backend flag (or use default)
-      const backendType = options.vectorBackend
-        ? parseVectorBackend(options.vectorBackend)
-        : DEFAULT_VECTOR_BACKEND;
-
-      // Create the vector store with Voyage AI embeddings
-      const embedder = new VoyageEmbedding();
-      const vectorStore = createVectorStore(embedder, backendType, {
-        chromaUrl: options.chromaUrl,
-        qdrantUrl: options.qdrantUrl,
-      });
+      const vectorStore = createSyncVectorStore(options);
 
       console.log("\nStarting instance sync...\n"); // eslint-disable-line no-console
 
