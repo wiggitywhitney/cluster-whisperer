@@ -1,20 +1,20 @@
-# Composition implementing the platform PostgreSQL XRD using AWS RDS.
+# Composition implementing the platform ManagedService XRD using AWS RDS.
 #
-# This maps the simplified platform abstraction (PostgreSQLInstance) to
+# This maps the simplified platform abstraction (ManagedService) to
 # concrete AWS RDS resources. In the demo, no cloud credentials are
 # configured — the Composition exists to show that the platform team has
 # defined the "right answer" for how to provision a database.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: postgresqlinstance-aws-rds
+  name: managedservice-aws-rds
   labels:
     provider: aws
     service: rds
 spec:
   compositeTypeRef:
-    apiVersion: platform.cluster-whisperer.io/v1alpha1
-    kind: PostgreSQLInstance
+    apiVersion: platform.acme.io/v1alpha1
+    kind: ManagedService
   mode: Pipeline
   pipeline:
   - step: create-rds-instance
@@ -77,4 +77,4 @@ spec:
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.networkRef
-          toFieldPath: metadata.annotations["platform.cluster-whisperer.io/network-ref"]
+          toFieldPath: metadata.annotations["platform.acme.io/network-ref"]

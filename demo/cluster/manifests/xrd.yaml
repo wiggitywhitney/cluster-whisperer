@@ -1,19 +1,22 @@
-# Platform-approved PostgreSQL database — the "needle in the haystack" that
+# Platform-approved managed service — the "needle in the haystack" that
 # the cluster-whisperer agent discovers among ~1,000 Crossplane CRDs.
 #
-# This XRD defines a simplified PostgreSQL abstraction that platform teams
-# offer to application developers. The rich field descriptions ensure that
-# `kubectl explain postgresqlinstances` produces detailed output for the
-# capability inference pipeline to analyze.
+# This XRD defines a simplified managed service abstraction that platform
+# teams offer to application developers. The intentionally opaque name
+# ("ManagedService" in the "platform.acme.io" group) means the agent
+# cannot identify this as a PostgreSQL database by scanning CRD names alone —
+# it needs semantic search (vector DB) to understand what this resource does.
+# The rich field descriptions ensure that `kubectl explain managedservices`
+# produces detailed output for the capability inference pipeline to analyze.
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: postgresqlinstances.platform.cluster-whisperer.io
+  name: managedservices.platform.acme.io
 spec:
-  group: platform.cluster-whisperer.io
+  group: platform.acme.io
   names:
-    kind: PostgreSQLInstance
-    plural: postgresqlinstances
+    kind: ManagedService
+    plural: managedservices
   versions:
   - name: v1alpha1
     served: true

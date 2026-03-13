@@ -130,19 +130,39 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] Verified: traces from local CLI appear in Jaeger via OTel Collector ingress
 - [x] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
 
-### M9: End-to-End Demo Flow Test
-- [ ] Full demo flow against the demo cluster (PRD #47)
-- [ ] Act 1: No agent — presenter shows `kubectl get pods` fails (no KUBECONFIG)
-- [ ] Vote 1: Presenter runs `export CLUSTER_WHISPERER_AGENT=langgraph` (audience chose framework)
-- [ ] Act 2: Presenter runs `export CLUSTER_WHISPERER_TOOLS=kubectl`, then `cluster-whisperer "Why is my app broken?"` — agent investigates, finds missing DB, hits CRD wall
-- [ ] Vote 2: Presenter runs `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` (or qdrant) based on audience choice
-- [ ] Act 3: Presenter runs `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply`, then `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds and deploys DB
-- [ ] Act 3 (alt): repeat with `CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` to verify both backends work
-- [ ] Vote 3: Audience picks Jaeger or Datadog
-- [ ] Act 4: Presenter opens the chosen observability UI and shows traces from the investigation
-- [ ] Verified: traces visible in both Jaeger UI and Datadog for both Chroma and Qdrant runs
+### M9: Multi-Backend Sync Pipeline
+- [ ] `MultiBackendVectorStore` class implementing `VectorStore` interface (`src/vectorstore/multi-backend.ts`)
+- [ ] Writes (`initialize`, `store`, `delete`) delegate to all backends in parallel via `Promise.all`
+- [ ] Reads (`search`, `keywordSearch`) delegate to first backend (wrapper is for sync writes only; demo agent reads from the audience-chosen backend via `CLUSTER_WHISPERER_VECTOR_BACKEND`)
+- [ ] Fail-fast: if any backend errors, the whole operation rejects
+- [ ] Unit tests for all delegated methods (`src/vectorstore/multi-backend.test.ts`)
+- [ ] Sync commands (`sync`, `sync-instances`) default to both backends when both URLs are available
+- [ ] Setup script: single sync invocation populates both Chroma and Qdrant
+- [ ] Setup script: verify Chroma has expected document count after sync
+- [ ] Setup script: verify Qdrant has expected document count after sync
+- [ ] Verified: single `sync` invocation populates both backends with identical document counts
 
-### M10: Documentation
+### M10: Full Demo Rehearsal
+
+This is not a checklist of features — it is a full end-to-end rehearsal from teardown to traces. The authoritative demo flow is `docs/choose-your-adventure-demo.md`. If setup fails at any point, fix the root cause, teardown, and run setup again from scratch. No patching a half-built cluster.
+
+- [ ] Teardown existing cluster (`demo/cluster/teardown.sh`)
+- [ ] Run `demo/cluster/setup.sh gcp` — must exit 0 with no manual intervention
+- [ ] Verify both vector databases are populated (Chroma and Qdrant have matching document counts)
+- [ ] Source `demo/.env` — confirm infrastructure URLs are set
+- [ ] Act 1: `kubectl get pods` fails (no KUBECONFIG in presenter shell)
+- [ ] Act 2 setup: `export CLUSTER_WHISPERER_AGENT=langgraph` and `export CLUSTER_WHISPERER_TOOLS=kubectl`
+- [ ] Act 2 question 1: `cluster-whisperer "Why is my app broken?"` — agent finds missing database
+- [ ] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees 1,000+ CRDs, cannot identify the right one by name (CRD wall)
+- [ ] Act 3 setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply`
+- [ ] Act 3 (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, deploys it
+- [ ] Act 3 cleanup: delete the deployed ManagedService instance
+- [ ] Act 3 (Qdrant): `export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` — repeat, agent finds and deploys ManagedService using Qdrant
+- [ ] Act 4: open Jaeger UI — traces visible from agent runs
+- [ ] Act 4 verification: traces include tool spans, vector search spans, and apply spans
+- [ ] Full flow completes without errors, retries, or manual workarounds
+
+### M11: Documentation
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
 - [ ] Update `docs/choose-your-adventure-demo.md` to reflect env var interface (replaces old CLI flag commands)
 
@@ -243,6 +263,7 @@ export CLUSTER_WHISPERER_AGENT=langgraph
 # Vote 1 result → Act 2: investigation with kubectl tools only
 export CLUSTER_WHISPERER_TOOLS=kubectl
 cluster-whisperer "Why is my app broken?"
+cluster-whisperer "Can you help me fix this? Which database should I deploy?"
 
 # Vote 2: audience picks vector DB
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
@@ -274,3 +295,6 @@ All changes are additive:
 | 2026-03-13 | OTel Collector needs ingress | With agent running locally (Option C), traces must reach in-cluster OTel Collector externally. Add ingress rule in setup script. |
 | 2026-03-13 | M7 OTel instrumentation already implemented in M5 | QdrantBackend spans were built alongside the backend implementation. 32 tests verify all span attributes. Live Jaeger/Datadog verification moved to M8 (requires running cluster). |
 | 2026-03-13 | URL port parsing fix for ingress URLs | ChromaBackend and QdrantBackend defaulted to service ports (8000/6333) when no port in URL, breaking ingress URLs on port 80. Fixed to use protocol defaults (80/443). |
+| 2026-03-13 | XRD renamed to opaque `managedservices.platform.acme.io` | Agent found `postgresqlinstances.platform.cluster-whisperer.io` by scanning CRD names, undermining the CRD wall narrative. The opaque name forces the agent to need vector search to discover the resource is a PostgreSQL database. |
+| 2026-03-13 | Multi-backend sync via `MultiBackendVectorStore` wrapper | Setup script needs to populate both Chroma and Qdrant. Running LLM inference twice wastes API costs. Wrapper writes to all backends from a single pipeline run. |
+| 2026-03-13 | Act 2 two-question flow | First question ("Why is my app broken?") finds the problem. Follow-up ("Can you help me fix this? Which database should I deploy?") triggers the CRD wall — agent sees 1,000+ opaque names and can't identify the database without semantic search. |

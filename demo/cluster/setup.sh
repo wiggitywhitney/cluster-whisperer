@@ -789,13 +789,13 @@ EOF
 # Apply the platform PostgreSQL XRD and Composition — the one resource the
 # agent should discover among ~1,000 CRDs when searching for a database.
 install_platform_composition() {
-    log_info "Applying platform PostgreSQL XRD and Composition..."
+    log_info "Applying platform ManagedService XRD and Composition..."
 
     install_composition_function
 
     # Apply XRD first — it creates the CRD that the Composition references
     kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
-    log_success "XRD applied (PostgreSQLInstance)"
+    log_success "XRD applied (ManagedService)"
 
     # Wait briefly for the XRD to register its CRD
     log_info "Waiting for XRD CRD registration..."
@@ -803,7 +803,7 @@ install_platform_composition() {
     local timeout=60
     while [[ $elapsed -lt $timeout ]]; do
         if kubectl get crd \
-            postgresqlinstances.platform.cluster-whisperer.io &>/dev/null 2>&1; then
+            managedservices.platform.acme.io &>/dev/null 2>&1; then
             break
         fi
         sleep 5
@@ -817,7 +817,7 @@ install_platform_composition() {
     fi
 
     kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
-    log_success "Composition applied (postgresqlinstance-aws-rds)"
+    log_success "Composition applied (managedservice-aws-rds)"
 }
 
 # =============================================================================

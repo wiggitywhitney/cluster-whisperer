@@ -18,7 +18,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 decisions): Pivoted to GKE as first-class target — Kind single-node overwhelmed by 150 providers (41 GB RAM). Added `kind|gcp` mode design, curated provider subset for Kind
 
 - Demo cluster (PRD #47 M2): Platform PostgreSQL XRD (apiextensions.crossplane.io/v2) and Composition (Pipeline mode with function-patch-and-transform) — the "needle in the haystack" among ~1,000 CRDs
-- Demo cluster (PRD #47 M2): XRD defines PostgreSQLInstance with rich field descriptions (engine, version, storage, HA, backup, network) for inference pipeline discovery
+- Demo cluster (PRD #47 M2): XRD defines ManagedService with rich field descriptions (engine, version, storage, HA, backup, network) for inference pipeline discovery
 - Demo cluster (PRD #47 M2): Composition maps to AWS RDS Instance with size-to-instance-class transform, Multi-AZ, and subnet group
 - Demo cluster (PRD #47 M2): setup.sh integration — installs function-patch-and-transform, applies XRD with CRD registration wait, then Composition
 - Demo cluster (PRD #47 M2): 14 manifest validation tests (YAML structure, field descriptions, inference pipeline compatibility)
@@ -51,6 +51,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-13) Demo modifications (PRD #48 M7/M8): Verified all 3 M8 verification items on live GKE cluster — kubeconfig governance (kubectl fails, agent succeeds), traces in Jaeger (64 spans via OTel Collector ingress), Qdrant traces (7 spans with db.system:"qdrant" attributes) in Jaeger
 
 ### Changed
+- (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning
+- (2026-03-13) Demo modifications (PRD #48): Updated demo flow with two-question Act 2 (investigation + CRD wall follow-up), restructured PRD milestones (added M9 multi-backend sync, M10 full rehearsal)
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored teardown.sh — surgical removal of per-cluster kubeconfig entries via `kubectl config delete-*` instead of deleting the file
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Removed vals dependency from setup.sh — reads API keys from plain env vars, auto-sources `.env` from repo root if present
