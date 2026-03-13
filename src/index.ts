@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// ABOUTME: CLI entry point for cluster-whisperer — handles investigate, sync, and serve subcommands.
+// ABOUTME: Parses CLI arguments and orchestrates agent invocation with streaming output.
+
 /**
  * index.ts - CLI entry point for cluster-whisperer
  *
@@ -27,7 +30,7 @@ import "./tracing";
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
-import { getInvestigatorAgent, truncate } from "./agent/investigator";
+import { getInvestigatorAgent, truncate, RECURSION_LIMIT } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import {
   syncCapabilities,
@@ -184,7 +187,7 @@ async function main() {
          */
         const eventStream = getInvestigatorAgent().streamEvents(
           { messages: [new HumanMessage(question)] },
-          { version: "v2" }
+          { version: "v2", recursionLimit: RECURSION_LIMIT }
         );
 
         /**
