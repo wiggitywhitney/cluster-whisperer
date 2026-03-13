@@ -30,7 +30,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
-import { kubectlTools, createVectorTools } from "../tools/langchain";
+import { kubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
 import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
 
 /**
@@ -124,16 +124,32 @@ function getSystemPrompt(): string {
  * is built in a single spread expression — avoiding TypeScript narrowing
  * issues with let/reassign.
  */
-function createVectorToolsSafe() {
+/**
+ * Creates vector search and apply tools that share the same VectorStore instance.
+ *
+ * Both tool types need a VectorStore:
+ * - Vector tools: for similarity and keyword search across collections
+ * - Apply tools: for catalog validation (querying capabilities collection)
+ *
+ * Sharing the same instance means a single connection to Chroma, and both
+ * tools benefit from the same lazy initialization.
+ *
+ * Returns { vectorTools, applyTools } — either may be empty if VOYAGE_API_KEY
+ * is not set (the agent still works with kubectl-only investigation).
+ */
+function createVectorAndApplyToolsSafe() {
   try {
     const embedder = new VoyageEmbedding();
     const vectorStore = new ChromaBackend(embedder);
-    return createVectorTools(vectorStore);
+    return {
+      vectorTools: createVectorTools(vectorStore),
+      applyTools: createApplyTools(vectorStore),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Expected when VOYAGE_API_KEY is not set. Log so it's visible but not alarming.
-    console.debug(`Vector tools disabled: ${message}`); // eslint-disable-line no-console
-    return [];
+    console.debug(`Vector and apply tools disabled: ${message}`); // eslint-disable-line no-console
+    return { vectorTools: [], applyTools: [] };
   }
 }
 
@@ -197,16 +213,15 @@ export function getInvestigatorAgent() {
       },
     });
 
-    // Create vector search tools with lazy-initialized Chroma backend.
-    // The VoyageEmbedding and ChromaBackend are instantiated here but don't
-    // connect to Chroma until the first vector tool call (lazy initialization).
+    // Create vector search and apply tools with lazy-initialized Chroma backend.
+    // Both share the same VectorStore instance for a single Chroma connection.
     // If VOYAGE_API_KEY is not set, VoyageEmbedding throws — so we catch that
-    // and skip vector tools, keeping the agent functional with kubectl only.
-    const vectorTools = createVectorToolsSafe();
+    // and skip both tool types, keeping the agent functional with kubectl only.
+    const { vectorTools, applyTools } = createVectorAndApplyToolsSafe();
 
     cachedAgent = createReactAgent({
       llm: model,
-      tools: [...kubectlTools, ...vectorTools],
+      tools: [...kubectlTools, ...vectorTools, ...applyTools],
       stateModifier: getSystemPrompt(),
     });
   }

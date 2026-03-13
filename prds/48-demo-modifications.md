@@ -60,10 +60,10 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Integration test against a real Kind cluster
 
 ### M2: kubectl_apply Framework Wrappers
-- [ ] LangChain tool wrapper (`src/tools/langchain/`)
-- [ ] MCP tool wrapper (`src/tools/mcp/`)
-- [ ] Investigator system prompt updated to explain when/how to use the apply tool (use `/write-prompt`)
-- [ ] Verified: agent can use the tool to deploy a resource in a test cluster
+- [x] LangChain tool wrapper (`src/tools/langchain/`)
+- [x] MCP tool wrapper (`src/tools/mcp/`)
+- [x] Investigator system prompt updated to explain when/how to use the apply tool (use `/write-prompt`)
+- [x] Verified: agent can use the tool to deploy a resource in a test cluster
 
 ### M3: CLI Tool-Set Filtering (--tools flag)
 - [ ] `--tools` CLI flag accepting comma-separated tool groups: `kubectl`, `vector`, `apply`

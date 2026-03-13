@@ -1,9 +1,17 @@
+// ABOUTME: MCP tool registration for cluster-whisperer — investigate and kubectl_apply tools
+// ABOUTME: Exposes agent-driven investigation and direct resource deployment to MCP clients
+
 /**
  * MCP tool registration for cluster-whisperer
  *
- * This module registers a single high-level "investigate" tool that wraps the
- * LangGraph agent. Instead of exposing low-level kubectl operations, MCP clients
- * get a complete investigation capability with full observability.
+ * This module registers tools for MCP clients:
+ *
+ * 1. "investigate" — A high-level tool that wraps the LangGraph agent. MCP clients
+ *    ask a natural language question and get a reasoned answer with full observability.
+ *
+ * 2. "kubectl_apply" — A direct tool for deploying Kubernetes resources. Unlike
+ *    investigate (which is agent-driven), this tool takes a YAML manifest directly.
+ *    It validates against the platform catalog before applying.
  *
  * Why a single investigate tool instead of kubectl_get, kubectl_describe, etc.?
  *
@@ -31,6 +39,13 @@ import {
   invokeInvestigator,
   type InvestigationResult,
 } from "../../agent/investigator";
+import {
+  kubectlApply,
+  kubectlApplySchema,
+  kubectlApplyDescription,
+  type KubectlApplyInput,
+} from "../core";
+import type { VectorStore } from "../../vectorstore";
 import {
   withMcpRequestTracing,
   setTraceOutput,
@@ -150,4 +165,44 @@ function buildTraceOutput(result: InvestigationResult): string {
   parts.push(result.answer);
 
   return parts.join("\n");
+}
+
+/**
+ * Registers the kubectl_apply tool with an MCP server.
+ *
+ * Unlike the investigate tool (which wraps the agent), this is a direct tool
+ * that takes a YAML manifest and applies it to the cluster. MCP clients can
+ * use this when they already know what resource to deploy.
+ *
+ * The tool validates against the platform catalog before applying — only
+ * resource types in the capabilities collection are allowed.
+ *
+ * @param server - The McpServer instance to register the tool with
+ * @param vectorStore - An initialized VectorStore for catalog validation
+ */
+export function registerApplyTool(
+  server: McpServer,
+  vectorStore: VectorStore
+): void {
+  server.registerTool(
+    "kubectl_apply",
+    {
+      description: kubectlApplyDescription,
+      inputSchema: kubectlApplySchema.shape,
+    },
+    async (input: KubectlApplyInput) => {
+      return withMcpRequestTracing(
+        "kubectl_apply",
+        input as Record<string, unknown>,
+        async () => {
+          const result = await kubectlApply(vectorStore, input);
+
+          return {
+            content: [{ type: "text" as const, text: result.output }],
+            isError: result.isError,
+          };
+        }
+      );
+    }
+  );
 }
