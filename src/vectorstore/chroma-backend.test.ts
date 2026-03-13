@@ -10,6 +10,9 @@ import {
 } from "@opentelemetry/sdk-trace-node";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
 import type { EmbeddingFunction } from "./types";
+// Pre-import the module under test at the top level to avoid slow dynamic imports.
+// The vi.mock("chromadb") above is hoisted, so this import gets the mocked version.
+import { ChromaBackend } from "./chroma-backend";
 
 // ---------------------------------------------------------------------------
 // Mock chromadb module — we test span creation, not Chroma behavior
@@ -87,7 +90,6 @@ function createMockEmbedder(): EmbeddingFunction {
 }
 
 async function createInitializedBackend(embedder?: EmbeddingFunction) {
-  const { ChromaBackend } = await import("./chroma-backend");
   const emb = embedder ?? createMockEmbedder();
   const backend = new ChromaBackend(emb, { chromaUrl: "http://localhost:8000" });
   await backend.initialize("test-collection", { distanceMetric: "cosine" });
@@ -149,7 +151,6 @@ describe("initialize() span", () => {
         .mockRejectedValue(new Error("Connection refused"));
     } as never);
 
-    const { ChromaBackend } = await import("./chroma-backend");
     const embedder = createMockEmbedder();
     const backend = new ChromaBackend(embedder, {
       chromaUrl: "http://localhost:8000",
