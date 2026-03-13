@@ -36,6 +36,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-12) Demo cluster (PRD #47 M8): Validated refactored scripts via full teardown + setup cycle — teardown surgically removed kubeconfig entries, setup completed end-to-end on GKE (1,041 CRDs, all components running, .env auto-loading works)
 - (2026-03-12) Demo cluster (PRD #47 M8): README documentation — Demo Cluster section with prerequisites, setup (real output from validated run), component inventory table, capability inference pipeline explanation, and teardown. Updated project structure tree.
 
+- (2026-03-12) Demo modifications (PRD #48 M1): kubectl_apply core tool with catalog validation — parses YAML manifests, validates resource type against capabilities collection via keywordSearch, applies approved resources via kubectl stdin. 32 tests (20 unit + 12 OTel span).
+
 ### Changed
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored teardown.sh — surgical removal of per-cluster kubeconfig entries via `kubectl config delete-*` instead of deleting the file

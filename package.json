@@ -36,6 +36,7 @@
     "chromadb": "^3.3.0",
     "commander": "^13.0.0",
     "hono": "^4.12.1",
+    "js-yaml": "^4.1.1",
     "voyageai": "^0.1.0",
     "zod": "3.25.67"
   },
@@ -80,6 +81,7 @@
     "@opentelemetry/sdk-trace-node": "^2.5.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
     "@traceloop/node-server-sdk": "~0.22.6",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.5",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18"

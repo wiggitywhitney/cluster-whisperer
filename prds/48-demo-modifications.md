@@ -1,6 +1,6 @@
 # PRD #48: Cluster-Whisperer Demo Modifications
 
-**Status**: Not Started
+**Status**: In Progress
 **Priority**: High
 **Dependencies**: PRD #47 (demo cluster, for end-to-end testing)
 **Execution Order**: 4 of 5 — Needs demo cluster for testing. Must complete before PRD #49 (Vercel agent uses the shared tool core and --agent flag).
@@ -50,13 +50,13 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 ## Milestones
 
 ### M1: kubectl_apply Core Tool
-- [ ] Core tool implementation (`src/tools/core/kubectl-apply.ts`)
-- [ ] YAML parsing to extract `kind` and `apiGroup` from input manifest
-- [ ] Catalog validation: query capabilities collection for the resource type
-- [ ] If not in catalog, return error to agent (tool-level enforcement, not prompt-level)
-- [ ] If in catalog, execute `kubectl apply -f -` via stdin
-- [ ] OTel span wrapping the apply operation
-- [ ] Unit tests for YAML parsing, catalog validation logic
+- [x] Core tool implementation (`src/tools/core/kubectl-apply.ts`)
+- [x] YAML parsing to extract `kind` and `apiGroup` from input manifest
+- [x] Catalog validation: query capabilities collection for the resource type
+- [x] If not in catalog, return error to agent (tool-level enforcement, not prompt-level)
+- [x] If in catalog, execute `kubectl apply -f -` via stdin
+- [x] OTel span wrapping the apply operation
+- [x] Unit tests for YAML parsing, catalog validation logic
 - [ ] Integration test against a real Kind cluster
 
 ### M2: kubectl_apply Framework Wrappers
