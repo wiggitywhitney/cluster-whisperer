@@ -22,11 +22,21 @@ needs:
 All of these are additions. The existing LangGraph + Chroma flow must continue working
 unchanged (the May conference talk depends on it).
 
+7. Environment variable support for all CLI flags (demo ergonomics — presenter sets env vars after audience votes instead of typing long flag combinations)
+8. Kubeconfig pass-through so the agent has cluster access but the presenter's shell does not (governance narrative)
+9. OTel Collector ingress so locally-run agent traces reach Jaeger/Datadog (Act 4)
+
 ## Solution
 
 Add the new tool, CLI flags, and Qdrant backend as new files alongside existing code.
 The three-layer tool architecture (`core/` → `langchain/` + `mcp/`) already supports
 adding new tools. The `VectorStore` interface already supports backend swapping.
+
+For the demo runtime, the CLI runs the agent locally with a dedicated kubeconfig
+(`CLUSTER_WHISPERER_KUBECONFIG`) that the presenter's shell doesn't export. This means
+`kubectl get pods` typed directly fails, but `cluster-whisperer "question"` succeeds —
+demonstrating the governance story without requiring a client-server architecture split.
+A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD.
 
 ## Success Criteria
 
@@ -39,6 +49,9 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - New tools have unit and integration tests
 - Qdrant backend passes the same tests as ChromaBackend (interface compliance)
 - OTel spans appear for Qdrant operations matching ChromaBackend's span patterns
+- `CLUSTER_WHISPERER_TOOLS=kubectl cluster-whisperer "question"` works (env var support)
+- Presenter's shell without KUBECONFIG: `kubectl get pods` fails, `cluster-whisperer "question"` succeeds
+- Traces from locally-run agent appear in Jaeger/Datadog via in-cluster OTel Collector
 
 ## Non-Goals
 
@@ -46,6 +59,8 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - Demo cluster setup (PRD #47)
 - Modifying existing LangGraph agent behavior
 - Modifying existing ChromaBackend
+- Thin-client mode (CLI → serve endpoint) — deferred to post-conference PRD
+- Authentication on serve endpoints (internal network only)
 
 ## Milestones
 
@@ -97,17 +112,31 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Every QdrantBackend operation wrapped in spans (matching ChromaBackend's pattern)
 - [x] Span attributes: `db.system: "qdrant"`, `db.operation.name`, `db.collection.name`, custom counts
 - [x] Unit tests verifying span creation (using in-memory OTel exporter, same pattern as ChromaBackend tests)
-- [ ] Verified: traces appear in Jaeger/Datadog when using Qdrant backend
+- [ ] Verified: traces appear in Jaeger/Datadog when using Qdrant backend (moved to M8 — requires live cluster + OTel ingress)
 
-### M8: End-to-End Demo Flow Test
+### M8: Demo Runtime Readiness
+- [ ] Env var support for CLI flags: `CLUSTER_WHISPERER_AGENT`, `CLUSTER_WHISPERER_TOOLS`, `CLUSTER_WHISPERER_VECTOR_BACKEND` (Commander.js `.env()`)
+- [ ] Env var support for URL flags: `CLUSTER_WHISPERER_CHROMA_URL`, `CLUSTER_WHISPERER_QDRANT_URL`
+- [ ] `CLUSTER_WHISPERER_KUBECONFIG` env var: pass through to `executeKubectl()` as `--kubeconfig` arg
+- [ ] Plumb kubeconfig path through agent factory → tool creation → kubectl execution
+- [ ] Unit tests for env var parsing and kubeconfig pass-through
+- [ ] Setup script: add Chroma ingress (`chroma.<ip>.nip.io` → port 8000)
+- [ ] Setup script: add Qdrant ingress (`qdrant.<ip>.nip.io` → port 6333)
+- [ ] Setup script: add OTel Collector ingress (`otel.<ip>.nip.io` → OTLP HTTP 4318)
+- [ ] Serve manifest: add `--qdrant-url http://qdrant.qdrant:6333` to args
+- [ ] Verified: `kubectl get pods` fails without KUBECONFIG, `cluster-whisperer` succeeds with `CLUSTER_WHISPERER_KUBECONFIG`
+- [ ] Verified: traces from local CLI appear in Jaeger via OTel Collector ingress
+- [ ] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
+
+### M9: End-to-End Demo Flow Test
 - [ ] Full demo flow against the demo cluster (PRD #47)
-- [ ] Act 2: `--tools kubectl` — agent investigates, finds missing DB, hits CRD wall
-- [ ] Act 3: `--tools kubectl,vector,apply --vector-backend chroma` — agent finds and deploys DB
-- [ ] Act 3 (alt): same with `--vector-backend qdrant`
+- [ ] Act 2: `CLUSTER_WHISPERER_TOOLS=kubectl cluster-whisperer "Why is my app broken?"` — agent investigates, finds missing DB, hits CRD wall
+- [ ] Act 3: `CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply cluster-whisperer "What database should I deploy?"` with `CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` — agent finds and deploys DB
+- [ ] Act 3 (alt): same with `CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant`
 - [ ] Verify traces in both Jaeger and Datadog
 
-### M9: Documentation
-- [ ] Update README using `/write-docs` to document new CLI flags and kubectl_apply tool
+### M10: Documentation
+- [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
 
 ## Technical Design
 
@@ -172,6 +201,31 @@ To use it: `KUBECONFIG=~/.kube/config-cluster-whisperer kubectl get nodes`
 
 This is set in `demo/cluster/setup.sh` (search for `KUBECONFIG_PATH`). The cluster has Crossplane CRDs, Chroma, Qdrant, the demo app, and synced capabilities/instances data. The default `~/.kube/config` may contain unrelated Kind clusters — always use the dedicated kubeconfig for demo cluster work.
 
+### Demo Runtime Architecture (Option C)
+
+```text
+Presenter's terminal:
+  - No KUBECONFIG exported → kubectl get pods fails
+  - CLUSTER_WHISPERER_KUBECONFIG=~/.kube/config-cluster-whisperer
+  - CLUSTER_WHISPERER_TOOLS=kubectl (after Vote 1)
+  - CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant (after Vote 2)
+  - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel.<ip>.nip.io
+
+cluster-whisperer CLI:
+  ├── Reads CLUSTER_WHISPERER_KUBECONFIG
+  ├── Passes --kubeconfig to every executeKubectl() call
+  ├── Agent runs locally with LangGraph streamEvents()
+  ├── Vector DB accessed via ingress (chroma/qdrant.<ip>.nip.io)
+  └── Traces exported to OTel Collector via ingress → Jaeger + Datadog
+```
+
+The presenter's `.env` file (sourced before demo) contains all env vars.
+After each audience vote, the presenter exports the chosen value:
+```bash
+export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
+```
+
 ### May Talk Preservation
 
 All changes are additive:
@@ -187,3 +241,7 @@ All changes are additive:
 | 2026-03-07 | `--tools` flag with groups, not individual tools | Groups match the demo narrative (progressive capability). Individual tool flags would clutter the CLI. |
 | 2026-03-07 | Qdrant filter translation internal to backend | Keeps the VectorStore interface backend-agnostic. Callers never touch Qdrant syntax. |
 | 2026-03-07 | Default behavior unchanged | May talk depends on current behavior. All new features require explicit flags. |
+| 2026-03-13 | Kubeconfig pass-through (Option C) over thin-client mode (Option B) | Demo narrative needs "kubectl fails, agent succeeds" — achievable by passing kubeconfig internally via env var. Thin-client mode (CLI → serve endpoint) is better architecture but doesn't change what the audience sees, and PRD #49 (Vercel agent, making Vote 1 real) is higher priority than client-server split. Defer Option B to post-conference PRD. |
+| 2026-03-13 | Env vars for CLI flags | Presenter sets env vars once after each audience vote instead of typing long flag combinations on stage. Cleaner demo experience, less error-prone. |
+| 2026-03-13 | OTel Collector needs ingress | With agent running locally (Option C), traces must reach in-cluster OTel Collector externally. Add ingress rule in setup script. |
+| 2026-03-13 | M7 OTel instrumentation already implemented in M5 | QdrantBackend spans were built alongside the backend implementation. 32 tests verify all span attributes. Live Jaeger/Datadog verification moved to M8 (requires running cluster). |
