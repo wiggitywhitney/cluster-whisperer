@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ABOUTME: CLI entry point for cluster-whisperer — handles investigate, sync, and serve subcommands.
-// ABOUTME: Uses gracefulExit to flush OTel traces before exiting at every exit path.
+// ABOUTME: Parses CLI arguments, orchestrates agent invocation, and flushes OTel traces on exit.
 
 /**
  * index.ts - CLI entry point for cluster-whisperer
@@ -31,7 +31,7 @@ import { gracefulExit } from "./tracing";
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
-import { getInvestigatorAgent, truncate } from "./agent/investigator";
+import { getInvestigatorAgent, truncate, RECURSION_LIMIT } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import {
   syncCapabilities,
@@ -188,7 +188,7 @@ async function main() {
          */
         const eventStream = getInvestigatorAgent().streamEvents(
           { messages: [new HumanMessage(question)] },
-          { version: "v2" }
+          { version: "v2", recursionLimit: RECURSION_LIMIT }
         );
 
         /**

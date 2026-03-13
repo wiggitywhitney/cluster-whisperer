@@ -1,5 +1,5 @@
 // ABOUTME: ReAct agent that answers Kubernetes questions using kubectl and vector search tools.
-// ABOUTME: Implements the agentic loop with extended thinking and graceful OTel-aware exit.
+// ABOUTME: Implements the agentic loop with extended thinking, recursion limit, and graceful exit.
 
 /**
  * investigator.ts - The agentic loop that answers questions about Kubernetes
@@ -38,6 +38,19 @@ import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
  * Exported so tracing code can reference the same model in span attributes.
  */
 export const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
+/**
+ * Maximum number of agent reasoning steps before forcing termination.
+ *
+ * LangGraph's recursionLimit is passed at execution time (.invoke/.streamEvents),
+ * not at agent creation. The default is 25, but we make it explicit and export
+ * it so both the CLI (streamEvents) and MCP (invoke) use the same limit.
+ *
+ * Why 25? Normal investigations use 5-10 tool calls. 25 is high enough for
+ * complex multi-step investigations but low enough to prevent runaway loops
+ * (e.g., model retrying a failing kubectl command indefinitely).
+ */
+export const RECURSION_LIMIT = 25;
 
 /**
  * Result from invoking the investigator agent.
@@ -250,9 +263,11 @@ export async function invokeInvestigator(
 
     // Invoke the agent with the user's question
     // This runs the full ReAct loop until the agent produces a final answer
-    const result = await agent.invoke({
-      messages: [new HumanMessage(question)],
-    });
+    // recursionLimit caps iterations to prevent runaway loops
+    const result = await agent.invoke(
+      { messages: [new HumanMessage(question)] },
+      { recursionLimit: RECURSION_LIMIT }
+    );
 
     // Extract the last message from the conversation
     // The agent produces a series of messages; the last AI message has our answer
