@@ -1,3 +1,6 @@
+// ABOUTME: ReAct agent that answers Kubernetes questions using kubectl and vector search tools.
+// ABOUTME: Implements the agentic loop with extended thinking and graceful OTel-aware exit.
+
 /**
  * investigator.ts - The agentic loop that answers questions about Kubernetes
  *
@@ -29,6 +32,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { kubectlTools, createVectorTools } from "../tools/langchain";
 import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
+import { gracefulExit } from "../tracing";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -89,7 +93,10 @@ function getSystemPrompt(): string {
       console.error(`Error: Could not load system prompt from ${promptPath}`);
       console.error("");
       console.error("Make sure prompts/investigator.md exists in the project root.");
-      process.exit(1);
+      // gracefulExit is async but getSystemPrompt is sync — use void to fire-and-forget
+      // the flush, then exit synchronously as a fallback
+      void gracefulExit(1);
+      throw new Error("System prompt not found"); // unreachable, but satisfies TypeScript
     }
   }
   return cachedPrompt;

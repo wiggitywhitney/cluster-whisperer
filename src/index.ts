@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// ABOUTME: CLI entry point for cluster-whisperer — handles investigate, sync, and serve subcommands.
+// ABOUTME: Uses gracefulExit to flush OTel traces before exiting at every exit path.
+
 /**
  * index.ts - CLI entry point for cluster-whisperer
  *
@@ -23,6 +26,7 @@
 // Initialize OpenTelemetry tracing before any other imports
 // This ensures the tracer provider is registered before any instrumented code runs
 import "./tracing";
+import { gracefulExit } from "./tracing";
 
 import { Command } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
@@ -47,7 +51,7 @@ import { createApp, startServer } from "./api/server";
  * Validates that kubectl is available.
  * Both the investigate and sync commands need kubectl.
  */
-function validateKubectl(): void {
+async function validateKubectl(): Promise<void> {
   try {
     execSync("kubectl version --client", {
       encoding: "utf-8",
@@ -58,7 +62,7 @@ function validateKubectl(): void {
     console.error("");
     console.error("Install kubectl:");
     console.error("  https://kubernetes.io/docs/tasks/tools/");
-    process.exit(1);
+    await gracefulExit(1);
   }
 }
 
@@ -66,13 +70,13 @@ function validateKubectl(): void {
  * Validates that the Anthropic API key is set.
  * Both the investigate agent and the sync inference pipeline need it.
  */
-function validateAnthropicKey(): void {
+async function validateAnthropicKey(): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
     console.error("");
     console.error("Export your API key:");
     console.error("  export ANTHROPIC_API_KEY=your-key-here");
-    process.exit(1);
+    await gracefulExit(1);
   }
 }
 
@@ -80,32 +84,32 @@ function validateAnthropicKey(): void {
  * Validates that the Voyage AI API key is set.
  * Only the sync command needs this (for embedding capability descriptions).
  */
-function validateVoyageKey(): void {
+async function validateVoyageKey(): Promise<void> {
   if (!process.env.VOYAGE_API_KEY) {
     console.error("Error: VOYAGE_API_KEY environment variable is not set.");
     console.error("");
     console.error("Export your API key:");
     console.error("  export VOYAGE_API_KEY=your-key-here");
-    process.exit(1);
+    await gracefulExit(1);
   }
 }
 
 /**
  * Validates environment for the investigate command.
  */
-function validateInvestigateEnvironment(): void {
-  validateAnthropicKey();
-  validateKubectl();
+async function validateInvestigateEnvironment(): Promise<void> {
+  await validateAnthropicKey();
+  await validateKubectl();
 }
 
 /**
  * Validates environment for the sync command.
  * Needs everything investigate needs, plus Voyage AI for embeddings.
  */
-function validateSyncEnvironment(): void {
-  validateAnthropicKey();
-  validateVoyageKey();
-  validateKubectl();
+async function validateSyncEnvironment(): Promise<void> {
+  await validateAnthropicKey();
+  await validateVoyageKey();
+  await validateKubectl();
 }
 
 /**
@@ -113,9 +117,9 @@ function validateSyncEnvironment(): void {
  * Needs Voyage AI for embeddings and kubectl for cluster access.
  * Does NOT need Anthropic — instance sync has no LLM inference step.
  */
-function validateInstanceSyncEnvironment(): void {
-  validateVoyageKey();
-  validateKubectl();
+async function validateInstanceSyncEnvironment(): Promise<void> {
+  await validateVoyageKey();
+  await validateKubectl();
 }
 
 /**
@@ -123,9 +127,9 @@ function validateInstanceSyncEnvironment(): void {
  * Needs Voyage AI for embeddings (upserts go through the embedding pipeline).
  * Needs Anthropic for capability inference (CRD scan triggers LLM calls).
  */
-function validateServeEnvironment(): void {
-  validateVoyageKey();
-  validateAnthropicKey();
+async function validateServeEnvironment(): Promise<void> {
+  await validateVoyageKey();
+  await validateAnthropicKey();
 }
 
 /**
@@ -149,7 +153,7 @@ async function main() {
     .argument("<question>", "Natural language question about your cluster")
     .action(async (question: string) => {
       // Validate environment before doing anything else
-      validateInvestigateEnvironment();
+      await validateInvestigateEnvironment();
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -264,13 +268,17 @@ async function main() {
         }
 
         // Display the final answer with a separator for visibility
-        if (finalAnswer) {
+        if (finalAnswer !== undefined && finalAnswer !== "") {
           // Record output on the trace for LLM Observability visibility
           setTraceOutput(finalAnswer);
 
           console.log("─".repeat(60));
           console.log("Answer:");
           console.log(finalAnswer);
+          console.log();
+        } else {
+          console.log("─".repeat(60));
+          console.log("The agent completed without producing a final answer.");
           console.log();
         }
       });
@@ -291,7 +299,7 @@ async function main() {
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
     .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
-      validateSyncEnvironment();
+      await validateSyncEnvironment();
 
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
@@ -310,7 +318,7 @@ async function main() {
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
         if (result.discovered === 0) {
           console.error("\nNo resources discovered. Is kubectl connected to a cluster?");
-          process.exit(1);
+          await gracefulExit(1);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -323,7 +331,7 @@ async function main() {
         } else {
           console.error(`\nSync failed: ${message}`);
         }
-        process.exit(1);
+        await gracefulExit(1);
       }
     });
 
@@ -342,7 +350,7 @@ async function main() {
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
     .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
-      validateInstanceSyncEnvironment();
+      await validateInstanceSyncEnvironment();
 
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
@@ -361,7 +369,7 @@ async function main() {
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
         if (result.discovered === 0) {
           console.error("\nNo instances discovered. Is kubectl connected to a cluster?");
-          process.exit(1);
+          await gracefulExit(1);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -374,7 +382,7 @@ async function main() {
         } else {
           console.error(`\nSync failed: ${message}`);
         }
-        process.exit(1);
+        await gracefulExit(1);
       }
     });
 
@@ -393,12 +401,12 @@ async function main() {
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
     .action(async (options: { port: string; chromaUrl?: string }) => {
-      validateServeEnvironment();
+      await validateServeEnvironment();
 
       const port = parseInt(options.port, 10);
       if (isNaN(port) || port < 1 || port > 65535) {
         console.error(`Error: Invalid port number: ${options.port}`);
-        process.exit(1);
+        await gracefulExit(1);
       }
 
       // Create the vector store with Voyage AI embeddings
@@ -421,8 +429,8 @@ async function main() {
       // Graceful shutdown on SIGTERM (Kubernetes sends this before killing the pod)
       process.on("SIGTERM", () => {
         console.log("\nReceived SIGTERM, shutting down..."); // eslint-disable-line no-console
-        server.close(() => {
-          process.exit(0);
+        server.close(async () => {
+          await gracefulExit(0);
         });
       });
     });
@@ -430,7 +438,7 @@ async function main() {
   await program.parseAsync(process.argv);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error("Error:", error.message);
-  process.exit(1);
+  await gracefulExit(1);
 });

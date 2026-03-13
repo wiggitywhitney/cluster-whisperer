@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// ABOUTME: MCP server entry point — exposes the investigate tool over stdio for MCP clients.
+// ABOUTME: Uses gracefulExit to flush OTel traces before exiting on errors.
+
 /**
  * mcp-server.ts - MCP server entry point for cluster-whisperer
  *
@@ -25,6 +28,7 @@
 // Initialize OpenTelemetry tracing before any other imports
 // This ensures the tracer provider is registered before any instrumented code runs
 import "./tracing";
+import { gracefulExit } from "./tracing";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -60,7 +64,7 @@ async function main(): Promise<void> {
 }
 
 // Run the server
-main().catch((error) => {
+main().catch(async (error) => {
   console.error("MCP server error:", error);
-  process.exit(1);
+  await gracefulExit(1);
 });
