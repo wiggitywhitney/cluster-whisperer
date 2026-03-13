@@ -138,10 +138,10 @@ export const kubectlTools = createKubectlTools();
  * and lazily initializes collections on first use.
  *
  * Lazy initialization means:
- * - Chroma doesn't need to be running at agent startup
+ * - The vector database doesn't need to be running at agent startup
  * - Collections are initialized once, then cached
- * - If Chroma is unreachable, the tool returns a helpful error message
- *   instead of crashing the agent
+ * - If the vector database is unreachable, the tool returns a helpful error
+ *   message instead of crashing the agent
  *
  * @param vectorStore - A VectorStore instance (e.g., new ChromaBackend(embedder))
  * @returns Array containing the single unified vector_search tool
@@ -153,8 +153,8 @@ export function createVectorTools(vectorStore: VectorStore) {
    * Initializes both collections on first use.
    *
    * Called before every vector tool invocation. After the first successful
-   * call, it's a no-op (the flag prevents re-initialization). If Chroma
-   * is unreachable, this throws and the tool wrapper catches it.
+   * call, it's a no-op (the flag prevents re-initialization). If the vector
+   * database is unreachable, this throws and the tool wrapper catches it.
    */
   async function ensureInitialized(): Promise<void> {
     if (initialized) return;
@@ -170,8 +170,8 @@ export function createVectorTools(vectorStore: VectorStore) {
   /**
    * Wraps a vector tool handler with initialization and error handling.
    *
-   * If Chroma is unreachable, returns a helpful message instead of crashing.
-   * The agent can then fall back to kubectl tools for investigation.
+   * If the vector database is unreachable, returns a helpful message instead
+   * of crashing. The agent can then fall back to kubectl tools for investigation.
    */
   function withGracefulDegradation<T>(
     handler: (input: T) => Promise<string>
@@ -184,7 +184,7 @@ export function createVectorTools(vectorStore: VectorStore) {
         const message =
           error instanceof Error ? error.message : String(error);
 
-        // Connection errors indicate Chroma isn't running
+        // Connection errors indicate the vector database isn't running
         if (
           message.includes("ECONNREFUSED") ||
           message.includes("fetch failed") ||
@@ -193,7 +193,7 @@ export function createVectorTools(vectorStore: VectorStore) {
           message.includes("ECONNRESET")
         ) {
           return (
-            "Vector database is not available. The Chroma server may not be running. " +
+            "Vector database is not available. The vector database server may not be running. " +
             "Use kubectl tools to investigate the cluster directly."
           );
         }

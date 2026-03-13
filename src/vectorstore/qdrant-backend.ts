@@ -115,12 +115,16 @@ export class QdrantBackend implements VectorStore {
       options?.qdrantUrl ?? process.env.QDRANT_URL ?? DEFAULT_QDRANT_URL;
     const parsed = new URL(url);
 
+    // When a port is explicit in the URL (e.g., http://localhost:6333), use it.
+    // When no port is specified (e.g., http://qdrant.nip.io via ingress),
+    // fall back to the protocol default (80/443) — not the Qdrant default (6333).
+    const port = parsed.port
+      ? parseInt(parsed.port, 10)
+      : parsed.protocol === "https:" ? 443 : 80;
+
     this.client = new QdrantClient({
       host: parsed.hostname,
-      port: parseInt(
-        parsed.port || (parsed.protocol === "https:" ? "443" : "6333"),
-        10
-      ),
+      port,
     });
   }
 

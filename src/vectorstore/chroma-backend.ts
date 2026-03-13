@@ -106,10 +106,16 @@ export class ChromaBackend implements VectorStore {
 
     // Parse the URL into host and port for the Chroma v3 SDK.
     // The 'path' constructor argument is deprecated in favor of host/port/ssl.
+    // When no port is specified (e.g., http://chroma.nip.io via ingress),
+    // fall back to the protocol default (80/443) — not the Chroma default (8000).
     const parsed = new URL(url);
+    const port = parsed.port
+      ? parseInt(parsed.port, 10)
+      : parsed.protocol === "https:" ? 443 : 80;
+
     this.client = new ChromaClient({
       host: parsed.hostname,
-      port: parseInt(parsed.port || (parsed.protocol === "https:" ? "443" : "8000"), 10),
+      port,
       ssl: parsed.protocol === "https:",
     });
   }

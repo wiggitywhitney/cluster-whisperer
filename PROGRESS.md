@@ -48,6 +48,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-13) Demo modifications (PRD #48 M8): Env var support for all CLI flags — Commander.js `.addOption(new Option(...).env(...))` on all subcommands for CLUSTER_WHISPERER_AGENT, CLUSTER_WHISPERER_TOOLS, CLUSTER_WHISPERER_VECTOR_BACKEND, CLUSTER_WHISPERER_CHROMA_URL, CLUSTER_WHISPERER_QDRANT_URL
 - (2026-03-13) Demo modifications (PRD #48 M8): Kubeconfig pass-through — CLUSTER_WHISPERER_KUBECONFIG env var threaded through CLI → agent-factory → investigator → createKubectlTools/createApplyTools → executeKubectl/spawnSync. KubectlOptions interface, createKubectlTools factory replacing static kubectlTools array. 7 new kubeconfig tests.
 - (2026-03-13) Demo modifications (PRD #48 M8): Infrastructure ingress rules — Chroma, Qdrant, and OTel Collector ingress via nip.io in setup.sh. Demo `.env` generation with resolved infrastructure URLs (KUBECONFIG, vector DB URLs, OTel endpoint). Serve manifest updated with `--qdrant-url`.
+- (2026-03-13) Demo modifications (PRD #48 M7/M8): Verified all 3 M8 verification items on live GKE cluster — kubeconfig governance (kubectl fails, agent succeeds), traces in Jaeger (64 spans via OTel Collector ingress), Qdrant traces (7 spans with db.system:"qdrant" attributes) in Jaeger
 
 ### Changed
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
@@ -59,6 +60,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi
 
 ### Fixed
+- (2026-03-13) Demo modifications (PRD #48 M8): URL port parsing in ChromaBackend and QdrantBackend — ingress URLs (port 80) incorrectly defaulted to service ports (8000/6333). Now uses protocol defaults (80/443) when no explicit port
+- (2026-03-13) Demo modifications (PRD #48 M8): Vector tool error message hardcoded "Chroma server" even when using Qdrant backend — now backend-agnostic
 - (2026-03-12) Demo cluster (PRD #47 M7): Eliminated double-rollout for GKE deployments — sed inline image replacement instead of apply+patch, avoiding ImagePullBackOff delay
 - (2026-03-12) Demo cluster (PRD #47 M7): Fixed helm search repo fallback — `helm search repo` returns exit 0 with "No results found", now checks stdout for actual matches
 - (2026-03-12) Demo cluster (PRD #47 M7): Fixed health checks for Chroma (v2 API, StatefulSet target), OTel Collector (0.0.0.0 bind), all using port-forward + local curl

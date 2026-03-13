@@ -112,7 +112,7 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] Every QdrantBackend operation wrapped in spans (matching ChromaBackend's pattern)
 - [x] Span attributes: `db.system: "qdrant"`, `db.operation.name`, `db.collection.name`, custom counts
 - [x] Unit tests verifying span creation (using in-memory OTel exporter, same pattern as ChromaBackend tests)
-- [ ] Verified: traces appear in Jaeger/Datadog when using Qdrant backend (moved to M8 — requires live cluster + OTel ingress)
+- [x] Verified: traces appear in Jaeger/Datadog when using Qdrant backend (moved to M8 — requires live cluster + OTel ingress)
 
 ### M8: Demo Runtime Readiness
 - [x] Env var support for CLI flags: `CLUSTER_WHISPERER_AGENT`, `CLUSTER_WHISPERER_TOOLS`, `CLUSTER_WHISPERER_VECTOR_BACKEND` (Commander.js `.env()`)
@@ -126,9 +126,9 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] Setup script: add OTel Collector ingress (`otel.<ip>.nip.io` → OTLP HTTP 4318)
 - [x] Setup script: generate demo `.env` file with resolved ingress URLs (IP not known until after setup)
 - [x] Serve manifest: add `--qdrant-url http://qdrant.qdrant:6333` to args
-- [ ] Verified: `kubectl get pods` fails without KUBECONFIG, `cluster-whisperer` succeeds with `CLUSTER_WHISPERER_KUBECONFIG`
-- [ ] Verified: traces from local CLI appear in Jaeger via OTel Collector ingress
-- [ ] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
+- [x] Verified: `kubectl get pods` fails without KUBECONFIG, `cluster-whisperer` succeeds with `CLUSTER_WHISPERER_KUBECONFIG`
+- [x] Verified: traces from local CLI appear in Jaeger via OTel Collector ingress
+- [x] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
 
 ### M9: End-to-End Demo Flow Test
 - [ ] Full demo flow against the demo cluster (PRD #47)
@@ -273,3 +273,4 @@ All changes are additive:
 | 2026-03-13 | Env vars for CLI flags | Presenter sets env vars once after each audience vote instead of typing long flag combinations on stage. Cleaner demo experience, less error-prone. |
 | 2026-03-13 | OTel Collector needs ingress | With agent running locally (Option C), traces must reach in-cluster OTel Collector externally. Add ingress rule in setup script. |
 | 2026-03-13 | M7 OTel instrumentation already implemented in M5 | QdrantBackend spans were built alongside the backend implementation. 32 tests verify all span attributes. Live Jaeger/Datadog verification moved to M8 (requires running cluster). |
+| 2026-03-13 | URL port parsing fix for ingress URLs | ChromaBackend and QdrantBackend defaulted to service ports (8000/6333) when no port in URL, breaking ingress URLs on port 80. Fixed to use protocol defaults (80/443). |
