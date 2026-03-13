@@ -57,7 +57,7 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] If in catalog, execute `kubectl apply -f -` via stdin
 - [x] OTel span wrapping the apply operation
 - [x] Unit tests for YAML parsing, catalog validation logic
-- [ ] Integration test against a real Kind cluster
+- [x] Integration test against a real Kind cluster
 
 ### M2: kubectl_apply Framework Wrappers
 - [ ] LangChain tool wrapper (`src/tools/langchain/`)
