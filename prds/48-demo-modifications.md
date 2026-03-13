@@ -115,12 +115,12 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [ ] Verified: traces appear in Jaeger/Datadog when using Qdrant backend (moved to M8 — requires live cluster + OTel ingress)
 
 ### M8: Demo Runtime Readiness
-- [ ] Env var support for CLI flags: `CLUSTER_WHISPERER_AGENT`, `CLUSTER_WHISPERER_TOOLS`, `CLUSTER_WHISPERER_VECTOR_BACKEND` (Commander.js `.env()`)
-- [ ] Env var support for URL flags: `CLUSTER_WHISPERER_CHROMA_URL`, `CLUSTER_WHISPERER_QDRANT_URL`
-- [ ] `CLUSTER_WHISPERER_KUBECONFIG` env var: pass through to `executeKubectl()` as `--kubeconfig` arg
-- [ ] Kubeconfig pass-through also covers `kubectlApply` in `src/tools/core/kubectl-apply.ts` (has its own `spawnSync("kubectl", ...)` call that bypasses `executeKubectl()`)
-- [ ] Plumb kubeconfig path through agent factory → tool creation → kubectl execution
-- [ ] Unit tests for env var parsing and kubeconfig pass-through
+- [x] Env var support for CLI flags: `CLUSTER_WHISPERER_AGENT`, `CLUSTER_WHISPERER_TOOLS`, `CLUSTER_WHISPERER_VECTOR_BACKEND` (Commander.js `.env()`)
+- [x] Env var support for URL flags: `CLUSTER_WHISPERER_CHROMA_URL`, `CLUSTER_WHISPERER_QDRANT_URL`
+- [x] `CLUSTER_WHISPERER_KUBECONFIG` env var: pass through to `executeKubectl()` as `--kubeconfig` arg
+- [x] Kubeconfig pass-through also covers `kubectlApply` in `src/tools/core/kubectl-apply.ts` (has its own `spawnSync("kubectl", ...)` call that bypasses `executeKubectl()`)
+- [x] Plumb kubeconfig path through agent factory → tool creation → kubectl execution
+- [x] Unit tests for env var parsing and kubeconfig pass-through
 - [ ] Setup script: add Chroma ingress (`chroma.<ip>.nip.io` → port 8000)
 - [ ] Setup script: add Qdrant ingress (`qdrant.<ip>.nip.io` → port 6333)
 - [ ] Setup script: add OTel Collector ingress (`otel.<ip>.nip.io` → OTLP HTTP 4318)

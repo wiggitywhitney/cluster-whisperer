@@ -394,4 +394,62 @@ describe("kubectlApply", () => {
       );
     });
   });
+
+  describe("kubeconfig pass-through", () => {
+    it("prepends --kubeconfig to kubectl args when kubeconfig option is provided", async () => {
+      const vectorStore = createMockVectorStore({
+        keywordSearch: vi.fn().mockResolvedValue([
+          makeCatalogEntry("Deployment", "apps"),
+        ]),
+      });
+
+      mockSpawnSync.mockReturnValue({
+        stdout: "deployment.apps/nginx created",
+        stderr: "",
+        status: 0,
+        error: null,
+      });
+
+      await kubectlApply(vectorStore, { manifest: deploymentManifest }, {
+        kubeconfig: "/home/demo/.kube/config-cluster-whisperer",
+      });
+
+      // Verify --kubeconfig is prepended to the args
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        "kubectl",
+        ["--kubeconfig", "/home/demo/.kube/config-cluster-whisperer", "apply", "-f", "-"],
+        expect.objectContaining({
+          input: deploymentManifest,
+          encoding: "utf-8",
+        })
+      );
+    });
+
+    it("does not include --kubeconfig when option is not provided", async () => {
+      const vectorStore = createMockVectorStore({
+        keywordSearch: vi.fn().mockResolvedValue([
+          makeCatalogEntry("Deployment", "apps"),
+        ]),
+      });
+
+      mockSpawnSync.mockReturnValue({
+        stdout: "deployment.apps/nginx created",
+        stderr: "",
+        status: 0,
+        error: null,
+      });
+
+      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+
+      // Verify --kubeconfig is NOT in the args
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        "kubectl",
+        ["apply", "-f", "-"],
+        expect.objectContaining({
+          input: deploymentManifest,
+          encoding: "utf-8",
+        })
+      );
+    });
+  });
 });

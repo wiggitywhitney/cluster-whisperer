@@ -51,6 +51,7 @@ import {
   type KubectlLogsInput,
   type VectorSearchInput,
   type KubectlApplyInput,
+  type KubectlOptions,
 } from "../core";
 import { withToolTracing } from "../../tracing/tool-tracing";
 import type { VectorStore } from "../../vectorstore";
@@ -60,77 +61,73 @@ import {
 } from "../../vectorstore";
 
 /**
- * kubectl_get tool for LangChain agents.
- * Lists Kubernetes resources in table format.
+ * Creates kubectl read tools (get, describe, logs) for the LangChain agent.
  *
- * Note: Core functions return { output, isError }. LangChain tools expect
- * a string, so we extract just the output. The isError flag is only used
- * by MCP clients; LangChain agents interpret the error message content.
+ * Why a factory function instead of static exports?
+ * The kubeconfig option needs to be captured at tool creation time via closure.
+ * When CLUSTER_WHISPERER_KUBECONFIG is set, every kubectl call needs --kubeconfig
+ * prepended — the factory captures this path once and all tool invocations use it.
  *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
+ * For backwards compatibility, kubectlTools is also exported as a static array
+ * (with no kubeconfig) for existing code that doesn't need kubeconfig support.
+ *
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
+ * @returns Array of kubectl tools [get, describe, logs]
  */
-export const kubectlGetTool = tool(
-  withToolTracing(
-    { name: "kubectl_get", description: kubectlGetDescription },
-    async (input: KubectlGetInput) => {
-      const { output } = await kubectlGet(input);
-      return output;
+export function createKubectlTools(options?: KubectlOptions) {
+  const kubectlGetTool = tool(
+    withToolTracing(
+      { name: "kubectl_get", description: kubectlGetDescription },
+      async (input: KubectlGetInput) => {
+        const { output } = await kubectlGet(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_get",
+      description: kubectlGetDescription,
+      schema: kubectlGetSchema,
     }
-  ),
-  {
-    name: "kubectl_get",
-    description: kubectlGetDescription,
-    schema: kubectlGetSchema,
-  }
-);
+  );
+
+  const kubectlDescribeTool = tool(
+    withToolTracing(
+      { name: "kubectl_describe", description: kubectlDescribeDescription },
+      async (input: KubectlDescribeInput) => {
+        const { output } = await kubectlDescribe(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_describe",
+      description: kubectlDescribeDescription,
+      schema: kubectlDescribeSchema,
+    }
+  );
+
+  const kubectlLogsTool = tool(
+    withToolTracing(
+      { name: "kubectl_logs", description: kubectlLogsDescription },
+      async (input: KubectlLogsInput) => {
+        const { output } = await kubectlLogs(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_logs",
+      description: kubectlLogsDescription,
+      schema: kubectlLogsSchema,
+    }
+  );
+
+  return [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool];
+}
 
 /**
- * kubectl_describe tool for LangChain agents.
- * Gets detailed information about a specific resource.
- *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
+ * All kubectl tools for the LangChain agent (no kubeconfig).
+ * Backwards-compatible static export for existing code.
  */
-export const kubectlDescribeTool = tool(
-  withToolTracing(
-    { name: "kubectl_describe", description: kubectlDescribeDescription },
-    async (input: KubectlDescribeInput) => {
-      const { output } = await kubectlDescribe(input);
-      return output;
-    }
-  ),
-  {
-    name: "kubectl_describe",
-    description: kubectlDescribeDescription,
-    schema: kubectlDescribeSchema,
-  }
-);
-
-/**
- * kubectl_logs tool for LangChain agents.
- * Gets container logs from a pod.
- *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
- */
-export const kubectlLogsTool = tool(
-  withToolTracing(
-    { name: "kubectl_logs", description: kubectlLogsDescription },
-    async (input: KubectlLogsInput) => {
-      const { output } = await kubectlLogs(input);
-      return output;
-    }
-  ),
-  {
-    name: "kubectl_logs",
-    description: kubectlLogsDescription,
-    schema: kubectlLogsSchema,
-  }
-);
-
-/**
- * All kubectl tools for the LangChain agent.
- * Import this array to give the agent access to all investigation tools.
- */
-export const kubectlTools = [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool];
+export const kubectlTools = createKubectlTools();
 
 /**
  * Creates the unified vector search tool bound to a VectorStore instance.
@@ -239,9 +236,10 @@ export function createVectorTools(vectorStore: VectorStore) {
  * (fail-closed, not fail-open).
  *
  * @param vectorStore - A VectorStore instance for catalog validation
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
  * @returns Array containing the single kubectl_apply tool
  */
-export function createApplyTools(vectorStore: VectorStore) {
+export function createApplyTools(vectorStore: VectorStore, options?: KubectlOptions) {
   /**
    * Wraps the apply tool handler with connection error handling.
    *
@@ -281,7 +279,7 @@ export function createApplyTools(vectorStore: VectorStore) {
     withToolTracing(
       { name: "kubectl_apply", description: kubectlApplyDescription },
       withGracefulDegradation(async (input: KubectlApplyInput) => {
-        const { output } = await kubectlApply(vectorStore, input);
+        const { output } = await kubectlApply(vectorStore, input, { kubeconfig: options?.kubeconfig });
         return output;
       })
     ),

@@ -129,11 +129,13 @@ export function parseManifestMetadata(
  *
  * @param vectorStore - An initialized VectorStore instance for catalog queries
  * @param input - Validated input matching kubectlApplySchema
+ * @param options - Optional configuration (e.g., kubeconfig path)
  * @returns KubectlResult with output string and isError flag
  */
 export async function kubectlApply(
   vectorStore: VectorStore,
-  input: KubectlApplyInput
+  input: KubectlApplyInput,
+  options?: { kubeconfig?: string }
 ): Promise<KubectlResult> {
   const tracer = getTracer();
 
@@ -197,15 +199,18 @@ export async function kubectlApply(
         }
 
         // Step 3: Apply the manifest via kubectl apply -f -
+        // Include --kubeconfig if specified (demo governance: agent has cluster access)
+        const applyArgs = options?.kubeconfig
+          ? ["--kubeconfig", options.kubeconfig, "apply", "-f", "-"]
+          : ["apply", "-f", "-"];
+
         span.setAttribute("process.executable.name", "kubectl");
         span.setAttribute("process.command_args", [
           "kubectl",
-          "apply",
-          "-f",
-          "-",
+          ...applyArgs,
         ]);
 
-        const result = spawnSync("kubectl", ["apply", "-f", "-"], {
+        const result = spawnSync("kubectl", applyArgs, {
           input: input.manifest,
           encoding: "utf-8",
           timeout: 30000,

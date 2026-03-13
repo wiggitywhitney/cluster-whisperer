@@ -30,7 +30,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
-import { kubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
+import { kubectlTools, createKubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
 import {
   VoyageEmbedding,
   createVectorStore,
@@ -144,14 +144,15 @@ function getSystemPrompt(): string {
  * is not set (the agent still works with kubectl-only investigation).
  */
 function createVectorAndApplyToolsSafe(
-  vectorBackend: VectorBackendType = DEFAULT_VECTOR_BACKEND
+  vectorBackend: VectorBackendType = DEFAULT_VECTOR_BACKEND,
+  kubectlOpts?: { kubeconfig?: string }
 ) {
   try {
     const embedder = new VoyageEmbedding();
     const vectorStore = createVectorStore(embedder, vectorBackend);
     return {
       vectorTools: createVectorTools(vectorStore),
-      applyTools: createApplyTools(vectorStore),
+      applyTools: createApplyTools(vectorStore, kubectlOpts),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -180,6 +181,13 @@ export interface InvestigatorOptions {
    * Defaults to "chroma" for backwards compatibility.
    */
   vectorBackend?: VectorBackendType;
+  /**
+   * Path to a kubeconfig file for kubectl operations.
+   * When set, all kubectl tools pass --kubeconfig to their subprocess calls.
+   * This enables the demo governance narrative: the presenter's shell has no
+   * KUBECONFIG, but the agent has cluster access via this path.
+   */
+  kubeconfig?: string;
 }
 
 /**
@@ -252,14 +260,18 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: any[] = [];
 
+    // Build kubectl options from kubeconfig if provided
+    const kubectlOpts = options?.kubeconfig ? { kubeconfig: options.kubeconfig } : undefined;
+
     if (toolGroups.includes("kubectl")) {
-      tools.push(...kubectlTools);
+      // Use factory when kubeconfig is provided, static export otherwise
+      tools.push(...(kubectlOpts ? createKubectlTools(kubectlOpts) : kubectlTools));
     }
 
     // Vector and apply tools share a VectorStore instance (single connection).
     // Only create the shared backend if either group is requested.
     if (toolGroups.includes("vector") || toolGroups.includes("apply")) {
-      const { vectorTools, applyTools } = createVectorAndApplyToolsSafe(vectorBackend);
+      const { vectorTools, applyTools } = createVectorAndApplyToolsSafe(vectorBackend, kubectlOpts);
 
       if (toolGroups.includes("vector")) {
         tools.push(...vectorTools);

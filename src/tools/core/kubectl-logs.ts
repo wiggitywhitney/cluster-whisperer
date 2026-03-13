@@ -1,3 +1,6 @@
+// ABOUTME: kubectl-logs core — shared logic for getting container logs
+// ABOUTME: Defines schema, description, and execution function used by both LangChain and MCP wrappers
+
 /**
  * kubectl-logs core - Shared logic for getting container logs
  *
@@ -13,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl, KubectlResult } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl logs.
@@ -78,7 +81,7 @@ Other useful flags:
  * @param input - Validated input matching kubectlLogsSchema
  * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlLogs(input: KubectlLogsInput): Promise<KubectlResult> {
+export async function kubectlLogs(input: KubectlLogsInput, options?: KubectlOptions): Promise<KubectlResult> {
   const { pod, namespace, args: extraArgs } = input;
 
   // Build kubectl arguments: kubectl logs <pod> -n <namespace> [...extraArgs]
@@ -97,5 +100,5 @@ export async function kubectlLogs(input: KubectlLogsInput): Promise<KubectlResul
     args.push(...extraArgs);
   }
 
-  return executeKubectl(args);
+  return executeKubectl(args, options);
 }

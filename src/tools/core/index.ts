@@ -48,3 +48,5 @@ export {
 } from "./kubectl-apply";
 
 export { formatSearchResults } from "./format-results";
+
+export { type KubectlOptions } from "../../utils/kubectl";

@@ -28,6 +28,11 @@ export interface CreateAgentOptions {
   toolGroups?: ToolGroup[];
   /** Which vector database backend to use. Defaults to "chroma". */
   vectorBackend?: VectorBackendType;
+  /**
+   * Path to a kubeconfig file for kubectl operations.
+   * Passed through to tool creation so all kubectl calls use this cluster.
+   */
+  kubeconfig?: string;
 }
 
 /**
@@ -45,6 +50,7 @@ export function createAgent(options: CreateAgentOptions = {}) {
       return getInvestigatorAgent({
         toolGroups: options.toolGroups,
         vectorBackend: options.vectorBackend,
+        kubeconfig: options.kubeconfig,
       });
 
     case "vercel":

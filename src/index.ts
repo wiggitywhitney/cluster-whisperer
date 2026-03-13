@@ -28,7 +28,7 @@
 import "./tracing";
 import { gracefulExit } from "./tracing";
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
 import { truncate, RECURSION_LIMIT } from "./agent/investigator";
@@ -159,17 +159,17 @@ async function main() {
 
   program
     .argument("<question>", "Natural language question about your cluster")
-    .option(
-      "--tools <groups>",
-      `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`,
+    .addOption(
+      new Option("--tools <groups>", `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`)
+        .env("CLUSTER_WHISPERER_TOOLS")
     )
-    .option(
-      "--agent <type>",
-      `Agent framework: langgraph, vercel (default: ${DEFAULT_AGENT_TYPE})`,
+    .addOption(
+      new Option("--agent <type>", `Agent framework: langgraph, vercel (default: ${DEFAULT_AGENT_TYPE})`)
+        .env("CLUSTER_WHISPERER_AGENT")
     )
-    .option(
-      "--vector-backend <backend>",
-      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
     .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string }) => {
       // Validate environment before doing anything else
@@ -189,6 +189,9 @@ async function main() {
       const vectorBackend = options.vectorBackend
         ? parseVectorBackend(options.vectorBackend)
         : DEFAULT_VECTOR_BACKEND;
+
+      // Read kubeconfig from env var (demo governance: agent has cluster access, shell does not)
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -221,7 +224,7 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = createAgent({ agentType, toolGroups, vectorBackend }).streamEvents(
+        const eventStream = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig }).streamEvents(
           { messages: [new HumanMessage(question)] },
           { version: "v2", recursionLimit: RECURSION_LIMIT }
         );
@@ -329,17 +332,17 @@ async function main() {
       "Scan cluster CRDs and sync capability descriptions to the vector database"
     )
     .option("--dry-run", "Discover and infer capabilities without storing them")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .option(
-      "--qdrant-url <url>",
-      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
     )
-    .option(
-      "--vector-backend <backend>",
-      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
     .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateSyncEnvironment();
@@ -394,17 +397,17 @@ async function main() {
       "Sync resource instance metadata from the cluster to the vector database"
     )
     .option("--dry-run", "Discover instances without storing them")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .option(
-      "--qdrant-url <url>",
-      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
     )
-    .option(
-      "--vector-backend <backend>",
-      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
     .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateInstanceSyncEnvironment();
@@ -459,17 +462,17 @@ async function main() {
       "Start HTTP server to receive instance sync from k8s-vectordb-sync controller"
     )
     .option("--port <number>", "HTTP server port", "3000")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .option(
-      "--qdrant-url <url>",
-      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
     )
-    .option(
-      "--vector-backend <backend>",
-      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
     .action(async (options: { port: string; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateServeEnvironment();

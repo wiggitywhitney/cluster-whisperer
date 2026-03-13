@@ -1,3 +1,6 @@
+// ABOUTME: kubectl-get core — shared logic for listing Kubernetes resources
+// ABOUTME: Defines schema, description, and execution function used by both LangChain and MCP wrappers
+
 /**
  * kubectl-get core - Shared logic for listing Kubernetes resources
  *
@@ -13,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl, KubectlResult } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl get.
@@ -80,7 +83,7 @@ Common resources: pods, deployments, services, nodes, configmaps, namespaces.`;
  * @param input - Validated input matching kubectlGetSchema
  * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlGet(input: KubectlGetInput): Promise<KubectlResult> {
+export async function kubectlGet(input: KubectlGetInput, options?: KubectlOptions): Promise<KubectlResult> {
   const { resource, namespace, name } = input;
 
   // Build kubectl arguments: kubectl get <resource> [name] [-n namespace | -A]
@@ -98,5 +101,5 @@ export async function kubectlGet(input: KubectlGetInput): Promise<KubectlResult>
     args.push(name);
   }
 
-  return executeKubectl(args);
+  return executeKubectl(args, options);
 }

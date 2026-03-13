@@ -1,4 +1,4 @@
-// ABOUTME: Executes kubectl commands as subprocesses with OTel tracing.
+// ABOUTME: Executes kubectl commands as subprocesses with OTel tracing and kubeconfig support.
 // ABOUTME: Includes sensitive argument redaction for telemetry safety.
 
 /**
@@ -109,6 +109,20 @@ export interface KubectlResult {
 }
 
 /**
+ * Options for executeKubectl.
+ */
+export interface KubectlOptions {
+  /**
+   * Path to a kubeconfig file to use instead of the default.
+   *
+   * When set, prepends --kubeconfig <path> to the kubectl args. This enables
+   * the demo governance narrative: the presenter's shell has no KUBECONFIG,
+   * so `kubectl get pods` fails, but the agent has access via this option.
+   */
+  kubeconfig?: string;
+}
+
+/**
  * Metadata extracted from kubectl args for tracing attributes.
  * We parse this from the args array to create meaningful span names
  * and attributes without changing the executeKubectl API.
@@ -163,6 +177,7 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  * creating the hierarchy: execute_tool kubectl_get → kubectl get pods
  *
  * @param args - Array of arguments to pass to kubectl (e.g., ["get", "pods"])
+ * @param options - Optional configuration (e.g., kubeconfig path)
  * @returns Object with output string and isError flag based on exit code
  *
  * Example:
@@ -172,7 +187,12 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  *   executeKubectl(["get", "nonexistent"])
  *   // Returns: { output: "Error executing...", isError: true }
  */
-export function executeKubectl(args: string[]): KubectlResult {
+export function executeKubectl(args: string[], options?: KubectlOptions): KubectlResult {
+  // Prepend --kubeconfig if specified (demo governance: agent has cluster access, shell does not)
+  if (options?.kubeconfig) {
+    args = ["--kubeconfig", options.kubeconfig, ...args];
+  }
+
   const tracer = getTracer();
   const metadata = extractKubectlMetadata(args);
 
