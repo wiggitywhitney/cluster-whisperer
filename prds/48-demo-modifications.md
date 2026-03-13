@@ -121,11 +121,11 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] Kubeconfig pass-through also covers `kubectlApply` in `src/tools/core/kubectl-apply.ts` (has its own `spawnSync("kubectl", ...)` call that bypasses `executeKubectl()`)
 - [x] Plumb kubeconfig path through agent factory → tool creation → kubectl execution
 - [x] Unit tests for env var parsing and kubeconfig pass-through
-- [ ] Setup script: add Chroma ingress (`chroma.<ip>.nip.io` → port 8000)
-- [ ] Setup script: add Qdrant ingress (`qdrant.<ip>.nip.io` → port 6333)
-- [ ] Setup script: add OTel Collector ingress (`otel.<ip>.nip.io` → OTLP HTTP 4318)
-- [ ] Setup script: generate demo `.env` file with resolved ingress URLs (IP not known until after setup)
-- [ ] Serve manifest: add `--qdrant-url http://qdrant.qdrant:6333` to args
+- [x] Setup script: add Chroma ingress (`chroma.<ip>.nip.io` → port 8000)
+- [x] Setup script: add Qdrant ingress (`qdrant.<ip>.nip.io` → port 6333)
+- [x] Setup script: add OTel Collector ingress (`otel.<ip>.nip.io` → OTLP HTTP 4318)
+- [x] Setup script: generate demo `.env` file with resolved ingress URLs (IP not known until after setup)
+- [x] Serve manifest: add `--qdrant-url http://qdrant.qdrant:6333` to args
 - [ ] Verified: `kubectl get pods` fails without KUBECONFIG, `cluster-whisperer` succeeds with `CLUSTER_WHISPERER_KUBECONFIG`
 - [ ] Verified: traces from local CLI appear in Jaeger via OTel Collector ingress
 - [ ] M7 item 4: Verified Qdrant traces (`db.system: "qdrant"`) appear in Jaeger/Datadog
