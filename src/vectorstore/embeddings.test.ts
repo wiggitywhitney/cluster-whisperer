@@ -9,6 +9,9 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
+// Pre-import the module under test at the top level to avoid slow dynamic imports.
+// vi.mock("voyageai") below is hoisted by Vitest, so this import gets the mocked version.
+import { VoyageEmbedding } from "./embeddings";
 
 // ---------------------------------------------------------------------------
 // Mock voyageai module — we test span creation, not Voyage AI behavior
@@ -66,8 +69,7 @@ afterEach(async () => {
 // Helper: create a VoyageEmbedding instance
 // ---------------------------------------------------------------------------
 
-async function createEmbedder(model?: string) {
-  const { VoyageEmbedding } = await import("./embeddings");
+function createEmbedder(model?: string) {
   return new VoyageEmbedding({ apiKey: "test-key", model });
 }
 
@@ -85,7 +87,7 @@ function getSpanByName(name: string): ReadableSpan | undefined {
 
 describe("embed() span", () => {
   it("creates a span named cluster-whisperer.embedding.embed", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["hello", "world"]);
 
@@ -94,7 +96,7 @@ describe("embed() span", () => {
   });
 
   it("sets span kind to CLIENT", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["hello", "world"]);
 
@@ -103,7 +105,7 @@ describe("embed() span", () => {
   });
 
   it("sets GenAI semconv attributes", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["hello", "world"]);
 
@@ -116,7 +118,7 @@ describe("embed() span", () => {
     mockEmbed.mockResolvedValueOnce({
       data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
     });
-    const embedder = await createEmbedder("voyage-code-3");
+    const embedder = createEmbedder("voyage-code-3");
 
     await embedder.embed(["hello"]);
 
@@ -132,7 +134,7 @@ describe("embed() span", () => {
         { embedding: [0.7, 0.8, 0.9], index: 2 },
       ],
     });
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["one", "two", "three"]);
 
@@ -141,7 +143,7 @@ describe("embed() span", () => {
   });
 
   it("sets dimensions custom attribute from response", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["hello", "world"]);
 
@@ -151,7 +153,7 @@ describe("embed() span", () => {
   });
 
   it("sets span status to OK on success", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     await embedder.embed(["hello", "world"]);
 
@@ -160,7 +162,7 @@ describe("embed() span", () => {
   });
 
   it("sets span status to ERROR on API failure", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
     mockEmbed.mockRejectedValueOnce(new Error("Voyage API rate limit exceeded"));
 
     await expect(embedder.embed(["hello"])).rejects.toThrow(
@@ -174,7 +176,7 @@ describe("embed() span", () => {
   });
 
   it("sets span status to ERROR when response has no data", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
     mockEmbed.mockResolvedValueOnce({ data: undefined });
 
     await expect(embedder.embed(["hello"])).rejects.toThrow(
@@ -186,7 +188,7 @@ describe("embed() span", () => {
   });
 
   it("sets span status to ERROR when response count mismatches", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
     mockEmbed.mockResolvedValueOnce({
       data: [{ embedding: [0.1, 0.2], index: 0 }],
     });
@@ -200,7 +202,7 @@ describe("embed() span", () => {
   });
 
   it("returns embedding vectors correctly", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     const result = await embedder.embed(["hello", "world"]);
 
@@ -223,7 +225,7 @@ describe("no-op tracer (tracing disabled)", () => {
   });
 
   it("embed() still works when tracing is disabled", async () => {
-    const embedder = await createEmbedder();
+    const embedder = createEmbedder();
 
     const result = await embedder.embed(["hello", "world"]);
     expect(result).toEqual([
