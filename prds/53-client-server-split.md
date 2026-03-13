@@ -69,6 +69,7 @@ clients never get cluster access.
 - [ ] SSE event format documented and versioned
 - [ ] Error handling for mid-stream failures (agent errors, tool failures, timeouts)
 - [ ] Concurrency control (max concurrent investigations, similar to capability scan's in-flight limit)
+- [ ] Non-streaming mode: `Accept: application/json` returns complete result (for CI, scripts, MCP-over-HTTP later)
 - [ ] Unit tests using Hono's `app.request()` test pattern
 - [ ] Integration test: POST question → receive SSE stream → verify event sequence
 
