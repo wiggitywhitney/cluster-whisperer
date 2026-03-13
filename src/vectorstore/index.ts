@@ -1,3 +1,5 @@
+// ABOUTME: Public API for the vector store module — re-exports types, backends, and collection constants
+// ABOUTME: Import from here, never directly from types.ts, embeddings.ts, or backend files
 /**
  * vectorstore/index.ts - Public API for the vector store module
  *
@@ -29,6 +31,7 @@ export type {
 
 // Implementations — wired together at startup
 export { ChromaBackend } from "./chroma-backend";
+export { QdrantBackend } from "./qdrant-backend";
 export { VoyageEmbedding } from "./embeddings";
 
 /**

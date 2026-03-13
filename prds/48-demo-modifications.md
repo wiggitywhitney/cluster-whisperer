@@ -80,12 +80,12 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Plumbing ready for PRD #49 to plug in the Vercel implementation
 
 ### M5: Qdrant VectorStore Backend
-- [ ] `QdrantBackend` implementing `VectorStore` interface (`src/vectorstore/qdrant-backend.ts`)
-- [ ] Filter syntax translation: convert `SearchOptions.where` to Qdrant `must`/`should`/`must_not` format
-- [ ] `keywordSearch` implementation using Qdrant's payload filtering
-- [ ] Use `/research` to verify current Qdrant JS/TS client API before implementation
-- [ ] Unit tests matching ChromaBackend test patterns
-- [ ] Integration tests against a real Qdrant instance
+- [x] `QdrantBackend` implementing `VectorStore` interface (`src/vectorstore/qdrant-backend.ts`)
+- [x] Filter syntax translation: convert `SearchOptions.where` to Qdrant `must`/`should`/`must_not` format
+- [x] `keywordSearch` implementation using Qdrant's payload filtering
+- [x] Use `/research` to verify current Qdrant JS/TS client API before implementation
+- [x] Unit tests matching ChromaBackend test patterns
+- [x] Integration tests against a real Qdrant instance
 
 ### M6: Vector Backend Switching (--vector-backend flag)
 - [ ] `--vector-backend` CLI flag accepting `chroma` (default) or `qdrant`

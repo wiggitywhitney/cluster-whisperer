@@ -33,6 +33,7 @@
     "@langchain/core": "^0.3.27",
     "@langchain/langgraph": "^0.2.42",
     "@modelcontextprotocol/sdk": "^1.25.3",
+    "@qdrant/js-client-rest": "^1.17.0",
     "chromadb": "^3.3.0",
     "commander": "^13.0.0",
     "hono": "^4.12.1",
