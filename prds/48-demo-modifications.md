@@ -159,6 +159,19 @@ Qdrant format:  { must: [
 The `whereDocument` filter ($contains) translates to Qdrant's full-text search
 or payload keyword matching.
 
+### Demo Cluster Access
+
+The PRD #47 demo cluster (GKE) uses a dedicated kubeconfig file, **not** the default `~/.kube/config`:
+
+```text
+KUBECONFIG path: ~/.kube/config-cluster-whisperer
+Context name:    gke_demoo-ooclock_<zone>_cluster-whisperer-<timestamp>
+```
+
+To use it: `KUBECONFIG=~/.kube/config-cluster-whisperer kubectl get nodes`
+
+This is set in `demo/cluster/setup.sh` (search for `KUBECONFIG_PATH`). The cluster has Crossplane CRDs, Chroma, Qdrant, the demo app, and synced capabilities/instances data. The default `~/.kube/config` may contain unrelated Kind clusters — always use the dedicated kubeconfig for demo cluster work.
+
 ### May Talk Preservation
 
 All changes are additive:

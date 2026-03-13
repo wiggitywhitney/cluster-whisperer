@@ -1,3 +1,6 @@
+// ABOUTME: LangChain tool wrappers for kubectl, vector search, and apply operations
+// ABOUTME: Wraps core functions with LangChain's tool() helper for agent use
+
 /**
  * LangChain tool wrappers for kubectl and vector search operations
  *
