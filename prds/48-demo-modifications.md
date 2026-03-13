@@ -90,8 +90,8 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 ### M6: Vector Backend Switching (--vector-backend flag)
 - [x] `--vector-backend` CLI flag accepting `chroma` (default) or `qdrant`
 - [x] Backend factory that constructs the right VectorStore based on the flag
-- [ ] Verified: pipeline populates both backends with identical data
-- [ ] Verified: agent produces equivalent search results from both backends
+- [x] Verified: pipeline populates both backends with identical data
+- [x] Verified: agent produces equivalent search results from both backends
 
 ### M7: OTel Instrumentation for Qdrant Backend
 - [ ] Every QdrantBackend operation wrapped in spans (matching ChromaBackend's pattern)
