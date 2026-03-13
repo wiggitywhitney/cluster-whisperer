@@ -34,6 +34,15 @@ export { ChromaBackend } from "./chroma-backend";
 export { QdrantBackend } from "./qdrant-backend";
 export { VoyageEmbedding } from "./embeddings";
 
+// Backend selection — routes --vector-backend flag to the right implementation
+export {
+  VALID_VECTOR_BACKENDS,
+  DEFAULT_VECTOR_BACKEND,
+  parseVectorBackend,
+  type VectorBackendType,
+} from "./backend-types";
+export { createVectorStore, type CreateVectorStoreOptions } from "./backend-factory";
+
 /**
  * Collection name for capability descriptions.
  *

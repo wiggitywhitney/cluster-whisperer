@@ -16,6 +16,7 @@
 import { getInvestigatorAgent } from "./investigator";
 import { DEFAULT_AGENT_TYPE, type AgentType } from "./agent-types";
 import { type ToolGroup } from "../tools/tool-groups";
+import { type VectorBackendType } from "../vectorstore";
 
 /**
  * Options for creating an agent via the factory.
@@ -25,6 +26,8 @@ export interface CreateAgentOptions {
   agentType?: AgentType;
   /** Which tool groups to include. Passed through to the agent constructor. */
   toolGroups?: ToolGroup[];
+  /** Which vector database backend to use. Defaults to "chroma". */
+  vectorBackend?: VectorBackendType;
 }
 
 /**
@@ -39,7 +42,10 @@ export function createAgent(options: CreateAgentOptions = {}) {
 
   switch (agentType) {
     case "langgraph":
-      return getInvestigatorAgent({ toolGroups: options.toolGroups });
+      return getInvestigatorAgent({
+        toolGroups: options.toolGroups,
+        vectorBackend: options.vectorBackend,
+      });
 
     case "vercel":
       throw new Error(

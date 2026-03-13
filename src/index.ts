@@ -37,13 +37,18 @@ import { parseAgentType, DEFAULT_AGENT_TYPE } from "./agent/agent-types";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
 import { parseToolGroups, DEFAULT_TOOL_GROUPS } from "./tools/tool-groups";
 import {
+  parseVectorBackend,
+  DEFAULT_VECTOR_BACKEND,
+  createVectorStore,
+  VoyageEmbedding,
+} from "./vectorstore";
+import {
   syncCapabilities,
   discoverResources,
   inferCapabilities,
   storeCapabilities,
 } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
-import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
 import { createApp, startServer } from "./api/server";
 
 // ---------------------------------------------------------------------------
@@ -162,7 +167,11 @@ async function main() {
       "--agent <type>",
       `Agent framework: langgraph, vercel (default: ${DEFAULT_AGENT_TYPE})`,
     )
-    .action(async (question: string, options: { tools?: string; agent?: string }) => {
+    .option(
+      "--vector-backend <backend>",
+      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    )
+    .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string }) => {
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
 
@@ -175,6 +184,11 @@ async function main() {
       const agentType = options.agent
         ? parseAgentType(options.agent)
         : DEFAULT_AGENT_TYPE;
+
+      // Parse vector backend from --vector-backend flag (or use default)
+      const vectorBackend = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -207,7 +221,7 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = createAgent({ agentType, toolGroups }).streamEvents(
+        const eventStream = createAgent({ agentType, toolGroups, vectorBackend }).streamEvents(
           { messages: [new HumanMessage(question)] },
           { version: "v2", recursionLimit: RECURSION_LIMIT }
         );
@@ -319,13 +333,27 @@ async function main() {
       "--chroma-url <url>",
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
-    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+    .option(
+      "--qdrant-url <url>",
+      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    )
+    .option(
+      "--vector-backend <backend>",
+      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    )
+    .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateSyncEnvironment();
+
+      // Parse vector backend from --vector-backend flag (or use default)
+      const backendType = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
 
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
+      const vectorStore = createVectorStore(embedder, backendType, {
         chromaUrl: options.chromaUrl,
+        qdrantUrl: options.qdrantUrl,
       });
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
@@ -370,13 +398,27 @@ async function main() {
       "--chroma-url <url>",
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
-    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+    .option(
+      "--qdrant-url <url>",
+      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    )
+    .option(
+      "--vector-backend <backend>",
+      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    )
+    .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateInstanceSyncEnvironment();
+
+      // Parse vector backend from --vector-backend flag (or use default)
+      const backendType = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
 
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
+      const vectorStore = createVectorStore(embedder, backendType, {
         chromaUrl: options.chromaUrl,
+        qdrantUrl: options.qdrantUrl,
       });
 
       console.log("\nStarting instance sync...\n"); // eslint-disable-line no-console
@@ -421,7 +463,15 @@ async function main() {
       "--chroma-url <url>",
       "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
     )
-    .action(async (options: { port: string; chromaUrl?: string }) => {
+    .option(
+      "--qdrant-url <url>",
+      "Qdrant server URL (default: QDRANT_URL env or http://localhost:6333)"
+    )
+    .option(
+      "--vector-backend <backend>",
+      `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`,
+    )
+    .action(async (options: { port: string; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateServeEnvironment();
 
       const port = parseInt(options.port, 10);
@@ -430,10 +480,16 @@ async function main() {
         await gracefulExit(1);
       }
 
+      // Parse vector backend from --vector-backend flag (or use default)
+      const backendType = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
+
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
+      const vectorStore = createVectorStore(embedder, backendType, {
         chromaUrl: options.chromaUrl,
+        qdrantUrl: options.qdrantUrl,
       });
 
       const app = createApp({

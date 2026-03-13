@@ -49,6 +49,14 @@ vi.mock("../vectorstore", () => ({
   VoyageEmbedding: class MockVoyageEmbedding {},
   CAPABILITIES_COLLECTION: "capabilities",
   INSTANCES_COLLECTION: "instances",
+  DEFAULT_VECTOR_BACKEND: "chroma",
+  createVectorStore: vi.fn().mockReturnValue({
+    initialize: vi.fn(),
+    store: vi.fn(),
+    search: vi.fn(),
+    keywordSearch: vi.fn(),
+    delete: vi.fn(),
+  }),
 }));
 
 vi.mock("../tracing/tool-tracing", () => ({
