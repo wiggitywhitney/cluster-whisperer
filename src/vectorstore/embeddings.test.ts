@@ -10,7 +10,7 @@ import {
 } from "@opentelemetry/sdk-trace-node";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
 // Pre-import the module under test at the top level to avoid slow dynamic imports.
-// The vi.mock("voyageai") above is hoisted, so this import gets the mocked version.
+// vi.mock("voyageai") below is hoisted by Vitest, so this import gets the mocked version.
 import { VoyageEmbedding } from "./embeddings";
 
 // ---------------------------------------------------------------------------

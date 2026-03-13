@@ -11,7 +11,7 @@ import {
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
 import type { EmbeddingFunction } from "./types";
 // Pre-import the module under test at the top level to avoid slow dynamic imports.
-// The vi.mock("chromadb") above is hoisted, so this import gets the mocked version.
+// vi.mock("chromadb") below is hoisted by Vitest, so this import gets the mocked version.
 import { ChromaBackend } from "./chroma-backend";
 
 // ---------------------------------------------------------------------------
