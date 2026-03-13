@@ -1,3 +1,6 @@
+// ABOUTME: Executes kubectl commands as subprocesses with OTel tracing.
+// ABOUTME: Includes sensitive argument redaction for telemetry safety.
+
 /**
  * kubectl.ts - Executes kubectl commands as subprocesses
  *
@@ -56,19 +59,24 @@ const SENSITIVE_FLAGS = new Set([
  * @param args - kubectl arguments array
  * @returns New array with sensitive values redacted
  */
-function redactSensitiveArgs(args: string[]): string[] {
+export function redactSensitiveArgs(args: string[]): string[] {
   const redacted: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    // Check for --flag=value format
+    // Check for --flag=value format (e.g., --token=secret123)
+    // Uses a flag to break out of both the inner and outer loops,
+    // since `continue` inside the inner for-of only skips within that loop.
+    let handled = false;
     for (const flag of SENSITIVE_FLAGS) {
       if (arg.startsWith(`${flag}=`)) {
         redacted.push(`${flag}=[REDACTED]`);
-        continue;
+        handled = true;
+        break;
       }
     }
+    if (handled) continue;
 
     // Check for --flag value format (two separate args)
     if (SENSITIVE_FLAGS.has(arg) && i + 1 < args.length) {
