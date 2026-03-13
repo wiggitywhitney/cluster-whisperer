@@ -1,5 +1,5 @@
-// ABOUTME: Unit tests for kubectl utility — verifies sensitive arg redaction
-// ABOUTME: and metadata extraction from kubectl command arguments.
+// ABOUTME: Unit tests for redactSensitiveArgs in kubectl utility.
+// ABOUTME: Covers non-sensitive passthrough and sensitive-flag redaction edge cases.
 
 import { describe, it, expect } from "vitest";
 import { redactSensitiveArgs } from "./kubectl";
