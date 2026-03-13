@@ -28,6 +28,7 @@
 import "./tracing";
 import { gracefulExit } from "./tracing";
 
+import * as path from "node:path";
 import { Command, Option } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
@@ -379,6 +380,7 @@ async function main() {
       "Scan cluster CRDs and sync capability descriptions to the vector database"
     )
     .option("--dry-run", "Discover and infer capabilities without storing them")
+    .option("--no-cache", "Disable inference caching (re-infer all resources)")
     .addOption(
       new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
         .env("CLUSTER_WHISPERER_CHROMA_URL")
@@ -391,10 +393,22 @@ async function main() {
       new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
         .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
-    .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
+    .action(async (options: { dryRun?: boolean; cache?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateSyncEnvironment();
 
       const vectorStore = createSyncVectorStore(options);
+
+      // Cache is enabled by default (--no-cache disables it).
+      // Commander's --no-cache sets options.cache to false.
+      const cacheDir = options.cache !== false
+        ? path.join(process.cwd(), "data", "inference-cache")
+        : undefined;
+
+      if (cacheDir) {
+        console.log(`Inference cache: ${cacheDir}`); // eslint-disable-line no-console
+      } else {
+        console.log("Inference cache: disabled"); // eslint-disable-line no-console
+      }
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
 
@@ -402,6 +416,7 @@ async function main() {
         const result = await syncCapabilities({
           vectorStore,
           dryRun: options.dryRun,
+          cacheDir,
         });
 
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)

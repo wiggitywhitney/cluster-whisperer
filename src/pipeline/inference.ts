@@ -1,5 +1,5 @@
-// ABOUTME: LLM capability inference for the pipeline (M2).
-// ABOUTME: Sends CRD schemas to Claude Haiku and returns structured ResourceCapability descriptions.
+// ABOUTME: LLM capability inference pipeline — sends CRD schemas to Haiku for structured analysis.
+// ABOUTME: Supports file-based caching to skip already-processed resources on re-runs.
 
 /**
  * inference.ts - LLM capability inference for the pipeline (M2)
@@ -22,6 +22,13 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { z } from "zod";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  computeCacheKey,
+  loadCache,
+  saveCache,
+  getCachedResult,
+  setCachedResult,
+} from "./inference-cache";
 import type {
   DiscoveredResource,
   ResourceCapability,
@@ -253,9 +260,29 @@ export async function inferCapabilities(
 ): Promise<ResourceCapability[]> {
   const onProgress = options?.onProgress ?? console.log; // eslint-disable-line no-console
   const results: ResourceCapability[] = [];
+  const cacheDir = options?.cacheDir;
+
+  // Load existing cache if caching is enabled
+  const cache = cacheDir ? loadCache(cacheDir) : undefined;
+  let cacheHits = 0;
 
   for (let i = 0; i < resources.length; i++) {
     const resource = resources[i];
+
+    // Check cache before calling the LLM
+    if (cache) {
+      const key = computeCacheKey(resource);
+      const cached = getCachedResult(cache, key);
+      if (cached) {
+        cacheHits++;
+        onProgress(
+          `Inferring capabilities (${i + 1} of ${resources.length}): ${resource.name} [cached]`
+        );
+        results.push(cached);
+        continue;
+      }
+    }
+
     onProgress(
       `Inferring capabilities (${i + 1} of ${resources.length}): ${resource.name}`
     );
@@ -263,14 +290,29 @@ export async function inferCapabilities(
     try {
       const capability = await inferCapability(resource, options);
       results.push(capability);
+
+      // Save to cache incrementally after each successful inference
+      if (cache && cacheDir) {
+        const key = computeCacheKey(resource);
+        setCachedResult(cache, key, {
+          resourceName: resource.name,
+          cacheKey: key,
+          result: capability,
+          cachedAt: new Date().toISOString(),
+        });
+        saveCache(cacheDir, cache);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       onProgress(`  Warning: skipping ${resource.name} (${message})`);
     }
   }
 
+  const cacheMsg = cache
+    ? ` (${cacheHits} cached, ${results.length - cacheHits} inferred)`
+    : "";
   onProgress(
-    `Inference complete: ${results.length} of ${resources.length} resources processed.`
+    `Inference complete: ${results.length} of ${resources.length} resources processed${cacheMsg}.`
   );
   return results;
 }

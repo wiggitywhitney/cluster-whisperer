@@ -10,6 +10,7 @@ import {
 } from "@opentelemetry/sdk-trace-node";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
 import type { EmbeddingFunction } from "./types";
+import { stringToUuidV5 } from "./qdrant-backend";
 
 // ---------------------------------------------------------------------------
 // Mock @qdrant/js-client-rest — we test span creation, not Qdrant behavior
@@ -23,22 +24,22 @@ const { mockQdrantClient } = vi.hoisted(() => {
     query: vi.fn().mockResolvedValue({
       points: [
         {
-          id: "doc-1",
+          id: "some-uuid-1",
           score: 0.9,
-          payload: { document: "text-1", kind: "Deployment" },
+          payload: { _originalId: "doc-1", document: "text-1", kind: "Deployment" },
         },
         {
-          id: "doc-2",
+          id: "some-uuid-2",
           score: 0.7,
-          payload: { document: "text-2", kind: "Service" },
+          payload: { _originalId: "doc-2", document: "text-2", kind: "Service" },
         },
       ],
     }),
     scroll: vi.fn().mockResolvedValue({
       points: [
         {
-          id: "doc-1",
-          payload: { document: "text-1", kind: "Deployment" },
+          id: "some-uuid-1",
+          payload: { _originalId: "doc-1", document: "text-1", kind: "Deployment" },
         },
       ],
     }),
@@ -79,22 +80,22 @@ beforeEach(() => {
   mockQdrantClient.query.mockClear().mockResolvedValue({
     points: [
       {
-        id: "doc-1",
+        id: "some-uuid-1",
         score: 0.9,
-        payload: { document: "text-1", kind: "Deployment" },
+        payload: { _originalId: "doc-1", document: "text-1", kind: "Deployment" },
       },
       {
-        id: "doc-2",
+        id: "some-uuid-2",
         score: 0.7,
-        payload: { document: "text-2", kind: "Service" },
+        payload: { _originalId: "doc-2", document: "text-2", kind: "Service" },
       },
     ],
   });
   mockQdrantClient.scroll.mockClear().mockResolvedValue({
     points: [
       {
-        id: "doc-1",
-        payload: { document: "text-1", kind: "Deployment" },
+        id: "some-uuid-1",
+        payload: { _originalId: "doc-1", document: "text-1", kind: "Deployment" },
       },
     ],
   });
@@ -537,6 +538,113 @@ describe("filter translation", () => {
         { key: "kind", match: { value: "Deployment" } },
       ],
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UUID v5 ID conversion
+// ---------------------------------------------------------------------------
+
+describe("stringToUuidV5", () => {
+  it("produces a valid UUID format", () => {
+    const uuid = stringToUuidV5("configmaps");
+    expect(uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+  });
+
+  it("is deterministic — same input always produces same UUID", () => {
+    const a = stringToUuidV5("deployments.apps");
+    const b = stringToUuidV5("deployments.apps");
+    expect(a).toBe(b);
+  });
+
+  it("produces different UUIDs for different inputs", () => {
+    const a = stringToUuidV5("configmaps");
+    const b = stringToUuidV5("deployments.apps");
+    expect(a).not.toBe(b);
+  });
+
+  it("handles resource names with slashes (instance IDs)", () => {
+    const uuid = stringToUuidV5("default/apps/v1/Deployment/nginx");
+    expect(uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+  });
+});
+
+describe("store() UUID ID conversion", () => {
+  it("converts string IDs to UUIDs before upserting", async () => {
+    const { backend } = await createInitializedBackend();
+
+    await backend.store("test-collection", [
+      { id: "my-resource", text: "hello", metadata: { kind: "Pod" } },
+    ]);
+
+    const upsertCall = mockQdrantClient.upsert.mock.calls[0];
+    const points = upsertCall[1].points;
+    // ID should be a UUID, not the original string
+    expect(points[0].id).toBe(stringToUuidV5("my-resource"));
+    expect(points[0].id).not.toBe("my-resource");
+  });
+
+  it("includes _originalId in payload for retrieval", async () => {
+    const { backend } = await createInitializedBackend();
+
+    await backend.store("test-collection", [
+      { id: "my-resource", text: "hello", metadata: { kind: "Pod" } },
+    ]);
+
+    const upsertCall = mockQdrantClient.upsert.mock.calls[0];
+    const points = upsertCall[1].points;
+    expect(points[0].payload._originalId).toBe("my-resource");
+  });
+});
+
+describe("search() returns original string IDs", () => {
+  it("returns _originalId from payload as the result id", async () => {
+    const { backend } = await createInitializedBackend();
+    const results = await backend.search("test-collection", "managed database");
+
+    expect(results[0].id).toBe("doc-1");
+    expect(results[1].id).toBe("doc-2");
+  });
+
+  it("does not include _originalId in result metadata", async () => {
+    const { backend } = await createInitializedBackend();
+    const results = await backend.search("test-collection", "managed database");
+
+    expect(results[0].metadata).not.toHaveProperty("_originalId");
+  });
+});
+
+describe("keywordSearch() returns original string IDs", () => {
+  it("returns _originalId from payload as the result id", async () => {
+    const { backend } = await createInitializedBackend();
+    const results = await backend.keywordSearch("test-collection", "backup");
+
+    expect(results[0].id).toBe("doc-1");
+  });
+
+  it("does not include _originalId in result metadata", async () => {
+    const { backend } = await createInitializedBackend();
+    const results = await backend.keywordSearch("test-collection", "backup");
+
+    expect(results[0].metadata).not.toHaveProperty("_originalId");
+  });
+});
+
+describe("delete() converts IDs to UUIDs", () => {
+  it("converts string IDs to UUIDs before deleting", async () => {
+    const { backend } = await createInitializedBackend();
+
+    await backend.delete("test-collection", ["doc-1", "doc-2"]);
+
+    const deleteCall = mockQdrantClient.delete.mock.calls[0];
+    expect(deleteCall[1].points).toEqual([
+      stringToUuidV5("doc-1"),
+      stringToUuidV5("doc-2"),
+    ]);
   });
 });
 

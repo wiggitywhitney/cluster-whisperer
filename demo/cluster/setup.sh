@@ -1242,8 +1242,11 @@ run_capability_inference() {
     log_info "Using Chroma at ${chroma_url}, Qdrant at ${qdrant_url}"
 
     # Run the sync pipeline with both URLs — CLI auto-detects multi-backend mode
+    # Strip ANTHROPIC_BASE_URL and ANTHROPIC_CUSTOM_HEADERS so Haiku inference
+    # calls go directly to Anthropic, not through the Datadog AI Gateway.
     local sync_exit=0
-    npx tsx "${REPO_ROOT}/src/index.ts" sync \
+    env -u ANTHROPIC_CUSTOM_HEADERS -u ANTHROPIC_BASE_URL \
+        npx tsx "${REPO_ROOT}/src/index.ts" sync \
         --chroma-url "${chroma_url}" \
         --qdrant-url "${qdrant_url}" || sync_exit=$?
 
@@ -1549,8 +1552,10 @@ run_instance_sync() {
     log_info "Using Chroma at ${chroma_url}, Qdrant at ${qdrant_url}"
 
     # Run sync-instances with both URLs — CLI auto-detects multi-backend mode
+    # Strip Datadog AI Gateway vars (same reason as sync above).
     local sync_exit=0
-    npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
+    env -u ANTHROPIC_CUSTOM_HEADERS -u ANTHROPIC_BASE_URL \
+        npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
         --chroma-url "${chroma_url}" \
         --qdrant-url "${qdrant_url}" || sync_exit=$?
 

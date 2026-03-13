@@ -51,6 +51,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-13) Demo modifications (PRD #48 M7/M8): Verified all 3 M8 verification items on live GKE cluster — kubeconfig governance (kubectl fails, agent succeeds), traces in Jaeger (64 spans via OTel Collector ingress), Qdrant traces (7 spans with db.system:"qdrant" attributes) in Jaeger
 
 - (2026-03-13) Demo modifications (PRD #48 M9): MultiBackendVectorStore — VectorStore wrapper that writes to all backends in parallel via Promise.all, reads from first backend. 15 unit tests. Sync commands auto-detect multi-backend mode when both Chroma and Qdrant URLs provided. Setup script updated for dual-backend sync and verification.
+- (2026-03-13) Demo modifications (PRD #48 M9): Qdrant UUID v5 ID mapping — deterministic string-to-UUID conversion for Qdrant point IDs (rejects arbitrary strings). Original IDs stored in payload as `_originalId` for transparent retrieval. 11 new tests (UUID format, determinism, store/search/delete round-trip).
+- (2026-03-13) Demo modifications (PRD #48 M9): Inference cache — file-based cache for LLM inference results keyed by SHA-256 of resource name + schema. Automatic invalidation on schema changes, incremental saves after each resource, `--no-cache` CLI flag. 18 unit tests. Prevents re-running ~30 min of Haiku calls when storage fails.
 
 ### Changed
 - (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning
@@ -64,6 +66,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi
 
 ### Fixed
+- (2026-03-13) Demo modifications (PRD #48 M9): Qdrant rejects string point IDs with "Bad Request" — added UUID v5 conversion so document IDs like "configmaps" become deterministic UUIDs
+- (2026-03-13) Demo modifications (PRD #48 M9): Setup script sync commands strip ANTHROPIC_BASE_URL and ANTHROPIC_CUSTOM_HEADERS so Haiku inference calls bypass Datadog AI Gateway
 - (2026-03-13) Demo modifications (PRD #48 M8): URL port parsing in ChromaBackend and QdrantBackend — ingress URLs (port 80) incorrectly defaulted to service ports (8000/6333). Now uses protocol defaults (80/443) when no explicit port
 - (2026-03-13) Demo modifications (PRD #48 M8): Vector tool error message hardcoded "Chroma server" even when using Qdrant backend — now backend-agnostic
 - (2026-03-12) Demo cluster (PRD #47 M7): Eliminated double-rollout for GKE deployments — sed inline image replacement instead of apply+patch, avoiding ImagePullBackOff delay

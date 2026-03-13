@@ -28,6 +28,7 @@
  * must/should/must_not format internally, keeping the interface backend-agnostic.
  */
 
+import { createHash } from "node:crypto";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { getTracer } from "../tracing";
@@ -67,6 +68,45 @@ const DISTANCE_METRIC_MAP: Record<string, string> = {
   l2: "Euclid",
   ip: "Dot",
 };
+
+/**
+ * UUID v5 namespace (DNS namespace from RFC 4122).
+ * Used to deterministically convert string document IDs to UUIDs.
+ * Qdrant only accepts unsigned integers or UUIDs as point IDs.
+ */
+const UUID_V5_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+/**
+ * Converts a string ID to a deterministic UUID v5.
+ *
+ * Qdrant rejects arbitrary string point IDs — it requires unsigned integers
+ * or UUIDs. This function hashes the string ID with SHA-1 (per UUID v5 spec)
+ * to produce a stable UUID. The same input always produces the same UUID,
+ * preserving upsert semantics.
+ *
+ * The original string ID is stored in the payload as `_originalId` so it can
+ * be recovered on read operations (search, keywordSearch).
+ */
+export function stringToUuidV5(name: string): string {
+  const namespaceBytes = Buffer.from(
+    UUID_V5_NAMESPACE.replace(/-/g, ""),
+    "hex"
+  );
+  const hash = createHash("sha1").update(namespaceBytes).update(name).digest();
+
+  // Set version (5) and variant (10xx) bits per RFC 4122
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  const hex = hash.toString("hex").substring(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Payload key for storing the original string document ID.
+ * Used to recover the human-readable ID from search/keywordSearch results.
+ */
+const ORIGINAL_ID_KEY = "_originalId";
 
 /**
  * Qdrant implementation of the VectorStore interface.
@@ -218,9 +258,10 @@ export class QdrantBackend implements VectorStore {
             const embeddings = await this.embedder.embed(texts);
 
             const points = batch.map((doc, idx) => ({
-              id: doc.id,
+              id: stringToUuidV5(doc.id),
               vector: embeddings[idx],
               payload: {
+                [ORIGINAL_ID_KEY]: doc.id,
                 document: doc.text,
                 ...doc.metadata,
               },
@@ -286,9 +327,10 @@ export class QdrantBackend implements VectorStore {
 
           const searchResults = (results.points ?? []).map((point) => {
             const payload = (point.payload ?? {}) as Record<string, unknown>;
-            const { document, ...metadata } = payload;
+            const { document, [ORIGINAL_ID_KEY]: originalId, ...metadata } =
+              payload;
             return {
-              id: String(point.id),
+              id: (originalId as string) ?? String(point.id),
               text: (document as string) ?? "",
               metadata: metadata as Record<string, string | number | boolean>,
               score: point.score ?? 0,
@@ -356,9 +398,10 @@ export class QdrantBackend implements VectorStore {
 
           const searchResults = (results.points ?? []).map((point) => {
             const payload = (point.payload ?? {}) as Record<string, unknown>;
-            const { document, ...metadata } = payload;
+            const { document, [ORIGINAL_ID_KEY]: originalId, ...metadata } =
+              payload;
             return {
-              id: String(point.id),
+              id: (originalId as string) ?? String(point.id),
               text: (document as string) ?? "",
               metadata: metadata as Record<string, string | number | boolean>,
               score: -1,
@@ -406,7 +449,7 @@ export class QdrantBackend implements VectorStore {
         try {
           this.ensureInitialized(collection);
           await this.client.delete(collection, {
-            points: ids,
+            points: ids.map((id) => stringToUuidV5(id)),
           });
           span.setStatus({ code: SpanStatusCode.OK });
         } catch (error) {
