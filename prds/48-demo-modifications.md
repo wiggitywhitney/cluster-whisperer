@@ -66,12 +66,12 @@ adding new tools. The `VectorStore` interface already supports backend swapping.
 - [x] Verified: agent can use the tool to deploy a resource in a test cluster
 
 ### M3: CLI Tool-Set Filtering (--tools flag)
-- [ ] `--tools` CLI flag accepting comma-separated tool groups: `kubectl`, `vector`, `apply`
-- [ ] Tool groups mapped to tool arrays in agent construction
-- [ ] Default: `kubectl,vector` (backwards compatible with current behavior)
-- [ ] Verified: `--tools kubectl` runs without vector or apply tools
-- [ ] Verified: `--tools kubectl,vector,apply` runs with all tools
-- [ ] Unit tests for tool-set parsing and filtering
+- [x] `--tools` CLI flag accepting comma-separated tool groups: `kubectl`, `vector`, `apply`
+- [x] Tool groups mapped to tool arrays in agent construction
+- [x] Default: `kubectl,vector` (backwards compatible with current behavior)
+- [x] Verified: `--tools kubectl` runs without vector or apply tools
+- [x] Verified: `--tools kubectl,vector,apply` runs with all tools
+- [x] Unit tests for tool-set parsing and filtering
 
 ### M4: Agent Selection Flag (--agent flag)
 - [ ] `--agent` CLI flag accepting `langgraph` (default) or `vercel`

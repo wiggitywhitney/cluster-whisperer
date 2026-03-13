@@ -33,6 +33,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
 import { getInvestigatorAgent, truncate, RECURSION_LIMIT } from "./agent/investigator";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
+import { parseToolGroups, DEFAULT_TOOL_GROUPS } from "./tools/tool-groups";
 import {
   syncCapabilities,
   discoverResources,
@@ -151,9 +152,18 @@ async function main() {
 
   program
     .argument("<question>", "Natural language question about your cluster")
-    .action(async (question: string) => {
+    .option(
+      "--tools <groups>",
+      `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`,
+    )
+    .action(async (question: string, options: { tools?: string }) => {
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
+
+      // Parse tool groups from --tools flag (or use defaults)
+      const toolGroups = options.tools
+        ? parseToolGroups(options.tools)
+        : DEFAULT_TOOL_GROUPS;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -186,7 +196,7 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = getInvestigatorAgent().streamEvents(
+        const eventStream = getInvestigatorAgent({ toolGroups }).streamEvents(
           { messages: [new HumanMessage(question)] },
           { version: "v2", recursionLimit: RECURSION_LIMIT }
         );

@@ -39,6 +39,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-12) Demo modifications (PRD #48 M1): kubectl_apply core tool with catalog validation — parses YAML manifests, validates resource type against capabilities collection via keywordSearch, applies approved resources via kubectl stdin. 32 tests (20 unit + 12 OTel span).
 - (2026-03-13) Demo modifications (PRD #48 M1): kubectl-apply integration tests with ephemeral Kind cluster — setup/teardown/run scripts, CI workflow, 4 integration tests (approved apply, catalog rejection, idempotent update, invalid manifest). No API tokens needed.
 - (2026-03-13) Demo modifications (PRD #48 M2): kubectl_apply framework wrappers — LangChain tool wrapper with createApplyTools factory (shared VectorStore, graceful degradation), MCP tool registration with catalog validation. Agent investigator wired with all 5 tools. System prompt updated with deployment mode.
+- (2026-03-13) Demo modifications (PRD #48 M3): --tools CLI flag with tool-group filtering — parseToolGroups module (kubectl, vector, apply groups), getInvestigatorAgent accepts toolGroups option, default kubectl,vector for backwards compatibility. 14 new tests (9 parsing + 5 agent filtering).
 
 ### Changed
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge

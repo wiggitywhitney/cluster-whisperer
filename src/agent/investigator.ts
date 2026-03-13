@@ -32,6 +32,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { kubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
 import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
+import { DEFAULT_TOOL_GROUPS, type ToolGroup } from "../tools/tool-groups";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -154,6 +155,22 @@ function createVectorAndApplyToolsSafe() {
 }
 
 /**
+ * Options for configuring the investigator agent.
+ */
+export interface InvestigatorOptions {
+  /**
+   * Which tool groups to include in the agent.
+   * Defaults to DEFAULT_TOOL_GROUPS (kubectl, vector) for backwards compatibility.
+   *
+   * Groups:
+   * - kubectl: kubectl_get, kubectl_describe, kubectl_logs
+   * - vector: vector_search
+   * - apply: kubectl_apply
+   */
+  toolGroups?: ToolGroup[];
+}
+
+/**
  * Cached agent instance - created lazily on first use.
  *
  * Why lazy creation?
@@ -197,9 +214,13 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
  * - budget_tokens: How many tokens Claude can use for thinking (min 1024)
  * - maxTokens: Must be greater than budget_tokens
  * - temperature: Cannot be set when using extended thinking (API requirement)
+ *
+ * @param options - Optional configuration for tool selection
  */
-export function getInvestigatorAgent() {
+export function getInvestigatorAgent(options?: InvestigatorOptions) {
   if (!cachedAgent) {
+    const toolGroups = options?.toolGroups ?? DEFAULT_TOOL_GROUPS;
+
     const model = new ChatAnthropic({
       model: ANTHROPIC_MODEL,
       maxTokens: 10000,
@@ -213,15 +234,31 @@ export function getInvestigatorAgent() {
       },
     });
 
-    // Create vector search and apply tools with lazy-initialized Chroma backend.
-    // Both share the same VectorStore instance for a single Chroma connection.
-    // If VOYAGE_API_KEY is not set, VoyageEmbedding throws — so we catch that
-    // and skip both tool types, keeping the agent functional with kubectl only.
-    const { vectorTools, applyTools } = createVectorAndApplyToolsSafe();
+    // Build the tools array based on selected tool groups.
+    // Each group maps to one or more LangChain tools.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools: any[] = [];
+
+    if (toolGroups.includes("kubectl")) {
+      tools.push(...kubectlTools);
+    }
+
+    // Vector and apply tools share a VectorStore instance (single Chroma connection).
+    // Only create the shared backend if either group is requested.
+    if (toolGroups.includes("vector") || toolGroups.includes("apply")) {
+      const { vectorTools, applyTools } = createVectorAndApplyToolsSafe();
+
+      if (toolGroups.includes("vector")) {
+        tools.push(...vectorTools);
+      }
+      if (toolGroups.includes("apply")) {
+        tools.push(...applyTools);
+      }
+    }
 
     cachedAgent = createReactAgent({
       llm: model,
-      tools: [...kubectlTools, ...vectorTools, ...applyTools],
+      tools,
       stateModifier: getSystemPrompt(),
     });
   }

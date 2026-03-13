@@ -81,7 +81,7 @@ describe("getInvestigatorAgent", () => {
     vi.resetModules();
   });
 
-  it("creates an agent with kubectl, vector, and apply tools", async () => {
+  it("creates an agent with default tools (kubectl + vector)", async () => {
     // Dynamic import after module reset to get a fresh module instance
     const { getInvestigatorAgent } = await import("./investigator");
 
@@ -95,13 +95,13 @@ describe("getInvestigatorAgent", () => {
       (t: { name: string }) => t.name
     );
 
-    // All five tools should be present: 3 kubectl + 1 vector + 1 apply
-    expect(tools).toHaveLength(5);
+    // Default tool groups: kubectl + vector (4 tools, no apply)
+    expect(tools).toHaveLength(4);
     expect(toolNames).toContain("kubectl_get");
     expect(toolNames).toContain("kubectl_describe");
     expect(toolNames).toContain("kubectl_logs");
     expect(toolNames).toContain("vector_search");
-    expect(toolNames).toContain("kubectl_apply");
+    expect(toolNames).not.toContain("kubectl_apply");
   });
 
   it("includes a system prompt", async () => {
@@ -112,5 +112,53 @@ describe("getInvestigatorAgent", () => {
     const callArgs = mockCreateReactAgent.mock.calls[0][0];
     expect(callArgs.stateModifier).toBeTruthy();
     expect(callArgs.stateModifier).toContain("Kubernetes");
+  });
+
+  it("filters to kubectl-only when toolGroups is ['kubectl']", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent({ toolGroups: ["kubectl"] });
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    expect(callArgs.tools).toHaveLength(3);
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).not.toContain("vector_search");
+    expect(toolNames).not.toContain("kubectl_apply");
+  });
+
+  it("includes all tools when toolGroups is ['kubectl', 'vector', 'apply']", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent({ toolGroups: ["kubectl", "vector", "apply"] });
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    expect(callArgs.tools).toHaveLength(5);
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).toContain("vector_search");
+    expect(toolNames).toContain("kubectl_apply");
+  });
+
+  it("uses default groups (kubectl,vector) when no options provided", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent();
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    // Default: kubectl + vector (backwards compatible, no apply)
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).toContain("vector_search");
+    expect(toolNames).not.toContain("kubectl_apply");
   });
 });
