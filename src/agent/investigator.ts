@@ -32,7 +32,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { kubectlTools, createVectorTools } from "../tools/langchain";
 import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
-import { gracefulExit } from "../tracing";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -93,10 +92,10 @@ function getSystemPrompt(): string {
       console.error(`Error: Could not load system prompt from ${promptPath}`);
       console.error("");
       console.error("Make sure prompts/investigator.md exists in the project root.");
-      // gracefulExit is async but getSystemPrompt is sync — use void to fire-and-forget
-      // the flush, then exit synchronously as a fallback
-      void gracefulExit(1);
-      throw new Error("System prompt not found"); // unreachable, but satisfies TypeScript
+      // process.exit(1) is intentional here: getSystemPrompt is synchronous and
+      // this is a fatal startup error — no traces are in flight yet, so losing
+      // the flush is acceptable. Using async gracefulExit would race with callers.
+      process.exit(1);
     }
   }
   return cachedPrompt;
