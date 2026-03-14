@@ -493,6 +493,8 @@ metadata:
   namespace: chroma
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
   rules:
@@ -517,6 +519,9 @@ kind: Ingress
 metadata:
   name: qdrant
   namespace: qdrant
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
   rules:
@@ -1421,6 +1426,8 @@ print_summary() {
         log_info "Ingress URLs:"
         log_info "  cluster-whisperer: http://cluster-whisperer.${BASE_DOMAIN}"
         log_info "  Jaeger UI:         http://jaeger.${BASE_DOMAIN}"
+        log_info "  Chroma:            http://chroma.${BASE_DOMAIN}"
+        log_info "  Qdrant:            http://qdrant.${BASE_DOMAIN}"
     fi
     echo ""
     log_info "To use this cluster:"
