@@ -163,17 +163,32 @@ This is not a checklist of features — it is a full end-to-end rehearsal from t
 - [x] Act 4 verification: traces include tool spans, vector search spans, and apply spans
 - [x] Full flow completes without errors, retries, or manual workarounds
 
-### M11: Post-Issue Re-Rehearsal & Documentation
+### M12: Decoy XRDs & Demo App Identity
 
-Re-validate the full demo after issue fixes (#67–#73) change setup.sh, agent behavior, and console output.
+Make the "needle in the haystack" genuinely hard to find. The agent can't shortcut by reading CRD names or running `kubectl explain` on one ManagedService — there are 20 of them, all for different teams. Only semantic search with the right organizational context finds the correct one.
 
-- [ ] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
-- [ ] Full three-beat demo flow: Act 2 (new Q1 wording, all three kubectl tools), Act 3a (vector search without apply), Act 3b (vector search + apply with valid manifest from #71), Act 4 (traces in Jaeger + Datadog)
+- [x] Make demo app error message generic — no mention of "database" or "postgres" (remove `postgres://` from DATABASE_URL, use "backend service" in error messages)
+- [x] Update main XRD description (`managedservices.platform.acme.io`) to include Whitney/Viktor and You Choose Demo App context in the description fields (visible to `kubectl explain` and capability inference, but buried among 20 similar XRDs). Demo app stays generically named so the agent must ask follow-up questions to match it.
+- [x] Create 19 decoy XRD manifests (`managedservices.{team}.acme.io`) — each for a different fake team/person/app (e.g., payments, hr, analytics, logistics, security, etc.) with realistic descriptions
+- [x] Create 19 decoy Compositions — each references its decoy XRD, structurally similar to the real Composition but subtly wrong (wrong engine, wrong port, wrong instance class mapping, wrong network ref — NOT wrong region since demo may run from different locations)
+- [x] Update `setup.sh` to apply all 20 XRD/Composition pairs during cluster setup
+- [x] Update investigator system prompt: when vector search returns multiple similar results, ask the user follow-up questions (team name, app name) before choosing a resource
+- [x] Update vector_search tool description to encourage the agent to ask clarifying questions when results are ambiguous (complements the system prompt change)
+- [x] Fix Chroma `$and` filter for multi-key `where` queries (`normalizeWhereFilter` in chroma-backend.ts)
+- [ ] Verify: `kubectl get crd | grep managedservice` shows 20 ManagedService CRDs, all equally opaque
+- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService
+
+### M11: Post-M12 Re-Rehearsal & Documentation
+
+Re-validate the full demo after M12 changes (decoy XRDs, app rename, generic error messages) and issue fixes (#67–#73).
+
+- [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
+- [ ] Full three-beat demo flow: Act 2 (new Q1 wording, all three kubectl tools), Act 3a (vector search returns multiple results, agent asks follow-up, finds correct ManagedService), Act 3b (vector search + apply deploys correct ManagedService), Act 4 (traces in Jaeger + Datadog)
 - [ ] Agent completes Act 3b without hitting recursion limit (#72)
 - [ ] No non-demo console noise during agent runs (#73)
 - [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
-- [ ] Update `docs/choose-your-adventure-demo.md` to reflect three-beat progressive capability flow and env var interface
+- [ ] Update `docs/choose-your-adventure-demo.md` to reflect three-beat progressive capability flow, decoy XRDs, follow-up question flow, and env var interface
 
 ## Technical Design
 
@@ -318,3 +333,7 @@ All changes are additive:
 | 2026-03-14 | Add `OTEL_TRACING_ENABLED` and `OTEL_EXPORTER_TYPE` to generated `demo/.env` | Tracing requires both vars but setup.sh only generated `OTEL_EXPORTER_OTLP_ENDPOINT`. Without them, tracing was silently disabled during demo runs. |
 | 2026-03-14 | Three-beat progressive capability in Act 3 | Original two-beat (kubectl → kubectl+vector+apply) didn't show the value of each addition separately. New flow: kubectl only (CRD wall) → kubectl+vector (finds answer, can't deploy) → kubectl+vector+apply (finds and deploys). Each vote visibly unlocks something new. |
 | 2026-03-14 | Act 2 Q1 reworded to "Something's wrong with my application" | Vaguer prompt encourages the agent to use all three kubectl tools (get, describe, logs) rather than shortcutting to just get+logs. |
+| 2026-03-14 | 20 decoy ManagedService XRDs | Single ManagedService was findable by name — agent could guess from `managedservices.platform.acme.io` or run `kubectl explain` on it. With 20 identical-looking ManagedService CRDs for different teams, the agent can't shortcut. Only semantic search with organizational context (team name, app name) finds the right one. |
+| 2026-03-14 | Demo app error message made generic | App logs previously showed `postgres://` connection string, letting the agent skip vector search. Generic "backend service" message forces the agent to use semantic search to discover what type of service the app needs. |
+| 2026-03-14 | Agent asks follow-up questions in Act 3a | When vector search returns multiple similar ManagedService results, the agent asks the presenter for context (team, app name) before choosing. Makes the demo interactive and shows the agent reasoning, not just searching. |
+| 2026-03-14 | Decoy Compositions are subtly wrong | Each decoy has a real-looking Composition but with wrong engine, port, instance class, or network ref (not region — demo may run from different locations). Raises the stakes: picking the wrong ManagedService would break the app. |

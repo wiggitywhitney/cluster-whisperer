@@ -87,19 +87,29 @@ describe("startup behavior", () => {
 describe("error message format", () => {
   it("produces agent-friendly error messages with [demo-app] prefix", async () => {
     const { formatStartupError } = await import("./server.js");
-    const url = "postgres://db-service:5432/myapp";
+    const url = "db-service:5432/myapp";
     const error = new Error("Connection refused");
     const message = formatStartupError(url, error);
     expect(message).toContain("[demo-app]");
-    expect(message).toContain("database");
+    expect(message).toContain("backend service");
     expect(message).toContain(url);
     expect(message).toContain("Connection refused");
+  });
+
+  it("error message does not reveal specific service type", async () => {
+    const { formatStartupError } = await import("./server.js");
+    const message = formatStartupError(
+      "db-service:5432/myapp",
+      new Error("fail")
+    );
+    expect(message).not.toContain("postgres");
+    expect(message).not.toContain("database");
   });
 
   it("error message is single-line", async () => {
     const { formatStartupError } = await import("./server.js");
     const message = formatStartupError(
-      "postgres://db:5432/app",
+      "db-service:5432/app",
       new Error("fail")
     );
     expect(message).not.toContain("\n");

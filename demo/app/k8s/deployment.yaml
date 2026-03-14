@@ -1,5 +1,5 @@
 # ABOUTME: Kubernetes Deployment for the demo app. Sets DATABASE_URL to a non-existent
-# ABOUTME: service so the app crashes on startup, producing CrashLoopBackOff for the demo.
+# ABOUTME: backend service so the app crashes on startup, producing CrashLoopBackOff.
 
 apiVersion: apps/v1
 kind: Deployment
@@ -25,7 +25,7 @@ spec:
             - containerPort: 3000
           env:
             - name: DATABASE_URL
-              value: "postgres://db-service:5432/myapp"
+              value: "db-service:5432/myapp"
           livenessProbe:
             httpGet:
               path: /healthz

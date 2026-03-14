@@ -57,7 +57,14 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 
 - (2026-03-14) Demo modifications (PRD #48 M10): Full demo rehearsal on live GKE cluster — teardown + setup.sh gcp exit 0 from scratch (1041 CRDs, all services running), all 4 demo acts verified (kubectl governance, CRD wall, vector search with both Chroma and Qdrant, ManagedService deploy), traces confirmed in Jaeger (25 spans with tool/LLM/workflow spans)
 
+- (2026-03-14) Demo modifications (PRD #48 M12): 19 decoy ManagedService XRDs with Compositions — each for a different fake team/person/app (payments, hr, analytics, etc.), structurally similar to the real one but with subtle flaws (wrong engine, port, instance class, network ref). All 20 applied by setup.sh.
+- (2026-03-14) Demo modifications (PRD #48 M12): Generic demo app error messages — removed postgres:// from DATABASE_URL, changed error to "backend service" so agent must use semantic search to discover the service type
+- (2026-03-14) Demo modifications (PRD #48 M12): Chroma $and filter fix — normalizeWhereFilter wraps multi-key where filters in $and for Chroma compatibility (Qdrant already handled this via buildFilter)
+- (2026-03-14) Demo modifications (PRD #48 M12): Updated investigator prompt and vector_search tool description to ask follow-up questions when multiple similar results appear (team name, app name, person)
+
 ### Changed
+- (2026-03-14) Demo modifications (PRD #48 M12): Updated main XRD description to mention Whitney/Viktor and You Choose demo app — organizational context only discoverable via vector search among 20 identical-looking ManagedService CRDs
+- (2026-03-14) Demo modifications (PRD #48 M12): Investigator prompt now instructs agent to fall back to `kubectl get crd` for discovery when vector_search is unavailable, and to ask clarifying questions when results are ambiguous
 - (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning
 - (2026-03-13) Demo modifications (PRD #48): Updated demo flow with two-question Act 2 (investigation + CRD wall follow-up), restructured PRD milestones (added M9 multi-backend sync, M10 full rehearsal)
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge

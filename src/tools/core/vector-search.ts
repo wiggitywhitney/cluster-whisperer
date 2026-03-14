@@ -1,3 +1,5 @@
+// ABOUTME: Unified vector search tool combining semantic, keyword, and metadata filtering
+// ABOUTME: Core logic shared by LangChain and MCP wrappers for cluster resource discovery
 /**
  * vector-search core - Unified search tool for the vector database
  *
@@ -110,7 +112,9 @@ At least one dimension is required. All three compose freely:
 
 Collections:
 - "capabilities": Resource type descriptions (CRDs, built-in types). Search here to find WHAT types exist.
-- "instances": Running resource metadata. Search here to find WHAT is deployed.`;
+- "instances": Running resource metadata. Search here to find WHAT is deployed.
+
+IMPORTANT: This cluster has many similar resources from different teams (e.g., multiple ManagedService types). If your search returns several results of the same kind, do NOT guess which one is correct. Ask the user which team, application, or person the resource is for, then refine your search with that context.`;
 
 /**
  * Execute a unified vector search against the vector database.

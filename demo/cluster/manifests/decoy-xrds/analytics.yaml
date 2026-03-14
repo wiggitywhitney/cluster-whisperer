@@ -1,19 +1,9 @@
-# Platform-approved managed service — the "needle in the haystack" that
-# the cluster-whisperer agent discovers among 20 similar ManagedService CRDs.
-#
-# This XRD is one of 20 managedservices.{team}.acme.io CRDs, each for a
-# different team. All 20 look identical from `kubectl get crd`. The agent
-# can only find the right one by searching the vector DB with the correct
-# organizational context (team name, app name, person).
-#
-# This one is for Whitney and Viktor's "You Choose" demo app.
-# The 19 decoys in decoy-xrds/ are for fake teams.
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: managedservices.platform.acme.io
+  name: managedservices.analytics.acme.io
 spec:
-  group: platform.acme.io
+  group: analytics.acme.io
   names:
     kind: ManagedService
     plural: managedservices
@@ -28,26 +18,27 @@ spec:
           spec:
             type: object
             description: >-
-              Platform-approved PostgreSQL database for Whitney and Viktor's
-              You Choose demo application. Managed by the Platform team for the
-              You Choose project. Application developers request this resource
-              to get a fully managed PostgreSQL instance without needing to
-              understand provider-specific details.
+              PostgreSQL database with TimescaleDB extension for Priya Patel's
+              Metrics Pipeline. Managed by the Analytics team for time-series
+              data ingestion and analysis. Application developers request this
+              resource to get a fully managed PostgreSQL instance without needing
+              to understand provider-specific details.
             properties:
               engine:
                 type: string
                 description: >-
-                  Database engine type. Currently only PostgreSQL is supported.
-                  The platform team manages engine compatibility and security patches.
+                  Database engine type. PostgreSQL with TimescaleDB extension
+                  is supported. The analytics team manages engine compatibility
+                  and security patches.
                 enum:
                   - postgresql
                 default: postgresql
               engineVersion:
                 type: string
                 description: >-
-                  PostgreSQL engine version. The platform team validates and
+                  PostgreSQL engine version. The analytics team validates and
                   approves each version for production use. Defaults to the
-                  latest platform-approved version.
+                  latest team-approved version.
                 enum:
                   - "17"
                   - "16"
@@ -62,7 +53,7 @@ spec:
                   Can be increased after creation but not decreased.
                 minimum: 20
                 maximum: 1000
-                default: 50
+                default: 200
               instanceSize:
                 type: string
                 description: >-
@@ -73,15 +64,15 @@ spec:
                   - small
                   - medium
                   - large
-                default: small
+                default: large
               highAvailability:
                 type: boolean
                 description: >-
                   Enable Multi-AZ deployment for automatic failover. When
                   enabled, a standby replica is maintained in a different
                   availability zone. Required for production workloads per
-                  platform policy.
-                default: false
+                  team policy.
+                default: true
               backupRetentionDays:
                 type: integer
                 description: >-
@@ -90,7 +81,7 @@ spec:
                   disable automated backups (not recommended for production).
                 minimum: 0
                 maximum: 35
-                default: 7
+                default: 14
               networkRef:
                 type: string
                 description: >-
@@ -126,3 +117,78 @@ spec:
                 type: string
                 description: >-
                   The storage type provisioned for this instance (e.g., gp3, io1).
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: managedservice-analytics-aws-rds
+  labels:
+    provider: aws
+    service: rds
+spec:
+  compositeTypeRef:
+    apiVersion: analytics.acme.io/v1alpha1
+    kind: ManagedService
+  mode: Pipeline
+  pipeline:
+  - step: create-rds-instance
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: rds-instance
+        base:
+          apiVersion: rds.aws.upbound.io/v1beta2
+          kind: Instance
+          spec:
+            forProvider:
+              engine: postgres
+              publiclyAccessible: false
+              storageType: gp3
+              storageEncrypted: true
+              skipFinalSnapshot: false
+              autoMinorVersionUpgrade: true
+        patches:
+        # Map engine version from XRD to RDS
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.engineVersion
+          toFieldPath: spec.forProvider.engineVersion
+        # Map storage size from XRD to RDS
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.storageGB
+          toFieldPath: spec.forProvider.allocatedStorage
+        # Map instance size to RDS instance class via lookup
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.instanceSize
+          toFieldPath: spec.forProvider.instanceClass
+          transforms:
+          - type: map
+            map:
+              small: db.t3.micro
+              medium: db.r6g.large
+              large: db.r6g.2xlarge
+        # Map high availability to Multi-AZ
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.highAvailability
+          toFieldPath: spec.forProvider.multiAz
+        # Map backup retention
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.backupRetentionDays
+          toFieldPath: spec.forProvider.backupRetentionPeriod
+        # Write endpoint back to XRD status
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.endpoint
+          toFieldPath: status.endpoint
+      - name: subnet-group
+        base:
+          apiVersion: rds.aws.upbound.io/v1beta2
+          kind: SubnetGroup
+          spec:
+            forProvider:
+              description: Platform-managed subnet group for PostgreSQL instances
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.networkRef
+          toFieldPath: metadata.annotations["platform.acme.io/network-ref"]

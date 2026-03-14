@@ -789,38 +789,52 @@ EOF
     log_success "function-patch-and-transform installed"
 }
 
-# Apply the platform PostgreSQL XRD and Composition — the one resource the
-# agent should discover among ~1,000 CRDs when searching for a database.
-install_platform_composition() {
-    log_info "Applying platform ManagedService XRD and Composition..."
+# Apply 20 ManagedService XRDs and Compositions — one real (platform.acme.io
+# for Whitney/Viktor's You Choose app) and 19 decoys for fake teams. All 20
+# look identical from `kubectl get crd`, forcing the agent to use vector search
+# with organizational context to find the right one.
+install_platform_compositions() {
+    log_info "Applying 20 ManagedService XRDs and Compositions..."
 
     install_composition_function
 
-    # Apply XRD first — it creates the CRD that the Composition references
+    # Apply the real XRD + Composition first
     kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
-    log_success "XRD applied (ManagedService)"
+    kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
+    log_success "Real XRD + Composition applied (platform.acme.io)"
 
-    # Wait briefly for the XRD to register its CRD
-    log_info "Waiting for XRD CRD registration..."
+    # Apply all 19 decoy XRDs + Compositions
+    local decoy_count=0
+    for decoy_file in "${SCRIPT_DIR}/manifests/decoy-xrds/"*.yaml; do
+        kubectl apply -f "${decoy_file}" 2>&1 | grep -v "^$" || true
+        decoy_count=$((decoy_count + 1))
+    done
+    log_success "Applied ${decoy_count} decoy XRDs + Compositions"
+
+    # Wait for all 20 ManagedService CRDs to register
+    log_info "Waiting for ManagedService CRD registration (20 expected)..."
     local elapsed=0
-    local timeout=60
+    local timeout=120
     while [[ $elapsed -lt $timeout ]]; do
-        if kubectl get crd \
-            managedservices.platform.acme.io &>/dev/null 2>&1; then
+        local registered
+        registered=$(kubectl get crd 2>/dev/null | grep -c "managedservices.*acme.io" || true)
+        if [[ $registered -ge 20 ]]; then
             break
         fi
         sleep 5
         elapsed=$((elapsed + 5))
+        if (( elapsed % 20 == 0 )); then
+            log_info "  [${elapsed}s] ${registered}/20 ManagedService CRDs registered"
+        fi
     done
 
-    if [[ $elapsed -ge $timeout ]]; then
-        log_warning "XRD CRD did not register within ${timeout}s — Composition may fail to validate"
+    local final_count
+    final_count=$(kubectl get crd 2>/dev/null | grep -c "managedservices.*acme.io" || true)
+    if [[ $final_count -ge 20 ]]; then
+        log_success "All ${final_count} ManagedService CRDs registered"
     else
-        log_success "XRD CRD registered"
+        log_warning "Only ${final_count}/20 ManagedService CRDs registered within ${timeout}s"
     fi
-
-    kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
-    log_success "Composition applied (managedservice-aws-rds)"
 }
 
 # =============================================================================
@@ -1761,7 +1775,7 @@ main() {
     install_ingress_controller
     install_crossplane
     install_crossplane_providers
-    install_platform_composition
+    install_platform_compositions
     install_chroma
     install_qdrant
     verify_vector_dbs

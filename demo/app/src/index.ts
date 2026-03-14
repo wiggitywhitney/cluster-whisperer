@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   }
 
   console.log( // eslint-disable-line no-console
-    `[demo-app] Connecting to database at ${DATABASE_URL}...`
+    `[demo-app] Connecting to backend service at ${DATABASE_URL}...`
   );
 
   const pool = new pg.Pool({
