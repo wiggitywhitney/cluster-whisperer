@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for LLM capability inference (M2).
+// ABOUTME: Verifies schema-to-capability mapping, prompt construction, and batch processing.
+
 /**
  * inference.test.ts - Unit tests for LLM capability inference (M2)
  *
@@ -53,6 +56,13 @@ function makeLlmResult(
       "Managed database solution supporting multiple SQL engine types.",
     useCase:
       "Deploy a managed SQL database without dealing with infrastructure complexity.",
+    exampleYaml: `apiVersion: devopstoolkit.live/v1beta1
+kind: SQL
+metadata:
+  name: my-database
+spec:
+  engine: postgresql
+  size: small`,
     confidence: 0.9,
     ...overrides,
   };
@@ -95,6 +105,8 @@ describe("inferCapability", () => {
     expect(result.useCase).toBe(
       "Deploy a managed SQL database without dealing with infrastructure complexity."
     );
+    expect(result.exampleYaml).toContain("apiVersion: devopstoolkit.live/v1beta1");
+    expect(result.exampleYaml).toContain("kind: SQL");
     expect(result.confidence).toBe(0.9);
   });
 

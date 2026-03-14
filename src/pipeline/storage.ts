@@ -1,3 +1,6 @@
+// ABOUTME: Vector database storage for capability descriptions (M3).
+// ABOUTME: Maps ResourceCapability to VectorDocument and stores in Chroma/Qdrant.
+
 /**
  * storage.ts - Vector database storage for capability descriptions (M3)
  *
@@ -132,6 +135,11 @@ function buildEmbeddingText(capability: ResourceCapability): string {
   // Description and use case
   lines.push(capability.description);
   lines.push(`Use case: ${capability.useCase}`);
+
+  // Example YAML for manifest construction
+  if (capability.exampleYaml) {
+    lines.push(`Example YAML:\n${capability.exampleYaml}`);
+  }
 
   return lines.join("\n");
 }

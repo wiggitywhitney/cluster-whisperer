@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for vector storage of capability descriptions (M3).
+// ABOUTME: Tests ResourceCapability-to-VectorDocument mapping and store orchestration.
+
 /**
  * storage.test.ts - Unit tests for vector storage of capability descriptions (M3)
  *
@@ -34,6 +37,13 @@ function makeCapability(
       "Managed database solution supporting multiple SQL engine types.",
     useCase:
       "Deploy a managed SQL database without dealing with infrastructure complexity.",
+    exampleYaml: `apiVersion: devopstoolkit.live/v1beta1
+kind: SQL
+metadata:
+  name: my-database
+spec:
+  engine: postgresql
+  size: small`,
     confidence: 0.9,
     ...overrides,
   };
@@ -128,6 +138,18 @@ describe("capabilityToDocument", () => {
     const doc = capabilityToDocument(capability);
 
     expect(doc.text).toContain("high");
+  });
+
+  it("includes exampleYaml in embedding text", () => {
+    const capability = makeCapability({
+      exampleYaml: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config",
+    });
+
+    const doc = capabilityToDocument(capability);
+
+    expect(doc.text).toContain("Example YAML");
+    expect(doc.text).toContain("apiVersion: v1");
+    expect(doc.text).toContain("kind: ConfigMap");
   });
 
   it("stores kind in metadata for filtering", () => {
