@@ -52,6 +52,17 @@ import {
   storeCapabilities,
 } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
+import { executeKubectl } from "./utils/kubectl";
+
+/**
+ * Creates a kubectl executor bound to a specific kubeconfig path.
+ * Used by sync commands to honor CLUSTER_WHISPERER_KUBECONFIG.
+ * The returned function matches the DiscoveryOptions.kubectl signature.
+ */
+function createBoundKubectl(kubeconfig?: string) {
+  if (!kubeconfig) return undefined;
+  return (args: string[]) => executeKubectl(args, { kubeconfig });
+}
 import { createApp, startServer } from "./api/server";
 
 // ---------------------------------------------------------------------------
@@ -412,11 +423,15 @@ async function main() {
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
 
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+      const kubectl = createBoundKubectl(kubeconfig);
+
       try {
         const result = await syncCapabilities({
           vectorStore,
           dryRun: options.dryRun,
           cacheDir,
+          ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
@@ -466,12 +481,16 @@ async function main() {
 
       const vectorStore = createSyncVectorStore(options);
 
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+      const kubectl = createBoundKubectl(kubeconfig);
+
       console.log("\nStarting instance sync...\n"); // eslint-disable-line no-console
 
       try {
         const result = await syncInstances({
           vectorStore,
           dryRun: options.dryRun,
+          ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
