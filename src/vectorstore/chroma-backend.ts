@@ -531,6 +531,11 @@ if (isQuietMode()) {
 }
 
 async function suppressChromaWarnings<T>(fn: () => Promise<T>): Promise<T> {
+  // In quiet mode, the global filter already suppresses Chroma warnings
+  if (isQuietMode()) {
+    return fn();
+  }
+
   if (suppressCount === 0) {
     originalWarnRef.fn = console.warn;
     console.warn = (...args: unknown[]) => {
