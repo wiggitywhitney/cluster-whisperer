@@ -1434,15 +1434,37 @@ print_summary() {
 # =============================================================================
 
 usage() {
-    echo "Usage: $0 <kind|gcp>"
+    echo "Usage: $0 <kind|gcp> [--verify-only]"
     echo ""
     echo "Modes:"
     echo "  kind   Create a local Kind cluster (~1,000 CRDs)"
     echo "  gcp    Create a GKE cluster (~1,000 CRDs)"
     echo ""
+    echo "Options:"
+    echo "  --verify-only   Skip cluster creation, only run verification steps"
+    echo "                  against an existing cluster. Completes in ~2 minutes."
+    echo ""
     echo "Environment variables (gcp mode):"
     echo "  GCP_ZONE    Override auto-detected zone (e.g., GCP_ZONE=europe-west1-b $0 gcp)"
     exit 1
+}
+
+# Verify that an existing cluster is accessible via kubectl.
+# Fails early with a clear message if no cluster exists.
+verify_cluster_accessible() {
+    log_info "Checking cluster accessibility..."
+    if ! kubectl cluster-info &>/dev/null; then
+        log_error "No accessible cluster found. Is your KUBECONFIG set correctly?"
+        log_error "Run setup without --verify-only to create a cluster first."
+        return 1
+    fi
+    local node_count
+    node_count=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ') || node_count=0
+    if [[ $node_count -eq 0 ]]; then
+        log_error "Cluster is accessible but has 0 nodes — something is wrong."
+        return 1
+    fi
+    log_success "Cluster accessible (${node_count} nodes)"
 }
 
 main() {
@@ -1455,6 +1477,36 @@ main() {
     if [[ "${MODE}" != "kind" && "${MODE}" != "gcp" ]]; then
         log_error "Invalid mode: '${MODE}'"
         usage
+    fi
+
+    # Parse optional flags
+    local verify_only=false
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --verify-only)
+                verify_only=true
+                shift
+                ;;
+            *)
+                log_error "Unknown option: '$1'"
+                usage
+                ;;
+        esac
+    done
+
+    if [[ "${verify_only}" == "true" ]]; then
+        echo ""
+        log_info "Cluster Whisperer Demo Verification (${MODE} mode)"
+        log_info "=================================="
+        echo ""
+
+        verify_cluster_accessible
+        verify_vector_dbs
+        verify_observability
+        verify_vector_search
+        print_summary
+        return 0
     fi
 
     echo ""
