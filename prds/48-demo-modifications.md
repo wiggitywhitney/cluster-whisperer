@@ -207,7 +207,7 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 
 Re-validate the full demo after all milestone changes (M12 decoys, M13 conversation memory, M14 working Composition) and issue fixes (#67–#73).
 
-- [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
+- [ ] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
 - [ ] Full demo flow: Act 2 (investigation, CRD wall), Act 3a (vector search + follow-up questions via --thread, finds correct ManagedService), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog)
 - [ ] Agent completes Act 3b without hitting recursion limit (#72)
 - [ ] No non-demo console noise during agent runs (#73)
