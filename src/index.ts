@@ -171,7 +171,7 @@ function createSyncVectorStore(options: {
 
   // Both URLs available — use multi-backend to populate both at once
   if (options.chromaUrl && options.qdrantUrl) {
-    console.log("Both Chroma and Qdrant URLs detected — syncing to both backends");
+    console.log("Both Chroma and Qdrant URLs detected — syncing to both backends"); // eslint-disable-line no-console
     const chroma = createVectorStore(embedder, "chroma", {
       chromaUrl: options.chromaUrl,
     });
