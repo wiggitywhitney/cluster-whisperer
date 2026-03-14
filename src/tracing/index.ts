@@ -146,7 +146,7 @@ function createSpanExporter(): SpanExporter {
     // Normalize: strip trailing slashes to avoid double-slash in URL
     const base = endpoint.replace(/\/+$/, "");
     const url = base.endsWith("/v1/traces") ? base : `${base}/v1/traces`;
-    if (!quiet) console.log(`[OTel] Using OTLP exporter → ${base}`);
+    if (!quiet) console.log(`[OTel] Using OTLP exporter → ${base}`); // eslint-disable-line no-console
     return new exporterOtlpProto.OTLPTraceExporter({ url });
   }
 
@@ -163,7 +163,7 @@ function createSpanExporter(): SpanExporter {
     );
   }
 
-  if (!quiet) console.log("[OTel] Using console exporter");
+  if (!quiet) console.log("[OTel] Using console exporter"); // eslint-disable-line no-console
   return new sdkTraceNode.ConsoleSpanExporter();
 }
 
