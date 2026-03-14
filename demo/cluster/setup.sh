@@ -583,6 +583,20 @@ wait_for_crds() {
         # may be briefly unavailable while providers register many CRDs)
         crd_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || crd_count=0
 
+        # Guard against transient blips: if the count drops significantly from
+        # a previously observed value, retry once before accepting it. A single
+        # kubectl failure can return 0 lines — this prevents a false regression.
+        if [[ $prev_count -gt 0 && $crd_count -lt $((prev_count / 2)) ]]; then
+            log_warning "Transient CRD count blip detected: ${crd_count} (was ${prev_count}), retrying..."
+            sleep 2
+            crd_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || crd_count=0
+            if [[ $crd_count -lt $((prev_count / 2)) ]]; then
+                log_warning "CRD count confirmed at ${crd_count} after retry (was ${prev_count})"
+            else
+                log_info "CRD count recovered to ${crd_count} after retry"
+            fi
+        fi
+
         # Show progress when count changes
         if [[ $crd_count -ne $prev_count ]]; then
             local pct=$((crd_count * 100 / target))
@@ -600,10 +614,15 @@ wait_for_crds() {
         elapsed=$((elapsed + interval))
     done
 
-    # Didn't hit target but may still have enough CRDs for the demo
+    # Didn't hit target but may still have enough CRDs for the demo.
+    # Retry the final count to avoid failing on a transient blip at timeout boundary.
     local final_count
     local min_acceptable=200  # Minimum CRD count to consider "good enough" for the demo
     final_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
+    if [[ $final_count -lt $min_acceptable ]]; then
+        sleep 2
+        final_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
+    fi
     if [[ $final_count -ge $min_acceptable ]]; then
         log_warning "CRD registration timed out with ${final_count} CRDs (target was ${target}+)"
         log_warning "This may be enough for the demo — check provider status:"
