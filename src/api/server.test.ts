@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for the HTTP server, health probes, and body size limits.
+// ABOUTME: Tests Hono app factory via app.request() with mock VectorStore injection.
+
 /**
  * server.test.ts - Unit tests for the HTTP server and health probes (PRD #35 M1)
  *
@@ -121,6 +124,55 @@ describe("capability scan route", () => {
     });
 
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Body size limit
+// ---------------------------------------------------------------------------
+
+describe("body size limit", () => {
+  it("rejects payloads exceeding 5MB with 413", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    // bodyLimit only triggers on streamed bodies (not string bodies in app.request)
+    const size = 5 * 1024 * 1024 + 1;
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(size));
+        controller.close();
+      },
+    });
+
+    const req = new Request("http://localhost/api/v1/instances/sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(size),
+      },
+      body,
+      // @ts-expect-error -- duplex required for streaming but not in TS types
+      duplex: "half",
+    });
+
+    const res = await app.request(req);
+
+    expect(res.status).toBe(413);
+  });
+
+  it("accepts payloads under the limit", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const res = await app.request("/api/v1/instances/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upserts: [], deletes: [] }),
+    });
+
+    // 200 means the payload was accepted (not blocked by body limit)
+    expect(res.status).toBe(200);
   });
 });
 
