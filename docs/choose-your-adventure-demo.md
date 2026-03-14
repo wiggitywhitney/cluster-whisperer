@@ -58,11 +58,12 @@ export CLUSTER_WHISPERER_TOOLS=kubectl
 Then runs the agent:
 
 ```bash
-cluster-whisperer "Why is my app broken?"
+cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 ```
 
 The agent streams its thinking live in the terminal — the audience watches it reason
-through the problem, call kubectl, read logs, and conclude the database is missing.
+through the problem using all three kubectl tools (get, describe, logs), and concludes
+the database is missing.
 
 The presenter follows up:
 
@@ -82,7 +83,7 @@ The agent can't make sense of them without semantic understanding.
 
 The audience chooses which vector database backend to connect.
 
-### Act 3: Agent with Semantic Search + Deploy
+### Act 3a: Agent with Semantic Search (no deploy)
 
 The presenter sets the vector backend based on the vote and adds the vector tool:
 
@@ -92,24 +93,30 @@ export CLUSTER_WHISPERER_TOOLS=kubectl,vector
 ```
 
 ```bash
-cluster-whisperer "What database should I deploy for my app?"
+cluster-whisperer "What database should I deploy for my app, and can you set it up?"
 ```
 
 The agent searches the vector database, finds the one platform-approved PostgreSQL
-resource among 1,000+ CRDs, and explains it.
+resource among 1,000+ CRDs (`managedservices.platform.acme.io`), and recommends it
+with example YAML. But it **cannot deploy** — it doesn't have the apply tool.
 
-But the dev can't deploy — they don't have the apply tool yet. The presenter adds it:
+> "The agent found the answer, but it can't act on it. Let's give it the ability
+> to deploy — but only from the approved catalog."
+
+### Act 3b: Agent Deploys
+
+The presenter adds the apply tool:
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+cluster-whisperer "Deploy the right database for my app"
 ```
 
 Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
 platform catalog. The tool validates the resource type against the capabilities
 collection before applying — this is enforced in code, not in the prompt.
 
-The agent deploys the platform-approved ManagedService. The database comes up, the app
-connects, and it works.
+The agent deploys the platform-approved ManagedService.
 
 > "The agent found the right resource out of over a thousand options because it has
 > semantic understanding of what each one does. And it could only deploy resources
@@ -145,17 +152,17 @@ kubectl get pods                                        # fails — no kubeconfi
 # Vote 1 result → Act 2
 export CLUSTER_WHISPERER_AGENT=langgraph                # (or vercel)
 export CLUSTER_WHISPERER_TOOLS=kubectl
-cluster-whisperer "Why is my app broken?"
+cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 cluster-whisperer "Can you help me fix this? Which database should I deploy?"
 
-# Vote 2 result → Act 3
+# Vote 2 result → Act 3a (vector search, no deploy)
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-cluster-whisperer "What database should I deploy for my app?"
+cluster-whisperer "What database should I deploy for my app, and can you set it up?"
 
-# Agent finds it but can't deploy — add the apply tool
+# Act 3b: add the apply tool → agent can now deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-# (re-run or new question to deploy)
+cluster-whisperer "Deploy the right database for my app"
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser
