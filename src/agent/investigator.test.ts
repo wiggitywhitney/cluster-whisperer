@@ -85,7 +85,7 @@ describe("getInvestigatorAgent", () => {
 describe("RECURSION_LIMIT", () => {
   it("exports a recursion limit constant", async () => {
     const { RECURSION_LIMIT } = await import("./investigator");
-    expect(RECURSION_LIMIT).toBe(25);
+    expect(RECURSION_LIMIT).toBe(50);
   });
 });
 
