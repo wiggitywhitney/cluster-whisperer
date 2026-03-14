@@ -175,8 +175,9 @@ Make the "needle in the haystack" genuinely hard to find. The agent can't shortc
 - [x] Update investigator system prompt: when vector search returns multiple similar results, ask the user follow-up questions (team name, app name) before choosing a resource
 - [x] Update vector_search tool description to encourage the agent to ask clarifying questions when results are ambiguous (complements the system prompt change)
 - [x] Fix Chroma `$and` filter for multi-key `where` queries (`normalizeWhereFilter` in chroma-backend.ts)
-- [ ] Verify: `kubectl get crd | grep managedservice` shows 20 ManagedService CRDs, all equally opaque
-- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService
+- [x] Verify: `kubectl get crd | grep managedservice` shows 20 ManagedService CRDs, all equally opaque
+- [x] Verify: both vector DBs synced with 1102 capabilities (1083 original + 19 decoys) — Chroma and Qdrant confirmed
+- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService (covered by M11 rehearsal)
 
 ### M11: Post-M12 Re-Rehearsal & Documentation
 

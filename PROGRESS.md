@@ -59,6 +59,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 
 - (2026-03-14) Demo modifications (PRD #48 M12): 19 decoy ManagedService XRDs with Compositions — each for a different fake team/person/app (payments, hr, analytics, etc.), structurally similar to the real one but with subtle flaws (wrong engine, port, instance class, network ref). All 20 applied by setup.sh.
 - (2026-03-14) Demo modifications (PRD #48 M12): Generic demo app error messages — removed postgres:// from DATABASE_URL, changed error to "backend service" so agent must use semantic search to discover the service type
+- (2026-03-14) Demo modifications (PRD #48 M12): Verified 20 ManagedService CRDs registered on live cluster, both vector DBs synced at 1102 capabilities (1083 original + 19 decoys)
 - (2026-03-14) Demo modifications (PRD #48 M12): Chroma $and filter fix — normalizeWhereFilter wraps multi-key where filters in $and for Chroma compatibility (Qdrant already handled this via buildFilter)
 - (2026-03-14) Demo modifications (PRD #48 M12): Updated investigator prompt and vector_search tool description to ask follow-up questions when multiple similar results appear (team name, app name, person)
 
