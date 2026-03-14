@@ -179,17 +179,41 @@ Make the "needle in the haystack" genuinely hard to find. The agent can't shortc
 - [x] Verify: both vector DBs synced with 1102 capabilities (1083 original + 19 decoys) — Chroma and Qdrant confirmed
 - [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService (covered by M11 rehearsal)
 
-### M11: Post-M12 Re-Rehearsal & Documentation
+### M13: LangGraph Conversation Memory (--thread flag)
 
-Re-validate the full demo after M12 changes (decoy XRDs, app rename, generic error messages) and issue fixes (#67–#73).
+Enable multi-turn CLI conversations so the agent can ask follow-up questions and remember the answers. Required for Act 3a where the agent asks "which team?" and the presenter responds in a follow-up command.
+
+- [ ] Add `--thread <id>` CLI flag to the investigate command (also `CLUSTER_WHISPERER_THREAD` env var)
+- [ ] Integrate LangGraph checkpointer (SqliteSaver or file-based) to persist conversation state between invocations
+- [ ] Same thread ID resumes the conversation — agent sees prior messages and tool results
+- [ ] Without `--thread`, behavior is unchanged (one-shot, no persistence)
+- [ ] Refine investigator system prompt: when using vector search and multiple similar results appear, specifically ask "which team is this for?" among other follow-up questions (builds on M12 prompt work, but needs to be more directive now that conversation memory exists)
+- [ ] Plumbing ready for Vercel agent to use the same thread mechanism (PRD #49)
+- [ ] Verified: two sequential CLI invocations with the same thread ID share conversation context
+
+### M14: Working ManagedService Composition (App Comes Alive)
+
+Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL instance. When the agent deploys the ManagedService, a real database comes up and the demo app starts working — the audience sees it go from CrashLoopBackOff to Running.
+
+- [ ] New Composition: deploy in-cluster PostgreSQL (Deployment + Service) instead of AWS RDS (no cloud credentials needed, comes up in seconds)
+- [ ] Service named `db-service` exposed on a non-standard port (e.g., 5151) to hide the PostgreSQL nature from kubectl describe
+- [ ] Update demo app `DATABASE_URL` to use the same non-standard port (`db-service:5151/myapp`)
+- [ ] App code already prepends `postgres://` internally (done in M12)
+- [ ] Update decoy Compositions to also use non-standard ports (different from the real one — each decoy uses a different wrong port)
+- [ ] Verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running
+- [ ] Verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
+
+### M11: Final Re-Rehearsal & Documentation
+
+Re-validate the full demo after all milestone changes (M12 decoys, M13 conversation memory, M14 working Composition) and issue fixes (#67–#73).
 
 - [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
-- [ ] Full three-beat demo flow: Act 2 (new Q1 wording, all three kubectl tools), Act 3a (vector search returns multiple results, agent asks follow-up, finds correct ManagedService), Act 3b (vector search + apply deploys correct ManagedService), Act 4 (traces in Jaeger + Datadog)
+- [ ] Full demo flow: Act 2 (investigation, CRD wall), Act 3a (vector search + follow-up questions via --thread, finds correct ManagedService), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog)
 - [ ] Agent completes Act 3b without hitting recursion limit (#72)
 - [ ] No non-demo console noise during agent runs (#73)
 - [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
-- [ ] Update `docs/choose-your-adventure-demo.md` to reflect three-beat progressive capability flow, decoy XRDs, follow-up question flow, and env var interface
+- [ ] Update `docs/choose-your-adventure-demo.md` to reflect full demo flow with decoy XRDs, conversation memory, working Composition, and env var interface
 
 ## Technical Design
 
@@ -338,3 +362,6 @@ All changes are additive:
 | 2026-03-14 | Demo app error message made generic | App logs previously showed `postgres://` connection string, letting the agent skip vector search. Generic "backend service" message forces the agent to use semantic search to discover what type of service the app needs. |
 | 2026-03-14 | Agent asks follow-up questions in Act 3a | When vector search returns multiple similar ManagedService results, the agent asks the presenter for context (team, app name) before choosing. Makes the demo interactive and shows the agent reasoning, not just searching. |
 | 2026-03-14 | Decoy Compositions are subtly wrong | Each decoy has a real-looking Composition but with wrong engine, port, instance class, or network ref (not region — demo may run from different locations). Raises the stakes: picking the wrong ManagedService would break the app. |
+| 2026-03-14 | LangGraph conversation memory for multi-turn CLI | CLI is one-shot — agent can ask follow-up questions but can't receive answers. `--thread` flag with LangGraph checkpointing enables multi-turn conversations across CLI invocations. Required for Act 3a. |
+| 2026-03-14 | In-cluster PostgreSQL Composition replaces AWS RDS | AWS RDS Composition can't provision without cloud credentials. In-cluster PostgreSQL comes up in seconds, makes the app actually work. Uses non-standard port (e.g., 5151) so kubectl describe doesn't reveal PostgreSQL. |
+| 2026-03-14 | Keep port 5432 reverted, use non-standard port in M14 | Changing the port now would break the existing demo flow. M14 introduces the non-standard port when the Composition and app are updated together. |
