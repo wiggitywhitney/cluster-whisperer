@@ -233,7 +233,7 @@ describe("QdrantBackend integration", () => {
   it("deletes a document and confirms it is gone", async () => {
     if (skipReason) return expect(true).toBe(true); // skip
 
-    // Store a temporary document
+    // Store a temporary document, with cleanup to avoid leaking on assertion failure
     const tempDoc: VectorDocument = {
       id: "test/temp/ToDelete",
       text: "Temporary document for delete test",
@@ -241,23 +241,29 @@ describe("QdrantBackend integration", () => {
     };
     await backend.store(collectionName, [tempDoc]);
 
-    // Verify it exists
-    const before = await backend.keywordSearch(collectionName, undefined, {
-      where: { kind: "Temporary" },
-    });
-    expect(before.length).toBe(1);
+    try {
+      // Verify it exists
+      const before = await backend.keywordSearch(collectionName, undefined, {
+        where: { kind: "Temporary" },
+      });
+      expect(before.length).toBe(1);
 
-    // Delete it
-    await backend.delete(collectionName, ["test/temp/ToDelete"]);
+      // Delete it
+      await backend.delete(collectionName, ["test/temp/ToDelete"]);
 
-    // Brief pause for Qdrant to process the delete
-    await new Promise((resolve) => setTimeout(resolve, 500));
+      // Brief pause for Qdrant to process the delete
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Verify it's gone
-    const after = await backend.keywordSearch(collectionName, undefined, {
-      where: { kind: "Temporary" },
-    });
-    expect(after.length).toBe(0);
+      // Verify it's gone
+      const after = await backend.keywordSearch(collectionName, undefined, {
+        where: { kind: "Temporary" },
+      });
+      expect(after.length).toBe(0);
+    } catch (err) {
+      // Clean up temp document if assertions fail
+      await backend.delete(collectionName, ["test/temp/ToDelete"]).catch(() => {});
+      throw err;
+    }
   });
 
   // ---------------------------------------------------------------------------

@@ -188,13 +188,14 @@ function extractKubectlMetadata(args: string[]): KubectlMetadata {
  *   // Returns: { output: "Error executing...", isError: true }
  */
 export function executeKubectl(args: string[], options?: KubectlOptions): KubectlResult {
+  const tracer = getTracer();
+  const metadata = extractKubectlMetadata(args);
+
   // Prepend --kubeconfig if specified (demo governance: agent has cluster access, shell does not)
+  // Done after metadata extraction so span names show "kubectl get pods" not "kubectl --kubeconfig /path"
   if (options?.kubeconfig) {
     args = ["--kubeconfig", options.kubeconfig, ...args];
   }
-
-  const tracer = getTracer();
-  const metadata = extractKubectlMetadata(args);
 
   // Build the full command for display purposes (logging only, not execution)
   const command = `kubectl ${args.join(" ")}`;
