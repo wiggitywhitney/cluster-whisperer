@@ -146,7 +146,7 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 
 This is not a checklist of features — it is a full end-to-end rehearsal from teardown to traces. The authoritative demo flow is `docs/choose-your-adventure-demo.md`. If setup fails at any point, fix the root cause, teardown, and run setup again from scratch. No patching a half-built cluster.
 
-- [ ] Teardown cluster (`demo/cluster/teardown.sh`) — can happen separately from setup (e.g., end of day)
+- [x] Teardown cluster (`demo/cluster/teardown.sh`) — can happen separately from setup (e.g., end of day)
 - [ ] Run `demo/cluster/setup.sh gcp` from scratch — must exit 0 with no manual intervention (if this succeeds on first attempt, teardown + setup are both verified)
 - [ ] Verify both vector databases are populated (Chroma and Qdrant have matching document counts)
 - [ ] Source `demo/.env` — confirm infrastructure URLs are set
