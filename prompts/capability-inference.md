@@ -33,7 +33,9 @@ Your job is to extract structured information that helps a developer understand 
 
 6. Write a **useCase** sentence describing when and why a developer would use this resource. Start with a verb like "Deploy", "Configure", "Manage".
 
-7. Rate your **confidence** from 0 to 1. Use 0.9+ when the schema is detailed and descriptive. Use 0.5-0.8 when the schema is sparse or ambiguous. Use below 0.5 only when the schema provides almost no useful information.
+7. Write a minimal **exampleYaml** manifest showing a valid resource with apiVersion, kind, metadata.name, and the key spec fields filled in with realistic example values. Keep it short — only include fields that a developer would typically set. Use YAML format (not JSON).
+
+8. Rate your **confidence** from 0 to 1. Use 0.9+ when the schema is detailed and descriptive. Use 0.5-0.8 when the schema is sparse or ambiguous. Use below 0.5 only when the schema provides almost no useful information.
 
 ## Examples
 
@@ -47,6 +49,7 @@ A resource with fields like `spec.parameters.engine` (postgresql, mysql), `spec.
   "complexity": "low",
   "description": "Managed SQL database that abstracts away infrastructure details, supporting multiple database engines.",
   "useCase": "Deploy a managed SQL database without dealing with provider-specific configuration.",
+  "exampleYaml": "apiVersion: devopstoolkit.live/v1beta1\nkind: SQL\nmetadata:\n  name: my-database\nspec:\n  engine: postgresql\n  size: medium",
   "confidence": 0.92
 }
 ```
@@ -61,6 +64,7 @@ A resource in the `s3.aws.upbound.io` API group with fields like `spec.forProvid
   "complexity": "medium",
   "description": "AWS S3 bucket with configurable access policies, versioning, and lifecycle rules.",
   "useCase": "Configure cloud object storage for application data, backups, or static assets.",
+  "exampleYaml": "apiVersion: s3.aws.upbound.io/v1beta1\nkind: Bucket\nmetadata:\n  name: my-bucket\nspec:\n  forProvider:\n    region: us-east-1",
   "confidence": 0.9
 }
 ```
@@ -75,6 +79,7 @@ A resource in the core `v1` API with fields `data` (map of strings) and `binaryD
   "complexity": "low",
   "description": "Stores non-confidential configuration data as key-value pairs for pods to consume.",
   "useCase": "Configure application settings, feature flags, or environment-specific values without rebuilding container images.",
+  "exampleYaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  DATABASE_URL: postgresql://localhost:5432/mydb",
   "confidence": 0.95
 }
 ```

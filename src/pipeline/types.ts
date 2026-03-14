@@ -1,3 +1,6 @@
+// ABOUTME: Shared data types for the capability and instance pipelines (M1-M3).
+// ABOUTME: Defines DiscoveredResource, ResourceCapability, and pipeline option interfaces.
+
 /**
  * types.ts - Shared data types for the capability and instance pipelines
  *
@@ -184,6 +187,8 @@ export interface ResourceCapability {
   description: string;
   /** When and why a developer would use this resource */
   useCase: string;
+  /** Minimal example YAML manifest showing valid spec fields */
+  exampleYaml: string;
   /** LLM's confidence in its analysis (0 = guessing, 1 = certain) */
   confidence: number;
 }

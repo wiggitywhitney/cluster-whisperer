@@ -1,3 +1,6 @@
+// ABOUTME: LLM capability inference for the pipeline (M2).
+// ABOUTME: Sends CRD schemas to Claude Haiku and returns structured ResourceCapability descriptions.
+
 /**
  * inference.ts - LLM capability inference for the pipeline (M2)
  *
@@ -65,6 +68,11 @@ export const LlmCapabilitySchema = z.object({
     .string()
     .describe(
       "When and why a developer would use this resource. Start with a verb like 'Deploy', 'Configure', 'Manage'."
+    ),
+  exampleYaml: z
+    .string()
+    .describe(
+      "A minimal, valid YAML manifest for this resource showing the apiVersion, kind, metadata.name, and key spec fields with example values. Use realistic but simple values."
     ),
   confidence: z
     .number()
