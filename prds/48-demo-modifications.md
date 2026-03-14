@@ -140,7 +140,7 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 - [x] Setup script: single sync invocation populates both Chroma and Qdrant
 - [x] Setup script: verify Chroma has expected document count after sync
 - [x] Setup script: verify Qdrant has expected document count after sync
-- [ ] Verified: single `sync` invocation populates both backends with identical document counts
+- [x] Verified: single `sync` invocation populates both backends with identical document counts
 
 ### M10: Full Demo Rehearsal
 

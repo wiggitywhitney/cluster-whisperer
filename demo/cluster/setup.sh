@@ -522,6 +522,7 @@ metadata:
   name: qdrant
   namespace: qdrant
   annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
