@@ -998,6 +998,99 @@ verify_observability() {
     fi
 }
 
+# Verify the trace pipeline end-to-end: send a test trace and confirm
+# it arrives in Jaeger. Datadog verification is advisory (skipped if
+# DD_API_KEY/DD_APP_KEY are not set).
+#
+# This catches configuration issues like OTEL_TRACING_ENABLED not being
+# set or the OTel collector not forwarding to Jaeger — problems that
+# health checks alone can't detect.
+verify_trace_pipeline() {
+    log_info "Verifying trace pipeline end-to-end..."
+
+    if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+        log_warning "ANTHROPIC_API_KEY not set — skipping trace pipeline verification"
+        return
+    fi
+
+    # Send a test trace via a quick agent query with tracing enabled.
+    # The OTel collector is in-cluster; use port-forward for the OTLP endpoint.
+    local otlp_port=4318
+    kubectl port-forward -n otel-collector \
+        svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
+    local otlp_pf_pid=$!
+    trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
+    sleep 2
+
+    log_info "Sending test trace via agent query..."
+    OTEL_TRACING_ENABLED=true \
+    OTEL_EXPORTER_TYPE=otlp \
+    OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
+        npx tsx "${REPO_ROOT}/src/index.ts" "what namespaces exist?" &>/dev/null || true
+
+    kill "${otlp_pf_pid}" 2>/dev/null || true
+    wait "${otlp_pf_pid}" 2>/dev/null || true
+    trap - EXIT
+
+    # Wait for trace propagation
+    log_info "Waiting for trace propagation (10s)..."
+    sleep 10
+
+    # Query Jaeger API to verify cluster-whisperer service appears
+    kubectl port-forward -n jaeger \
+        deploy/jaeger 16686:16686 &>/dev/null &
+    local jaeger_pf_pid=$!
+    trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
+    sleep 2
+
+    local jaeger_services
+    local trace_verified=false
+    local max_attempts=3
+
+    for ((i=1; i<=max_attempts; i++)); do
+        jaeger_services=$(curl -sf "http://localhost:16686/api/services" 2>/dev/null || true)
+        if echo "${jaeger_services}" | grep -q "cluster-whisperer"; then
+            log_success "Trace pipeline verified: cluster-whisperer service found in Jaeger"
+            trace_verified=true
+            break
+        fi
+        if [[ $i -lt $max_attempts ]]; then
+            log_info "  [attempt ${i}/${max_attempts}] cluster-whisperer not in Jaeger yet, waiting 10s..."
+            sleep 10
+        fi
+    done
+
+    kill "${jaeger_pf_pid}" 2>/dev/null || true
+    wait "${jaeger_pf_pid}" 2>/dev/null || true
+    trap - EXIT
+
+    if [[ "${trace_verified}" != "true" ]]; then
+        log_error "Trace pipeline verification failed: cluster-whisperer not found in Jaeger after 30s"
+        log_error "Check: OTEL_TRACING_ENABLED, OTel Collector config, Jaeger OTLP receiver"
+        return 1
+    fi
+
+    # Advisory: verify Datadog received traces (skip if no keys)
+    if [[ -n "${DD_API_KEY:-}" && -n "${DD_APP_KEY:-}" ]]; then
+        log_info "Checking Datadog for traces (advisory)..."
+        local dd_response
+        dd_response=$(curl -sf -X POST "https://api.datadoghq.com/api/v2/spans/events/search" \
+            -H "DD-API-KEY: ${DD_API_KEY}" \
+            -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"data":{"type":"search_request","attributes":{"filter":{"query":"service:cluster-whisperer","from":"now-5m","to":"now"},"page":{"limit":1}}}}' \
+            2>/dev/null || true)
+
+        if echo "${dd_response}" | grep -q '"data"'; then
+            log_success "Datadog traces verified (advisory)"
+        else
+            log_warning "Datadog trace verification inconclusive — check manually"
+        fi
+    else
+        log_info "DD_API_KEY/DD_APP_KEY not set — skipping Datadog trace verification"
+    fi
+}
+
 # =============================================================================
 # Capability Inference Pipeline
 # =============================================================================
@@ -1553,6 +1646,7 @@ main() {
     install_jaeger
     install_otel_collector
     verify_observability
+    verify_trace_pipeline
     deploy_demo_app
     run_capability_inference
     verify_vector_search
