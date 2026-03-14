@@ -261,8 +261,16 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
   it("initializes collection before delete to avoid race condition", async () => {
     const deps = createMockDeps();
     const callOrder: string[] = [];
+
+    // Gate initialize with a deferred promise to prove delete waits for it
+    let releaseInitialize!: () => void;
+    const initializeGate = new Promise<void>((resolve) => {
+      releaseInitialize = resolve;
+    });
+
     deps.vectorStore.initialize.mockImplementation(async () => {
       callOrder.push("initialize");
+      await initializeGate;
     });
     (deps.vectorStore.delete as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       callOrder.push("delete");
@@ -271,6 +279,14 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
 
     await postScan(app, { deletes: ["old-resource.example.io"] });
 
+    // initialize should be called but delete should NOT yet (still awaiting)
+    await vi.waitFor(() => {
+      expect(deps.vectorStore.initialize).toHaveBeenCalled();
+    });
+    expect(deps.vectorStore.delete).not.toHaveBeenCalled();
+
+    // Release initialize — now delete should proceed
+    releaseInitialize();
     await vi.waitFor(() => {
       expect(deps.vectorStore.delete).toHaveBeenCalled();
     });
