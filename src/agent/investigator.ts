@@ -46,11 +46,12 @@ export const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
  * not at agent creation. The default is 25, but we make it explicit and export
  * it so both the CLI (streamEvents) and MCP (invoke) use the same limit.
  *
- * Why 25? Normal investigations use 5-10 tool calls. 25 is high enough for
- * complex multi-step investigations but low enough to prevent runaway loops
- * (e.g., model retrying a failing kubectl command indefinitely).
+ * Why 50? Normal investigations use 5-10 tool calls. Complex demo flows
+ * (vector search → failed deploy → retry → describe → more searches) can
+ * exceed 25 steps. 50 is generous enough for multi-step Act 3 flows while
+ * still preventing runaway loops.
  */
-export const RECURSION_LIMIT = 25;
+export const RECURSION_LIMIT = 50;
 
 /**
  * Result from invoking the investigator agent.
