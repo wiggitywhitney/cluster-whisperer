@@ -33,8 +33,15 @@ async function main(): Promise<void> {
     `[demo-app] Connecting to backend service at ${DATABASE_URL}...`
   );
 
+  // Prepend postgres:// if not already present — the Kubernetes manifest uses
+  // a generic URL (db-service:5432/myapp) so kubectl describe doesn't reveal
+  // the database type, but pg.Pool needs the protocol to connect.
+  const connectionString = DATABASE_URL.startsWith("postgres")
+    ? DATABASE_URL
+    : `postgres://${DATABASE_URL}`;
+
   const pool = new pg.Pool({
-    connectionString: DATABASE_URL,
+    connectionString,
     connectionTimeoutMillis: 5000,
   });
 
