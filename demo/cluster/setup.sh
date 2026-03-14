@@ -1000,6 +1000,7 @@ verify_trace_pipeline() {
     kubectl port-forward -n otel-collector \
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
+    trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
     sleep 2
 
     log_info "Sending test trace via agent query..."
@@ -1010,6 +1011,7 @@ verify_trace_pipeline() {
 
     kill "${otlp_pf_pid}" 2>/dev/null || true
     wait "${otlp_pf_pid}" 2>/dev/null || true
+    trap - EXIT
 
     # Wait for trace propagation
     log_info "Waiting for trace propagation (10s)..."
@@ -1019,6 +1021,7 @@ verify_trace_pipeline() {
     kubectl port-forward -n jaeger \
         deploy/jaeger 16686:16686 &>/dev/null &
     local jaeger_pf_pid=$!
+    trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
     sleep 2
 
     local jaeger_services
@@ -1040,6 +1043,7 @@ verify_trace_pipeline() {
 
     kill "${jaeger_pf_pid}" 2>/dev/null || true
     wait "${jaeger_pf_pid}" 2>/dev/null || true
+    trap - EXIT
 
     if [[ "${trace_verified}" != "true" ]]; then
         log_error "Trace pipeline verification failed: cluster-whisperer not found in Jaeger after 30s"
