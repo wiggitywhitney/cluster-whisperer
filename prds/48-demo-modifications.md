@@ -152,12 +152,13 @@ This is not a checklist of features — it is a full end-to-end rehearsal from t
 - [x] Source `demo/.env` — confirm infrastructure URLs are set
 - [x] Act 1: `kubectl get pods` fails (no KUBECONFIG in presenter shell)
 - [x] Act 2 setup: `export CLUSTER_WHISPERER_AGENT=langgraph` and `export CLUSTER_WHISPERER_TOOLS=kubectl`
-- [x] Act 2 question 1: `cluster-whisperer "Why is my app broken?"` — agent finds missing database
+- [x] Act 2 question 1: `cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"` — agent uses all three kubectl tools (get, describe, logs), finds missing database
 - [x] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees 1,000+ CRDs, cannot identify the right one by name (CRD wall)
-- [x] Act 3 setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply`
-- [x] Act 3 (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, deploys it
+- [x] Act 3a setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector`
+- [x] Act 3a (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, recommends it with YAML, but cannot deploy (no apply tool)
+- [x] Act 3b: `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply` — agent finds ManagedService and deploys it
 - [x] Act 3 cleanup: delete the deployed ManagedService instance
-- [x] Act 3 (Qdrant): `export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` — repeat, agent finds and deploys ManagedService using Qdrant
+- [x] Act 3 (Qdrant): `export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` — repeat three-beat flow using Qdrant
 - [x] Act 4: open Jaeger UI — traces visible from agent runs
 - [x] Act 4 verification: traces include tool spans, vector search spans, and apply spans
 - [x] Full flow completes without errors, retries, or manual workarounds
@@ -262,15 +263,21 @@ export CLUSTER_WHISPERER_AGENT=langgraph
 
 # Vote 1 result → Act 2: investigation with kubectl tools only
 export CLUSTER_WHISPERER_TOOLS=kubectl
-cluster-whisperer "Why is my app broken?"
+cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 cluster-whisperer "Can you help me fix this? Which database should I deploy?"
 
 # Vote 2: audience picks vector DB
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
 
-# Vote 2 result → Act 3: full capability
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+# Vote 2 result → Act 3a: vector search finds the answer but can't deploy
+export CLUSTER_WHISPERER_TOOLS=kubectl,vector
 cluster-whisperer "What database should I deploy for my app, and can you set it up?"
+# Agent finds ManagedService via semantic search, recommends it with YAML, but cannot deploy (no apply tool)
+
+# Act 3b: add apply tool → agent can now deploy autonomously
+export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+cluster-whisperer "Deploy the right database for my app"
+# Agent finds ManagedService again and applies it
 
 # Vote 3: audience picks observability UI → presenter opens that UI
 ```
@@ -301,3 +308,5 @@ All changes are additive:
 | 2026-03-14 | Fix QdrantBackend `collectionExists` destructuring | Qdrant JS client returns `{ exists: boolean }`, not `boolean`. Code checked `if (!exists)` which was always false (truthy object), so collections were never created. Fixed to `const { exists } = ...`. |
 | 2026-03-14 | Backend constructors read `CLUSTER_WHISPERER_*` env vars | Investigate command didn't pass `--chroma-url`/`--qdrant-url` to the agent. Added `CLUSTER_WHISPERER_CHROMA_URL` and `CLUSTER_WHISPERER_QDRANT_URL` fallbacks in ChromaBackend/QdrantBackend constructors so the agent connects to ingress URLs when running locally. |
 | 2026-03-14 | Add `OTEL_TRACING_ENABLED` and `OTEL_EXPORTER_TYPE` to generated `demo/.env` | Tracing requires both vars but setup.sh only generated `OTEL_EXPORTER_OTLP_ENDPOINT`. Without them, tracing was silently disabled during demo runs. |
+| 2026-03-14 | Three-beat progressive capability in Act 3 | Original two-beat (kubectl → kubectl+vector+apply) didn't show the value of each addition separately. New flow: kubectl only (CRD wall) → kubectl+vector (finds answer, can't deploy) → kubectl+vector+apply (finds and deploys). Each vote visibly unlocks something new. |
+| 2026-03-14 | Act 2 Q1 reworded to "Something's wrong with my application" | Vaguer prompt encourages the agent to use all three kubectl tools (get, describe, logs) rather than shortcutting to just get+logs. |
