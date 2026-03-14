@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for tracing module OTel initialization and quiet mode suppression.
+// ABOUTME: Verifies graceful degradation when SDK packages are absent and quiet mode behavior.
+
 /**
  * index.test.ts - Unit tests for tracing module dynamic import fallback
  *
@@ -77,6 +80,7 @@ beforeEach(() => {
   // Clean tracing-related env vars for deterministic tests
   delete process.env.OTEL_TRACING_ENABLED;
   delete process.env.OTEL_CAPTURE_AI_PAYLOADS;
+  delete process.env.CLUSTER_WHISPERER_QUIET;
   delete process.env.OTEL_EXPORTER_TYPE;
   delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
@@ -376,5 +380,46 @@ describe("isCaptureAiPayloads", () => {
     process.env.OTEL_CAPTURE_AI_PAYLOADS = "yes";
     const tracing = await import("./index");
     expect(tracing.isCaptureAiPayloads).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quiet mode — CLUSTER_WHISPERER_QUIET suppresses [OTel] messages
+// ---------------------------------------------------------------------------
+
+describe("quiet mode", () => {
+  it("suppresses [OTel] init messages when CLUSTER_WHISPERER_QUIET=true", async () => {
+    process.env.OTEL_TRACING_ENABLED = "true";
+    process.env.CLUSTER_WHISPERER_QUIET = "true";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await import("./index");
+
+    const otelMessages = logSpy.mock.calls
+      .flat()
+      .filter((msg) => typeof msg === "string" && msg.includes("[OTel]"));
+    expect(otelMessages).toHaveLength(0);
+  });
+
+  it("still initializes tracing when quiet (only output is suppressed)", async () => {
+    process.env.OTEL_TRACING_ENABLED = "true";
+    process.env.CLUSTER_WHISPERER_QUIET = "true";
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await import("./index");
+
+    expect(mockConfig.traceloopSpy.initialize).toHaveBeenCalledOnce();
+  });
+
+  it("shows [OTel] messages when quiet mode is off", async () => {
+    process.env.OTEL_TRACING_ENABLED = "true";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await import("./index");
+
+    const otelMessages = logSpy.mock.calls
+      .flat()
+      .filter((msg) => typeof msg === "string" && msg.includes("[OTel]"));
+    expect(otelMessages.length).toBeGreaterThan(0);
   });
 });

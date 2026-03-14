@@ -33,6 +33,7 @@ import {
 } from "chromadb";
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { getTracer } from "../tracing";
+import { isQuietMode } from "../quiet-mode";
 import type {
   VectorStore,
   VectorDocument,
@@ -497,12 +498,44 @@ export class ChromaBackend implements VectorStore {
 let suppressCount = 0;
 const originalWarnRef: { fn: typeof console.warn } = { fn: console.warn };
 
+/**
+ * Known Chroma SDK warning patterns to suppress.
+ *
+ * These warnings are harmless noise in our architecture (we use pre-computed
+ * embeddings and the host/port/ssl constructor). The SDK has no log level config.
+ */
+const CHROMA_WARNING_PATTERNS = [
+  "No embedding function configuration found",
+  "The 'path' argument is deprecated",
+  "Collection schema deserialization",
+  "Cannot instantiate a collection with the DefaultEmbeddingFunction",
+];
+
+function isChromaWarning(msg: string): boolean {
+  return CHROMA_WARNING_PATTERNS.some((pattern) => msg.includes(pattern));
+}
+
+/**
+ * In quiet mode, install a global console.warn filter for Chroma warnings.
+ *
+ * This catches warnings that fire outside suppressChromaWarnings() scope
+ * (e.g., during ChromaClient construction or lazy SDK initialization).
+ * The filter persists for the process lifetime in quiet mode.
+ */
+if (isQuietMode()) {
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (args.length > 0 && isChromaWarning(String(args[0]))) return;
+    originalWarn.apply(console, args);
+  };
+}
+
 async function suppressChromaWarnings<T>(fn: () => Promise<T>): Promise<T> {
   if (suppressCount === 0) {
     originalWarnRef.fn = console.warn;
     console.warn = (...args: unknown[]) => {
       const msg = String(args[0]);
-      if (msg.includes("No embedding function configuration found")) return;
+      if (isChromaWarning(msg)) return;
       originalWarnRef.fn.apply(console, args);
     };
   }

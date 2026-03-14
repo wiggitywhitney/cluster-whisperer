@@ -40,6 +40,7 @@
 
 import { trace, type Tracer } from "@opentelemetry/api";
 import type { SpanExporter } from "@opentelemetry/sdk-trace-node";
+import { isQuietMode } from "../quiet-mode";
 import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
 import {
   loadTraceloop,
@@ -87,6 +88,9 @@ let initializedTraceloop: typeof traceloop | null = null;
  * - Follows Viktor's pattern from dot-ai
  */
 const isTracingEnabled = process.env.OTEL_TRACING_ENABLED === "true";
+
+/** Whether to suppress non-essential console output (OTel init messages). */
+const quiet = isQuietMode();
 
 /**
  * Check if trace content capture is enabled.
@@ -142,7 +146,7 @@ function createSpanExporter(): SpanExporter {
     // Normalize: strip trailing slashes to avoid double-slash in URL
     const base = endpoint.replace(/\/+$/, "");
     const url = base.endsWith("/v1/traces") ? base : `${base}/v1/traces`;
-    console.log(`[OTel] Using OTLP exporter → ${base}`);
+    if (!quiet) console.log(`[OTel] Using OTLP exporter → ${base}`);
     return new exporterOtlpProto.OTLPTraceExporter({ url });
   }
 
@@ -159,7 +163,7 @@ function createSpanExporter(): SpanExporter {
     );
   }
 
-  console.log("[OTel] Using console exporter");
+  if (!quiet) console.log("[OTel] Using console exporter");
   return new sdkTraceNode.ConsoleSpanExporter();
 }
 
@@ -187,7 +191,7 @@ if (isTracingEnabled) {
         "Tracing will be no-op. Install SDK packages for full telemetry."
     );
   } else {
-    console.log("[OTel] Initializing OpenTelemetry tracing..."); // eslint-disable-line no-console
+    if (!quiet) console.log("[OTel] Initializing OpenTelemetry tracing..."); // eslint-disable-line no-console
 
     const exporter = createSpanExporter();
 
@@ -222,8 +226,8 @@ if (isTracingEnabled) {
     // Store reference for gracefulExit() to use
     initializedTraceloop = traceloop;
 
-    console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`); // eslint-disable-line no-console
-    console.log("[OTel] OpenLLMetry initialized for LLM instrumentation"); // eslint-disable-line no-console
+    if (!quiet) console.log(`[OTel] Tracing enabled for ${SERVICE_NAME}`); // eslint-disable-line no-console
+    if (!quiet) console.log("[OTel] OpenLLMetry initialized for LLM instrumentation"); // eslint-disable-line no-console
 
     /**
      * Graceful shutdown: flush pending spans before process exits.
@@ -242,7 +246,7 @@ if (isTracingEnabled) {
     const shutdown = async () => {
       try {
         await traceloopSdk.forceFlush();
-        console.log("[OTel] Tracing shut down gracefully"); // eslint-disable-line no-console
+        if (!quiet) console.log("[OTel] Tracing shut down gracefully"); // eslint-disable-line no-console
       } catch (error) {
         console.error("[OTel] Error shutting down tracing:", error);
       }
