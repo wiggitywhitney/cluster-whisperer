@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for the capability scan endpoint (PRD #42 M1).
+// ABOUTME: Tests async 202 acceptance, background pipeline, validation, and concurrency limits.
+
 /**
  * capabilities.test.ts - Unit tests for the capability scan endpoint (PRD #42 M1)
  *
@@ -253,6 +256,46 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
     expect(deps.discoverResources).not.toHaveBeenCalled();
     expect(deps.inferCapabilities).not.toHaveBeenCalled();
     expect(deps.storeCapabilities).not.toHaveBeenCalled();
+  });
+
+  it("initializes collection before delete to avoid race condition", async () => {
+    const deps = createMockDeps();
+    const callOrder: string[] = [];
+
+    // Gate initialize with a deferred promise to prove delete waits for it
+    let releaseInitialize!: () => void;
+    const initializeGate = new Promise<void>((resolve) => {
+      releaseInitialize = resolve;
+    });
+
+    deps.vectorStore.initialize.mockImplementation(async () => {
+      callOrder.push("initialize");
+      await initializeGate;
+    });
+    (deps.vectorStore.delete as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callOrder.push("delete");
+    });
+    const app = createTestApp(deps);
+
+    await postScan(app, { deletes: ["old-resource.example.io"] });
+
+    // initialize should be called but delete should NOT yet (still awaiting)
+    await vi.waitFor(() => {
+      expect(deps.vectorStore.initialize).toHaveBeenCalled();
+    });
+    expect(deps.vectorStore.delete).not.toHaveBeenCalled();
+
+    // Release initialize — now delete should proceed
+    releaseInitialize();
+    await vi.waitFor(() => {
+      expect(deps.vectorStore.delete).toHaveBeenCalled();
+    });
+
+    expect(callOrder[0]).toBe("initialize");
+    expect(callOrder).toContain("delete");
+    expect(deps.vectorStore.initialize).toHaveBeenCalledWith("capabilities", {
+      distanceMetric: "cosine",
+    });
   });
 
   it("does not call vectorStore.delete when deletes is empty", async () => {

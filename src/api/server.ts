@@ -23,6 +23,7 @@
  */
 
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { serve, type ServerType } from "@hono/node-server";
 import { INSTANCES_COLLECTION } from "../vectorstore";
 import type { VectorStore } from "../vectorstore";
@@ -60,8 +61,21 @@ export function createApp(deps: ServerDependencies): Hono {
   const app = new Hono({ strict: false });
 
   // OTel tracing middleware — creates a SERVER span per incoming request.
+  // Registered first so rejected 413s are also traced for observability.
   // When tracing is disabled, getTracer() returns a no-op tracer (zero overhead).
   app.use("*", tracingMiddleware());
+
+  // Body size limit — reject payloads over 5MB before parsing.
+  // Prevents memory spikes from oversized or malicious requests.
+  app.use(
+    "*",
+    bodyLimit({
+      maxSize: 5 * 1024 * 1024,
+      onError: (c) => {
+        return c.json({ error: "Payload too large (max 5MB)" }, 413);
+      },
+    })
+  );
 
   /**
    * Liveness probe — "is the process alive?"

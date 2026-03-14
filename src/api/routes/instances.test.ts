@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for the instance sync endpoint route (PRD #35 M2-M3).
+// ABOUTME: Tests upserts, deletes, validation, ordering, and error handling via app.request().
+
 /**
  * instances.test.ts - Unit tests for the sync endpoint route (PRD #35 M2–M3)
  *
@@ -263,6 +266,9 @@ describe("POST /api/v1/instances/sync — mixed upserts + deletes", () => {
   it("processes deletes before upserts", async () => {
     const mockStore = createMockVectorStore();
     const callOrder: string[] = [];
+    mockStore.initialize.mockImplementation(async () => {
+      callOrder.push("initialize");
+    });
     mockStore.delete.mockImplementation(async () => {
       callOrder.push("delete");
     });
@@ -276,7 +282,30 @@ describe("POST /api/v1/instances/sync — mixed upserts + deletes", () => {
       deletes: ["default/apps/v1/Deployment/old-service"],
     });
 
-    expect(callOrder).toEqual(["delete", "store"]);
+    // initialize is called first (route handler), then delete, then
+    // storeInstances calls initialize again (idempotent) before store
+    expect(callOrder[0]).toBe("initialize");
+    expect(callOrder.indexOf("delete")).toBeGreaterThan(0);
+    expect(callOrder.indexOf("store")).toBeGreaterThan(callOrder.indexOf("delete"));
+  });
+
+  it("initializes collection before delete to avoid race condition", async () => {
+    const mockStore = createMockVectorStore();
+    const callOrder: string[] = [];
+    mockStore.initialize.mockImplementation(async () => {
+      callOrder.push("initialize");
+    });
+    mockStore.delete.mockImplementation(async () => {
+      callOrder.push("delete");
+    });
+    const app = createApp({ vectorStore: mockStore });
+
+    await postSync(app, {
+      deletes: ["default/apps/v1/Deployment/old-service"],
+    });
+
+    expect(callOrder[0]).toBe("initialize");
+    expect(callOrder).toContain("delete");
   });
 });
 

@@ -205,6 +205,20 @@ async function processInBackground(
   payload: { upserts: string[]; deletes: string[] },
   onProgress: (message: string) => void
 ): Promise<void> {
+  // Ensure collection exists before any operations — prevents
+  // "Collection has not been initialized" when the first request
+  // includes deletes before any readiness probe has run.
+  try {
+    await deps.vectorStore.initialize(CAPABILITIES_COLLECTION, {
+      distanceMetric: "cosine",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // eslint-disable-next-line no-console
+    console.error(`Capability scan: initialize failed: ${message}`);
+    return;
+  }
+
   // Process deletes first
   if (payload.deletes.length > 0) {
     try {

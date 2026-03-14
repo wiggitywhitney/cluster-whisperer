@@ -63,6 +63,13 @@ export function createInstancesRoute(vectorStore: VectorStore): Hono {
       const payload = c.req.valid("json");
 
       try {
+        // Ensure collection exists before any operations — prevents
+        // "Collection has not been initialized" when the first request
+        // includes deletes before any readiness probe has run.
+        await vectorStore.initialize(INSTANCES_COLLECTION, {
+          distanceMetric: "cosine",
+        });
+
         // Process deletes first — if the same ID appears in both arrays,
         // the delete removes it and the upsert recreates it below
         if (payload.deletes.length > 0) {
