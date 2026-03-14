@@ -163,9 +163,17 @@ This is not a checklist of features — it is a full end-to-end rehearsal from t
 - [x] Act 4 verification: traces include tool spans, vector search spans, and apply spans
 - [x] Full flow completes without errors, retries, or manual workarounds
 
-### M11: Documentation
+### M11: Post-Issue Re-Rehearsal & Documentation
+
+Re-validate the full demo after issue fixes (#67–#73) change setup.sh, agent behavior, and console output.
+
+- [ ] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
+- [ ] Full three-beat demo flow: Act 2 (new Q1 wording, all three kubectl tools), Act 3a (vector search without apply), Act 3b (vector search + apply with valid manifest from #71), Act 4 (traces in Jaeger + Datadog)
+- [ ] Agent completes Act 3b without hitting recursion limit (#72)
+- [ ] No non-demo console noise during agent runs (#73)
+- [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
-- [ ] Update `docs/choose-your-adventure-demo.md` to reflect env var interface (replaces old CLI flag commands)
+- [ ] Update `docs/choose-your-adventure-demo.md` to reflect three-beat progressive capability flow and env var interface
 
 ## Technical Design
 
