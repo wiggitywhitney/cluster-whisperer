@@ -44,7 +44,7 @@ const { mockQdrantClient } = vi.hoisted(() => {
       ],
     }),
     delete: vi.fn().mockResolvedValue({ status: "completed" }),
-    collectionExists: vi.fn().mockResolvedValue(false),
+    collectionExists: vi.fn().mockResolvedValue({ exists: false }),
   };
   return { mockQdrantClient };
 });
@@ -75,7 +75,7 @@ beforeEach(() => {
   // Reset mocks
   mockQdrantClient.createCollection.mockClear();
   mockQdrantClient.getCollection.mockClear();
-  mockQdrantClient.collectionExists.mockClear().mockResolvedValue(false);
+  mockQdrantClient.collectionExists.mockClear().mockResolvedValue({ exists: false });
   mockQdrantClient.upsert.mockClear();
   mockQdrantClient.query.mockClear().mockResolvedValue({
     points: [
@@ -180,7 +180,7 @@ describe("initialize() span", () => {
   });
 
   it("skips creation when collection already exists", async () => {
-    mockQdrantClient.collectionExists.mockResolvedValueOnce(true);
+    mockQdrantClient.collectionExists.mockResolvedValueOnce({ exists: true });
     await createInitializedBackend();
 
     expect(mockQdrantClient.createCollection).not.toHaveBeenCalled();

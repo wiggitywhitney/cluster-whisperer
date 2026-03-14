@@ -102,7 +102,7 @@ export class ChromaBackend implements VectorStore {
     options?: { chromaUrl?: string }
   ) {
     this.embedder = embedder;
-    const url = options?.chromaUrl ?? process.env.CHROMA_URL ?? DEFAULT_CHROMA_URL;
+    const url = options?.chromaUrl ?? process.env.CLUSTER_WHISPERER_CHROMA_URL ?? process.env.CHROMA_URL ?? DEFAULT_CHROMA_URL;
 
     // Parse the URL into host and port for the Chroma v3 SDK.
     // The 'path' constructor argument is deprecated in favor of host/port/ssl.

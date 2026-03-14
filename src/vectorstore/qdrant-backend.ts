@@ -152,7 +152,7 @@ export class QdrantBackend implements VectorStore {
     this.vectorSize = options?.vectorSize ?? 1024;
 
     const url =
-      options?.qdrantUrl ?? process.env.QDRANT_URL ?? DEFAULT_QDRANT_URL;
+      options?.qdrantUrl ?? process.env.CLUSTER_WHISPERER_QDRANT_URL ?? process.env.QDRANT_URL ?? DEFAULT_QDRANT_URL;
     const parsed = new URL(url);
 
     // When a port is explicit in the URL (e.g., http://localhost:6333), use it.
@@ -189,7 +189,7 @@ export class QdrantBackend implements VectorStore {
         span.setAttribute("db.collection.name", collection);
 
         try {
-          const exists = await this.client.collectionExists(collection);
+          const { exists } = await this.client.collectionExists(collection);
 
           if (!exists) {
             const distance =

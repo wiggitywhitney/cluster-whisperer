@@ -147,20 +147,20 @@ A thin-client mode (CLI → serve endpoint) is deferred to a post-conference PRD
 This is not a checklist of features — it is a full end-to-end rehearsal from teardown to traces. The authoritative demo flow is `docs/choose-your-adventure-demo.md`. If setup fails at any point, fix the root cause, teardown, and run setup again from scratch. No patching a half-built cluster.
 
 - [x] Teardown cluster (`demo/cluster/teardown.sh`) — can happen separately from setup (e.g., end of day)
-- [ ] Run `demo/cluster/setup.sh gcp` from scratch — must exit 0 with no manual intervention (if this succeeds on first attempt, teardown + setup are both verified)
-- [ ] Verify both vector databases are populated (Chroma and Qdrant have matching document counts)
-- [ ] Source `demo/.env` — confirm infrastructure URLs are set
-- [ ] Act 1: `kubectl get pods` fails (no KUBECONFIG in presenter shell)
-- [ ] Act 2 setup: `export CLUSTER_WHISPERER_AGENT=langgraph` and `export CLUSTER_WHISPERER_TOOLS=kubectl`
-- [ ] Act 2 question 1: `cluster-whisperer "Why is my app broken?"` — agent finds missing database
-- [ ] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees 1,000+ CRDs, cannot identify the right one by name (CRD wall)
-- [ ] Act 3 setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply`
-- [ ] Act 3 (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, deploys it
-- [ ] Act 3 cleanup: delete the deployed ManagedService instance
-- [ ] Act 3 (Qdrant): `export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` — repeat, agent finds and deploys ManagedService using Qdrant
-- [ ] Act 4: open Jaeger UI — traces visible from agent runs
-- [ ] Act 4 verification: traces include tool spans, vector search spans, and apply spans
-- [ ] Full flow completes without errors, retries, or manual workarounds
+- [x] Run `demo/cluster/setup.sh gcp` from scratch — must exit 0 with no manual intervention (if this succeeds on first attempt, teardown + setup are both verified)
+- [x] Verify both vector databases are populated (Chroma and Qdrant have matching document counts)
+- [x] Source `demo/.env` — confirm infrastructure URLs are set
+- [x] Act 1: `kubectl get pods` fails (no KUBECONFIG in presenter shell)
+- [x] Act 2 setup: `export CLUSTER_WHISPERER_AGENT=langgraph` and `export CLUSTER_WHISPERER_TOOLS=kubectl`
+- [x] Act 2 question 1: `cluster-whisperer "Why is my app broken?"` — agent finds missing database
+- [x] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees 1,000+ CRDs, cannot identify the right one by name (CRD wall)
+- [x] Act 3 setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply`
+- [x] Act 3 (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, deploys it
+- [x] Act 3 cleanup: delete the deployed ManagedService instance
+- [x] Act 3 (Qdrant): `export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant` — repeat, agent finds and deploys ManagedService using Qdrant
+- [x] Act 4: open Jaeger UI — traces visible from agent runs
+- [x] Act 4 verification: traces include tool spans, vector search spans, and apply spans
+- [x] Full flow completes without errors, retries, or manual workarounds
 
 ### M11: Documentation
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
@@ -298,3 +298,6 @@ All changes are additive:
 | 2026-03-13 | XRD renamed to opaque `managedservices.platform.acme.io` | Agent found `postgresqlinstances.platform.cluster-whisperer.io` by scanning CRD names, undermining the CRD wall narrative. The opaque name forces the agent to need vector search to discover the resource is a PostgreSQL database. |
 | 2026-03-13 | Multi-backend sync via `MultiBackendVectorStore` wrapper | Setup script needs to populate both Chroma and Qdrant. Running LLM inference twice wastes API costs. Wrapper writes to all backends from a single pipeline run. |
 | 2026-03-13 | Act 2 two-question flow | First question ("Why is my app broken?") finds the problem. Follow-up ("Can you help me fix this? Which database should I deploy?") triggers the CRD wall — agent sees 1,000+ opaque names and can't identify the database without semantic search. |
+| 2026-03-14 | Fix QdrantBackend `collectionExists` destructuring | Qdrant JS client returns `{ exists: boolean }`, not `boolean`. Code checked `if (!exists)` which was always false (truthy object), so collections were never created. Fixed to `const { exists } = ...`. |
+| 2026-03-14 | Backend constructors read `CLUSTER_WHISPERER_*` env vars | Investigate command didn't pass `--chroma-url`/`--qdrant-url` to the agent. Added `CLUSTER_WHISPERER_CHROMA_URL` and `CLUSTER_WHISPERER_QDRANT_URL` fallbacks in ChromaBackend/QdrantBackend constructors so the agent connects to ingress URLs when running locally. |
+| 2026-03-14 | Add `OTEL_TRACING_ENABLED` and `OTEL_EXPORTER_TYPE` to generated `demo/.env` | Tracing requires both vars but setup.sh only generated `OTEL_EXPORTER_OTLP_ENDPOINT`. Without them, tracing was silently disabled during demo runs. |

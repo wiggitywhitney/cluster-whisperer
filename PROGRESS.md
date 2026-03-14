@@ -55,6 +55,8 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-13) Demo modifications (PRD #48 M9): Inference cache — file-based cache for LLM inference results keyed by SHA-256 of resource name + schema. Automatic invalidation on schema changes, incremental saves after each resource, `--no-cache` CLI flag. 18 unit tests. Prevents re-running ~30 min of Haiku calls when storage fails.
 - (2026-03-13) Demo modifications (PRD #48 M9): Verified multi-backend sync on live GKE cluster — single sync invocation populates both Chroma and Qdrant with identical document counts (capabilities: 1083/1083, instances: 1210/1210). Ingress proxy-body-size increased to 10m for batch upserts.
 
+- (2026-03-14) Demo modifications (PRD #48 M10): Full demo rehearsal on live GKE cluster — teardown + setup.sh gcp exit 0 from scratch (1041 CRDs, all services running), all 4 demo acts verified (kubectl governance, CRD wall, vector search with both Chroma and Qdrant, ManagedService deploy), traces confirmed in Jaeger (25 spans with tool/LLM/workflow spans)
+
 ### Changed
 - (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning
 - (2026-03-13) Demo modifications (PRD #48): Updated demo flow with two-question Act 2 (investigation + CRD wall follow-up), restructured PRD milestones (added M9 multi-backend sync, M10 full rehearsal)
@@ -67,6 +69,9 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi
 
 ### Fixed
+- (2026-03-14) Demo modifications (PRD #48 M10): QdrantBackend `collectionExists` returned `{ exists: boolean }` not `boolean` — destructuring fix prevents silent collection creation failure
+- (2026-03-14) Demo modifications (PRD #48 M10): Backend constructors now read `CLUSTER_WHISPERER_CHROMA_URL`/`CLUSTER_WHISPERER_QDRANT_URL` env vars — agent connects to ingress URLs when running locally against remote cluster
+- (2026-03-14) Demo modifications (PRD #48 M10): Generated `demo/.env` now includes `OTEL_TRACING_ENABLED=true` and `OTEL_EXPORTER_TYPE=otlp` — tracing was silently disabled without these
 - (2026-03-13) Demo modifications (PRD #48 M9): Qdrant rejects string point IDs with "Bad Request" — added UUID v5 conversion so document IDs like "configmaps" become deterministic UUIDs
 - (2026-03-13) Demo modifications (PRD #48 M9): Setup script sync commands strip ANTHROPIC_BASE_URL and ANTHROPIC_CUSTOM_HEADERS so Haiku inference calls bypass Datadog AI Gateway
 - (2026-03-13) Demo modifications (PRD #48 M8): URL port parsing in ChromaBackend and QdrantBackend — ingress URLs (port 80) incorrectly defaulted to service ports (8000/6333). Now uses protocol defaults (80/443) when no explicit port
