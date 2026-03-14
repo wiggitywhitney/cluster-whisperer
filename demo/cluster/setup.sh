@@ -483,6 +483,56 @@ spec:
 EOF
 
     log_success "Ingress created: http://jaeger.${BASE_DOMAIN}"
+
+    # Chroma Ingress
+    kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chroma
+  namespace: chroma
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: chroma.${BASE_DOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: chroma-chromadb
+            port:
+              number: 8000
+EOF
+
+    log_success "Ingress created: http://chroma.${BASE_DOMAIN}"
+
+    # Qdrant Ingress
+    kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qdrant
+  namespace: qdrant
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: qdrant.${BASE_DOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: qdrant
+            port:
+              number: 6333
+EOF
+
+    log_success "Ingress created: http://qdrant.${BASE_DOMAIN}"
 }
 
 # =============================================================================
@@ -988,7 +1038,8 @@ verify_observability() {
 # (e.g., "PostgreSQL database" finds the platform XRD among all the noise).
 #
 # Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
-# Uses a temporary port-forward to reach the in-cluster Chroma instance.
+# Uses the Chroma ingress URL to reach the in-cluster Chroma instance.
+# Requires create_ingress_resources to have run first.
 run_capability_inference() {
     log_info "Running capability inference pipeline..."
     log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in Chroma."
@@ -1000,29 +1051,13 @@ run_capability_inference() {
         return
     fi
 
-    # Start port-forward to Chroma in the background
-    local chroma_port=8000
-    kubectl port-forward \
-        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
-    local pf_pid=$!
-
-    # Give port-forward a moment to establish
-    sleep 3
-
-    # Verify port-forward is working
-    if ! kill -0 "${pf_pid}" 2>/dev/null; then
-        log_error "Port-forward to Chroma failed to start"
-        return 1
-    fi
+    local chroma_url="http://chroma.${BASE_DOMAIN}"
+    log_info "Using Chroma at ${chroma_url}"
 
     # Run the sync pipeline. Requires ANTHROPIC_API_KEY and VOYAGE_API_KEY in the environment.
     local sync_exit=0
     npx tsx "${REPO_ROOT}/src/index.ts" sync \
-        --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
-
-    # Clean up port-forward
-    kill "${pf_pid}" 2>/dev/null || true
-    wait "${pf_pid}" 2>/dev/null || true
+        --chroma-url "${chroma_url}" || sync_exit=$?
 
     if [[ $sync_exit -ne 0 ]]; then
         log_error "Capability inference pipeline failed (exit code: ${sync_exit})"
@@ -1034,24 +1069,15 @@ run_capability_inference() {
 
 # Verify the platform PostgreSQL XRD is discoverable via semantic search.
 # This is the "needle in the haystack" — the one Composition among ~1,000 CRDs.
+# Uses the Chroma ingress URL (requires create_ingress_resources to have run).
 verify_vector_search() {
     log_info "Verifying platform PostgreSQL XRD is discoverable via vector search..."
 
-    # Start port-forward to Chroma
-    local chroma_port=8000
-    kubectl port-forward \
-        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
-    local pf_pid=$!
-    sleep 3
+    local chroma_url="http://chroma.${BASE_DOMAIN}"
 
-    # Run a search query and check if the XRD appears in results.
-    # The sync-instances or a quick search via the CLI would verify this.
-    # For now, check that Chroma has documents in the capabilities collection.
+    # Check that Chroma has documents in the capabilities collection.
     local doc_count
-    doc_count=$(curl -sf "http://localhost:${chroma_port}/api/v2/collections" 2>/dev/null || true)
-
-    kill "${pf_pid}" 2>/dev/null || true
-    wait "${pf_pid}" 2>/dev/null || true
+    doc_count=$(curl -sf "${chroma_url}/api/v2/collections" 2>/dev/null || true)
 
     if [[ -n "${doc_count}" ]]; then
         log_success "Chroma capabilities collection is populated"
@@ -1316,24 +1342,12 @@ deploy_vectordb_sync() {
 run_instance_sync() {
     log_info "Running instance sync (populating instances collection)..."
 
-    # Start port-forward to Chroma in the background
-    local chroma_port=8000
-    kubectl port-forward \
-        -n chroma svc/chroma-chromadb "${chroma_port}:${chroma_port}" &>/dev/null &
-    local pf_pid=$!
-    sleep 3
-
-    if ! kill -0 "${pf_pid}" 2>/dev/null; then
-        log_error "Port-forward to Chroma failed to start"
-        return 1
-    fi
+    local chroma_url="http://chroma.${BASE_DOMAIN}"
+    log_info "Using Chroma at ${chroma_url}"
 
     local sync_exit=0
     npx tsx "${REPO_ROOT}/src/index.ts" sync-instances \
-        --chroma-url "http://localhost:${chroma_port}" || sync_exit=$?
-
-    kill "${pf_pid}" 2>/dev/null || true
-    wait "${pf_pid}" 2>/dev/null || true
+        --chroma-url "${chroma_url}" || sync_exit=$?
 
     if [[ $sync_exit -ne 0 ]]; then
         log_error "Instance sync failed (exit code: ${sync_exit})"
@@ -1483,11 +1497,11 @@ main() {
     install_otel_collector
     verify_observability
     deploy_demo_app
+    deploy_cluster_whisperer_serve
+    create_ingress_resources
     run_capability_inference
     verify_vector_search
     run_instance_sync
-    deploy_cluster_whisperer_serve
-    create_ingress_resources
     deploy_vectordb_sync
     print_summary
 }
