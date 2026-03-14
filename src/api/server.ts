@@ -60,6 +60,11 @@ export interface ServerDependencies {
 export function createApp(deps: ServerDependencies): Hono {
   const app = new Hono({ strict: false });
 
+  // OTel tracing middleware — creates a SERVER span per incoming request.
+  // Registered first so rejected 413s are also traced for observability.
+  // When tracing is disabled, getTracer() returns a no-op tracer (zero overhead).
+  app.use("*", tracingMiddleware());
+
   // Body size limit — reject payloads over 5MB before parsing.
   // Prevents memory spikes from oversized or malicious requests.
   app.use(
@@ -71,10 +76,6 @@ export function createApp(deps: ServerDependencies): Hono {
       },
     })
   );
-
-  // OTel tracing middleware — creates a SERVER span per incoming request.
-  // When tracing is disabled, getTracer() returns a no-op tracer (zero overhead).
-  app.use("*", tracingMiddleware());
 
   /**
    * Liveness probe — "is the process alive?"

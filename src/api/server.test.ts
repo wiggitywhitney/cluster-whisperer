@@ -161,6 +161,35 @@ describe("body size limit", () => {
     expect(res.status).toBe(413);
   });
 
+  it("accepts payloads exactly at 5MB", async () => {
+    const mockStore = createMockVectorStore();
+    const app = createApp({ vectorStore: mockStore });
+
+    const exactSize = 5 * 1024 * 1024;
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(exactSize));
+        controller.close();
+      },
+    });
+
+    const req = new Request("http://localhost/api/v1/instances/sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(exactSize),
+      },
+      body,
+      // @ts-expect-error -- duplex required for streaming but not in TS types
+      duplex: "half",
+    });
+
+    const res = await app.request(req);
+
+    // Exactly at limit should be accepted (not 413)
+    expect(res.status).not.toBe(413);
+  });
+
   it("accepts payloads under the limit", async () => {
     const mockStore = createMockVectorStore();
     const app = createApp({ vectorStore: mockStore });

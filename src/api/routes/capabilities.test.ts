@@ -277,6 +277,9 @@ describe("POST /api/v1/capabilities/scan — pipeline invocation", () => {
 
     expect(callOrder[0]).toBe("initialize");
     expect(callOrder).toContain("delete");
+    expect(deps.vectorStore.initialize).toHaveBeenCalledWith("capabilities", {
+      distanceMetric: "cosine",
+    });
   });
 
   it("does not call vectorStore.delete when deletes is empty", async () => {
