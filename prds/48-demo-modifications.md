@@ -183,13 +183,15 @@ Make the "needle in the haystack" genuinely hard to find. The agent can't shortc
 
 Enable multi-turn CLI conversations so the agent can ask follow-up questions and remember the answers. Required for Act 3a where the agent asks "which team?" and the presenter responds in a follow-up command.
 
-- [ ] Add `--thread <id>` CLI flag to the investigate command (also `CLUSTER_WHISPERER_THREAD` env var)
-- [ ] Integrate LangGraph checkpointer (SqliteSaver or file-based) to persist conversation state between invocations
-- [ ] Same thread ID resumes the conversation — agent sees prior messages and tool results
-- [ ] Without `--thread`, behavior is unchanged (one-shot, no persistence)
-- [ ] Refine investigator system prompt: when using vector search and multiple similar results appear, specifically ask "which team is this for?" among other follow-up questions (builds on M12 prompt work, but needs to be more directive now that conversation memory exists)
-- [ ] Plumbing ready for Vercel agent to use the same thread mechanism (PRD #49)
+- [x] Add `--thread <id>` CLI flag to the investigate command (also `CLUSTER_WHISPERER_THREAD` env var)
+- [x] Integrate LangGraph checkpointer (file-based MemorySaver wrapper — avoids @langchain/langgraph-checkpoint-sqlite peer dep conflict)
+- [x] Same thread ID resumes the conversation — agent sees prior messages and tool results
+- [x] Without `--thread`, behavior is unchanged (one-shot, no persistence)
+- [x] Refine investigator system prompt: when using vector search and multiple similar results appear, specifically ask "which team is this for?" among other follow-up questions (builds on M12 prompt work, but needs to be more directive now that conversation memory exists)
+- [x] Plumbing ready for Vercel agent to use the same thread mechanism (PRD #49) — checkpointer passed through CreateAgentOptions
+- [x] Discovery pipeline enriched: kubectl explain spec descriptions included alongside recursive field structure, so LLM sees team/app context from XRDs
 - [ ] Verified: two sequential CLI invocations with the same thread ID share conversation context
+- [ ] Verified: vector DB contains Whitney/Viktor context in platform.acme.io description after re-sync
 
 ### M14: Working ManagedService Composition (App Comes Alive)
 
