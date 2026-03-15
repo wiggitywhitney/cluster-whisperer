@@ -215,13 +215,13 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 Re-validate the full demo after all milestone changes (M12 decoys, M13 conversation memory, M14 working Composition) and issue fixes (#67–#73).
 
 - [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
-- [ ] Full demo flow: Act 2 (investigation, CRD wall), Act 3a (vector search + follow-up questions via --thread, finds correct ManagedService), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog)
-- [ ] Save full agent output from each Act to `demo/runs/<timestamp>-<notes>.txt` for comparison across rehearsals
-- [ ] Agent completes Act 3b without hitting recursion limit (#72)
+- [ ] Three consecutive full demo runs, Act 1 through Act 4, following `docs/choose-your-adventure-demo.md` exactly: Act 1 (kubectl fails), Act 2 (investigation Q1 + CRD wall Q2), Act 3a three-turn conversation (Q1 "What database?" → multiple results → Q2 "You Choose team" → narrows to platform.acme.io → Q3 "Deploy it?" → no apply tool), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog). Clean up deployed ManagedService between runs.
+- [ ] Save full agent output from every run to `demo/runs/<timestamp>-run<N>.txt` — three complete run files for comparison
+- [ ] Agent completes Act 3b without hitting recursion limit (#72) in all three runs
 - [ ] No non-demo console noise during agent runs (#73)
 - [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
 - [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
-- [ ] Update `docs/choose-your-adventure-demo.md` to reflect full demo flow with decoy XRDs, conversation memory, working Composition, and env var interface
+- [x] Update `docs/choose-your-adventure-demo.md` to reflect full demo flow with decoy XRDs, conversation memory, working Composition, and env var interface
 
 ## Technical Design
 
