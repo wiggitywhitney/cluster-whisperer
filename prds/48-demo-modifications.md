@@ -177,7 +177,7 @@ Make the "needle in the haystack" genuinely hard to find. The agent can't shortc
 - [x] Fix Chroma `$and` filter for multi-key `where` queries (`normalizeWhereFilter` in chroma-backend.ts)
 - [x] Verify: `kubectl get crd | grep managedservice` shows 20 ManagedService CRDs, all equally opaque
 - [x] Verify: both vector DBs synced with 1102 capabilities (1083 original + 19 decoys) — Chroma and Qdrant confirmed
-- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService (covered by M11 rehearsal)
+- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService
 
 ### M13: LangGraph Conversation Memory (--thread flag)
 
@@ -202,8 +202,13 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 - [x] Update demo app `DATABASE_URL` to use the same non-standard port (`db-service:5151/myapp`)
 - [x] App code already prepends `postgres://` internally (done in M12)
 - [x] Update decoy Compositions to also use non-standard ports (different from the real one — each decoy uses a different wrong port)
-- [ ] Verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running
-- [ ] Verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
+- [ ] Kind verification: provider-kubernetes CRD registers via MRAP activation
+- [ ] Kind verification: `setup.sh kind` completes successfully with provider-kubernetes + ProviderConfig
+- [ ] Kind verification: ManagedService claim creates PostgreSQL Deployment + db-service Service on port 5151
+- [ ] Kind verification: demo app connects to db-service:5151 and transitions from CrashLoopBackOff to Running
+- [ ] Kind verification: deploying a decoy ManagedService creates db-service on wrong port — app stays broken
+- [ ] GKE verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running (covered by M11 rehearsal)
+- [ ] GKE verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config) (covered by M11 rehearsal)
 
 ### M11: Final Re-Rehearsal & Documentation
 
@@ -370,3 +375,6 @@ All changes are additive:
 | 2026-03-14 | Keep port 5432 reverted, use non-standard port in M14 | Changing the port now would break the existing demo flow. M14 introduces the non-standard port when the Composition and app are updated together. |
 | 2026-03-15 | Pare Crossplane providers from 35 to 15 (~360 CRDs) | Research using upjet-aws/upjet-gcp repos showed exact CRD counts per provider. 35 providers was overkill — only ~30 CRDs surface during the demo. Kept 8 database providers (rds, dynamodb, elasticache, opensearch, sql, spanner, redis, bigquery) + 7 variety (ec2, s3, iam, lambda, compute, container, storage). 13 providers registered 253 CRDs; adding lambda(11) + compute(96) should bring total to ~360. Faster setup, lower resource usage, same demo narrative. |
 | 2026-03-15 | Decoy xRD descriptions reframed as "platform-provided database" | Original descriptions said "Managed by the X team" — team-specific, not platform. New descriptions lead with "Platform-provided [PostgreSQL/MySQL] database provisioned by the Acme platform team for the X division." Makes vector search for "platform database" return all 20 hits, forcing the agent to dig deeper with organizational context to find the right one. Strengthens the needle-in-haystack demo moment. |
+| 2026-03-15 | Kind-first verification before GKE | GKE cycles take 45+ minutes and cost money. Verify provider-kubernetes, Composition, and ManagedService claim work on Kind first. GKE-specific verification (full demo flow, traces, sync) happens during M11 rehearsal. |
+| 2026-03-15 | Crossplane v2 MRAP activation for provider-kubernetes | Crossplane v2.2.0 uses MRDs + MRAPs instead of registering CRDs directly. The default MRAP (`"*"`) activates all MRDs, but activation is asynchronous — provider becomes Healthy before its MRDs become CRDs. Setup script now waits in two phases: Provider healthy, then CRD activation. |
+| 2026-03-15 | Save demo run outputs for comparison | Demo changes are iterative and tedious. Saving full agent output to `demo/runs/` after each rehearsal enables comparing runs, catching regressions, and tracking improvements. Directory is gitignored (cluster-specific URLs). |
