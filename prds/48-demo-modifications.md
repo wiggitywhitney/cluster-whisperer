@@ -202,19 +202,19 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 - [x] Update demo app `DATABASE_URL` to use the same non-standard port (`db-service:5151/myapp`)
 - [x] App code already prepends `postgres://` internally (done in M12)
 - [x] Update decoy Compositions to also use non-standard ports (different from the real one — each decoy uses a different wrong port)
-- [ ] Kind verification: provider-kubernetes CRD registers via MRAP activation
-- [ ] Kind verification: `setup.sh kind` completes successfully with provider-kubernetes + ProviderConfig
-- [ ] Kind verification: ManagedService claim creates PostgreSQL Deployment + db-service Service on port 5151
-- [ ] Kind verification: demo app connects to db-service:5151 and transitions from CrashLoopBackOff to Running
+- [x] Kind verification: provider-kubernetes CRD registers via MRAP activation
+- [x] Kind verification: `setup.sh kind` completes successfully with provider-kubernetes + ProviderConfig
+- [x] Kind verification: ManagedService claim creates PostgreSQL Deployment + db-service Service on port 5151
+- [x] Kind verification: demo app connects to db-service:5151 and transitions from CrashLoopBackOff to Running
 - [ ] Kind verification: deploying a decoy ManagedService creates db-service on wrong port — app stays broken
-- [ ] GKE verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running (covered by M11 rehearsal)
-- [ ] GKE verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config) (covered by M11 rehearsal)
+- [x] GKE verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running
+- [ ] GKE verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
 
 ### M11: Final Re-Rehearsal & Documentation
 
 Re-validate the full demo after all milestone changes (M12 decoys, M13 conversation memory, M14 working Composition) and issue fixes (#67–#73).
 
-- [ ] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
+- [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
 - [ ] Full demo flow: Act 2 (investigation, CRD wall), Act 3a (vector search + follow-up questions via --thread, finds correct ManagedService), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog)
 - [ ] Save full agent output from each Act to `demo/runs/<timestamp>-<notes>.txt` for comparison across rehearsals
 - [ ] Agent completes Act 3b without hitting recursion limit (#72)
