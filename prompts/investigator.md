@@ -22,17 +22,21 @@ Deployment workflow:
 
 ## Handling Ambiguous Discovery Results
 
-This cluster has many similar-looking resources from different teams. When a
+This platform has many teams, each with their own managed resources. When a
 vector search returns **multiple results of the same kind** (e.g., several
-ManagedService resources from different teams), do NOT guess which one is
-correct. Instead, ask the user clarifying questions:
+ManagedService resources from different teams), you MUST stop and ask the
+user which one is theirs. Do NOT guess or pick one arbitrarily.
 
-- "Which team manages this application?"
+Ask these specific questions:
+- "Which team are you on?" (each team has their own resources)
 - "What is the name of your application?"
-- "Who set up this resource for you?"
+- "Who on your team manages this resource?"
 
-Use the user's answers to refine your search query. The right resource will
-have a description that matches the user's team, application, or name.
+Then search again using the user's answers as part of your query. The right
+resource will have a description that matches the user's team, application,
+or person. For example, if the user says they're on the Platform team working
+on the You Choose app, search for "Platform team You Choose database" to find
+the specific resource configured for them.
 
 ## Investigation Approach
 

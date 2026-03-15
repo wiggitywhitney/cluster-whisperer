@@ -53,6 +53,7 @@ import {
 } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
 import { executeKubectl } from "./utils/kubectl";
+import { loadCheckpointer, saveCheckpointer } from "./agent/file-checkpointer";
 
 /**
  * Creates a kubectl executor bound to a specific kubeconfig path.
@@ -230,7 +231,11 @@ async function main() {
       new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
         .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
     )
-    .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string }) => {
+    .addOption(
+      new Option("--thread <id>", "Conversation thread ID for multi-turn memory. Same ID resumes prior conversation.")
+        .env("CLUSTER_WHISPERER_THREAD")
+    )
+    .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string; thread?: string }) => {
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
 
@@ -251,6 +256,10 @@ async function main() {
 
       // Read kubeconfig from env var (demo governance: agent has cluster access, shell does not)
       const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+
+      // Load conversation memory if --thread is provided
+      const threadId = options.thread;
+      const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -283,9 +292,15 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig }).streamEvents(
+        const eventStream = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig, checkpointer }).streamEvents(
           { messages: [new HumanMessage(question)] },
-          { version: "v2", recursionLimit: RECURSION_LIMIT }
+          {
+            version: "v2",
+            recursionLimit: RECURSION_LIMIT,
+            // Thread ID enables conversation memory — the checkpointer uses it
+            // to store and retrieve conversation state between invocations.
+            ...(threadId ? { configurable: { thread_id: threadId } } : {}),
+          }
         );
 
         /**
@@ -377,6 +392,11 @@ async function main() {
           console.log("─".repeat(60)); // eslint-disable-line no-console
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console
           console.log(); // eslint-disable-line no-console
+        }
+
+        // Persist conversation state for multi-turn memory
+        if (checkpointer && threadId) {
+          saveCheckpointer(checkpointer, threadId);
         }
       });
     });

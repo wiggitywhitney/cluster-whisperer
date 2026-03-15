@@ -27,6 +27,7 @@
 
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { MemorySaver } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
@@ -188,6 +189,12 @@ export interface InvestigatorOptions {
    * KUBECONFIG, but the agent has cluster access via this path.
    */
   kubeconfig?: string;
+  /**
+   * Checkpointer for conversation memory persistence.
+   * When provided, the agent saves conversation state after each step
+   * so multi-turn conversations work across CLI invocations.
+   */
+  checkpointer?: MemorySaver;
 }
 
 /**
@@ -238,7 +245,9 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
  * @param options - Optional configuration for tool selection
  */
 export function getInvestigatorAgent(options?: InvestigatorOptions) {
-  if (!cachedAgent) {
+  // When a checkpointer is provided, always create a fresh agent — the
+  // checkpointer is per-thread and can't be shared with a cached agent.
+  if (!cachedAgent || options?.checkpointer) {
     const toolGroups = options?.toolGroups ?? DEFAULT_TOOL_GROUPS;
     const vectorBackend = options?.vectorBackend ?? DEFAULT_VECTOR_BACKEND;
 
@@ -285,6 +294,10 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
       llm: model,
       tools,
       stateModifier: getSystemPrompt(),
+      // Checkpointer enables conversation memory — the agent saves state
+      // after each step so multi-turn conversations persist across CLI invocations.
+      // Without a checkpointer, each invocation starts fresh (one-shot mode).
+      ...(options?.checkpointer ? { checkpointer: options.checkpointer } : {}),
     });
   }
   return cachedAgent;

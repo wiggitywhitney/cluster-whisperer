@@ -17,6 +17,7 @@ import { getInvestigatorAgent } from "./investigator";
 import { DEFAULT_AGENT_TYPE, type AgentType } from "./agent-types";
 import { type ToolGroup } from "../tools/tool-groups";
 import { type VectorBackendType } from "../vectorstore";
+import type { MemorySaver } from "@langchain/langgraph";
 
 /**
  * Options for creating an agent via the factory.
@@ -33,6 +34,12 @@ export interface CreateAgentOptions {
    * Passed through to tool creation so all kubectl calls use this cluster.
    */
   kubeconfig?: string;
+  /**
+   * Checkpointer for conversation memory persistence.
+   * When provided, the agent saves state after each step so conversations
+   * can resume across CLI invocations with the same thread ID.
+   */
+  checkpointer?: MemorySaver;
 }
 
 /**
@@ -51,6 +58,7 @@ export function createAgent(options: CreateAgentOptions = {}) {
         toolGroups: options.toolGroups,
         vectorBackend: options.vectorBackend,
         kubeconfig: options.kubeconfig,
+        checkpointer: options.checkpointer,
       });
 
     case "vercel":

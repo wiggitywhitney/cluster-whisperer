@@ -1,3 +1,5 @@
+// ABOUTME: CRD and API resource discovery for the capability inference pipeline
+// ABOUTME: Discovers resource types via kubectl, filters, and extracts schemas for LLM analysis
 /**
  * discovery.ts - CRD and API resource discovery for the capability inference pipeline (M1)
  *
@@ -277,6 +279,20 @@ export async function discoverResources(
       continue;
     }
 
+    // Also fetch the spec description (non-recursive) which includes the
+    // human-readable description from the CRD/XRD. The --recursive flag
+    // strips descriptions but shows field structure. We combine both so the
+    // LLM inference pipeline sees field structure AND team/app context.
+    let specDescription = "";
+    const specResult = kubectl(["explain", `${fqName}.spec`]);
+    if (!specResult.isError) {
+      specDescription = specResult.output;
+    }
+
+    const fullSchema = specDescription
+      ? `${specDescription}\n\n--- Field structure (recursive) ---\n\n${explainResult.output}`
+      : explainResult.output;
+
     discovered.push({
       name: fqName,
       apiVersion: resource.apiVersion,
@@ -284,7 +300,7 @@ export async function discoverResources(
       kind: resource.kind,
       namespaced: resource.namespaced,
       isCRD: crdNames.has(fqName),
-      schema: explainResult.output,
+      schema: fullSchema,
     });
   }
 
