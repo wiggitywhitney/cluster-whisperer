@@ -795,18 +795,22 @@ EOF
 configure_provider_kubernetes() {
     log_info "Configuring provider-kubernetes for in-cluster access..."
 
-    # Wait for the provider-kubernetes Provider to become healthy first.
-    # The CRD wait (wait_for_crds) may finish before provider-kubernetes
-    # has pulled its image and registered its CRDs, since the target count
-    # can be reached by the other providers alone.
+    # Crossplane v2 uses ManagedResourceDefinitions (MRDs) + MRAPs instead of
+    # registering CRDs directly. The default MRAP activates all MRDs ("*"), but
+    # activation is asynchronous — the provider becomes Healthy before the MRAP
+    # converts its MRDs into CRDs.
+    #
+    # Step 1: Wait for the Provider to be Healthy (image pulled, pod running).
+    # Step 2: Wait for the Object CRD to appear (MRAP activates the MRD → CRD).
     local elapsed=0
-    local timeout=600
+    local timeout=300
     log_info "Waiting for provider-kubernetes to become healthy (timeout: ${timeout}s)..."
     while [[ $elapsed -lt $timeout ]]; do
         local pk_healthy
         pk_healthy=$(kubectl get providers.pkg.crossplane.io provider-kubernetes \
             -o jsonpath='{.status.conditions[?(@.type=="Healthy")].status}' 2>/dev/null || true)
         if [[ "${pk_healthy}" == "True" ]]; then
+            log_success "provider-kubernetes is healthy"
             break
         fi
         if (( elapsed % 30 == 0 && elapsed > 0 )); then
@@ -819,12 +823,41 @@ configure_provider_kubernetes() {
         elapsed=$((elapsed + 10))
     done
 
-    if ! kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
-        log_error "provider-kubernetes CRD did not register within ${timeout}s"
-        kubectl get providers.pkg.crossplane.io provider-kubernetes -o yaml 2>/dev/null || true
+    # Step 2: Wait for the Object CRD to appear via MRAP activation.
+    # Check both the legacy CRD name and the v2 MRD.
+    log_info "Waiting for Object CRD activation via MRAP..."
+    local crd_elapsed=0
+    local crd_timeout=180
+    while [[ $crd_elapsed -lt $crd_timeout ]]; do
+        # Check for both possible CRD names (legacy and v2 namespaced)
+        if kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
+            log_success "Object CRD registered (objects.kubernetes.crossplane.io)"
+            break
+        fi
+        if kubectl get crd objects.kubernetes.m.crossplane.io &>/dev/null 2>&1; then
+            log_success "Object CRD registered (objects.kubernetes.m.crossplane.io)"
+            break
+        fi
+        if (( crd_elapsed % 30 == 0 )); then
+            # Show MRD status for debugging
+            local mrd_count
+            mrd_count=$(kubectl get mrds 2>/dev/null | grep -c "kubernetes" || echo "0")
+            log_info "  [${crd_elapsed}s] kubernetes MRDs found: ${mrd_count}, waiting for CRD activation..."
+        fi
+        sleep 10
+        crd_elapsed=$((crd_elapsed + 10))
+    done
+
+    # Final check — if neither CRD exists, show diagnostics
+    if ! kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1 && \
+       ! kubectl get crd objects.kubernetes.m.crossplane.io &>/dev/null 2>&1; then
+        log_error "provider-kubernetes Object CRD not activated within ${crd_timeout}s"
+        log_error "MRD status:"
+        kubectl get mrds 2>/dev/null | grep -i "kubernetes\|object" || true
+        log_error "MRAP status:"
+        kubectl get mrap 2>/dev/null || true
         return 1
     fi
-    log_success "provider-kubernetes CRDs registered"
 
     # Grant cluster-admin to provider-kubernetes so it can create
     # Deployments, Services, and other resources in any namespace
