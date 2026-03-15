@@ -163,23 +163,20 @@ spec:
                         app: support-postgresql
                     spec:
                       containers:
-                      - name: postgresql
-                        image: postgres:16-alpine
+                      - name: mysql
+                        image: mysql:8.0
                         ports:
-                        - containerPort: 5432
+                        - containerPort: 3306
                         env:
-                        - name: POSTGRES_DB
+                        - name: MYSQL_DATABASE
                           value: myapp
-                        - name: POSTGRES_USER
-                          value: postgres
-                        - name: POSTGRES_PASSWORD
+                        - name: MYSQL_USER
+                          value: root
+                        - name: MYSQL_ROOT_PASSWORD
                           value: demo-password
                         readinessProbe:
                           exec:
-                            command:
-                            - pg_isready
-                            - -U
-                            - postgres
+                            command: ["mysqladmin", "ping", "-h", "localhost"]
                           initialDelaySeconds: 5
                           periodSeconds: 5
       - name: postgresql-service
@@ -201,5 +198,5 @@ spec:
                     app: support-postgresql
                   ports:
                   - port: 5170
-                    targetPort: 5432
+                    targetPort: 3306
                     protocol: TCP
