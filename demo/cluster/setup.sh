@@ -687,6 +687,13 @@ install_crossplane_providers() {
 
     # Wait for CRD registration with mode-specific targets
     wait_for_crds
+
+    # On GKE, registering hundreds of CRDs can trigger an automatic control plane
+    # resize. The resize temporarily makes the API server unreachable, which kills
+    # subsequent helm installs. Wait for any ongoing operations to complete.
+    if [[ "${MODE}" == "gcp" ]]; then
+        wait_for_gke_operations
+    fi
 }
 
 # Wait for Crossplane provider CRDs to register, showing progress along the way.
@@ -758,6 +765,43 @@ wait_for_crds() {
     log_error "Check provider status:"
     kubectl get providers 2>/dev/null || true
     return 1
+}
+
+# Wait for any in-progress GKE cluster operations (e.g., control plane resize).
+# GKE auto-resizes the control plane when object count spikes (hundreds of CRDs).
+# During resize, the API server is temporarily unreachable — helm installs fail
+# with "TLS handshake timeout." This function polls until all operations complete.
+wait_for_gke_operations() {
+    log_info "Checking for in-progress GKE cluster operations..."
+
+    local timeout=600
+    local elapsed=0
+    local interval=15
+
+    while [[ $elapsed -lt $timeout ]]; do
+        local running_ops
+        running_ops=$(gcloud container operations list \
+            --project "${GCP_PROJECT}" \
+            --zone "${GCP_ZONE}" \
+            --filter="targetLink~${CLUSTER_NAME} AND status=RUNNING" \
+            --format="value(name,operationType)" 2>/dev/null || true)
+
+        if [[ -z "${running_ops}" ]]; then
+            log_success "No in-progress GKE operations"
+            return 0
+        fi
+
+        if (( elapsed % 60 == 0 )); then
+            local op_type
+            op_type=$(echo "${running_ops}" | head -1 | awk '{print $2}')
+            log_info "  [${elapsed}s] Waiting for GKE operation: ${op_type:-unknown}"
+        fi
+
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_warning "GKE operations still running after ${timeout}s — proceeding anyway"
 }
 
 # =============================================================================
