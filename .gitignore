@@ -17,6 +17,9 @@ chroma-data/
 # OS
 .DS_Store
 
+# Demo rehearsal outputs (cluster-specific URLs, large text)
+demo/runs/
+
 # Personal notes
 journal/
 .claude/design-decisions.md

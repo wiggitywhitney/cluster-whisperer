@@ -211,6 +211,7 @@ Re-validate the full demo after all milestone changes (M12 decoys, M13 conversat
 
 - [ ] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
 - [ ] Full demo flow: Act 2 (investigation, CRD wall), Act 3a (vector search + follow-up questions via --thread, finds correct ManagedService), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog)
+- [ ] Save full agent output from each Act to `demo/runs/<timestamp>-<notes>.txt` for comparison across rehearsals
 - [ ] Agent completes Act 3b without hitting recursion limit (#72)
 - [ ] No non-demo console noise during agent runs (#73)
 - [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
