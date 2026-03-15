@@ -824,10 +824,13 @@ configure_provider_kubernetes() {
     done
 
     # Step 2: Wait for the Object CRD to appear via MRAP activation.
-    # Check both the legacy CRD name and the v2 MRD.
+    # Crossplane v2's default MRAP activates MRDs that exist when it's created.
+    # If provider-kubernetes registers its MRDs after the MRAP was created,
+    # they stay Inactive. Fix: patch the MRAP to trigger re-evaluation.
     log_info "Waiting for Object CRD activation via MRAP..."
     local crd_elapsed=0
     local crd_timeout=180
+    local mrap_refreshed=false
     while [[ $crd_elapsed -lt $crd_timeout ]]; do
         # Check for both possible CRD names (legacy and v2 namespaced)
         if kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
@@ -838,8 +841,33 @@ configure_provider_kubernetes() {
             log_success "Object CRD registered (objects.kubernetes.m.crossplane.io)"
             break
         fi
+
+        # If MRDs exist but are Inactive after 30s, refresh the MRAP
+        if [[ "${mrap_refreshed}" == "false" && $crd_elapsed -ge 30 ]]; then
+            local inactive_count
+            inactive_count=$(kubectl get mrds 2>/dev/null | grep "kubernetes.*Inactive" | wc -l | tr -d ' ') || inactive_count=0
+            if [[ $inactive_count -gt 0 ]]; then
+                log_info "  Found ${inactive_count} Inactive kubernetes MRDs — refreshing default MRAP..."
+                # Patch the default MRAP to trigger re-evaluation of all MRDs
+                kubectl patch mrap default --type=merge \
+                    -p '{"spec":{"activate":["*"]}}' 2>/dev/null || \
+                # If no default MRAP exists, create one
+                kubectl apply -f - <<'MRAP_EOF' 2>/dev/null || true
+apiVersion: apiextensions.crossplane.io/v1alpha1
+kind: ManagedResourceActivationPolicy
+metadata:
+  name: provider-kubernetes
+spec:
+  activate:
+  - "*.kubernetes.crossplane.io"
+  - "*.kubernetes.m.crossplane.io"
+MRAP_EOF
+                mrap_refreshed=true
+                log_info "  MRAP refreshed — waiting for activation..."
+            fi
+        fi
+
         if (( crd_elapsed % 30 == 0 )); then
-            # Show MRD status for debugging
             local mrd_count
             mrd_count=$(kubectl get mrds 2>/dev/null | grep -c "kubernetes" || echo "0")
             log_info "  [${crd_elapsed}s] kubernetes MRDs found: ${mrd_count}, waiting for CRD activation..."
@@ -855,7 +883,7 @@ configure_provider_kubernetes() {
         log_error "MRD status:"
         kubectl get mrds 2>/dev/null | grep -i "kubernetes\|object" || true
         log_error "MRAP status:"
-        kubectl get mrap 2>/dev/null || true
+        kubectl get mrap -o wide 2>/dev/null || true
         return 1
     fi
 
