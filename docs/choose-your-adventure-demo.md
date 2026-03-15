@@ -93,7 +93,7 @@ export CLUSTER_WHISPERER_TOOLS=kubectl,vector
 export CLUSTER_WHISPERER_THREAD=demo
 ```
 
-The `--thread` flag enables multi-turn conversation memory. Same thread ID across
+The `CLUSTER_WHISPERER_THREAD` env var enables multi-turn conversation memory. Same thread ID across
 invocations means the agent remembers what was said before.
 
 **Turn 1** — the presenter asks a broad question:
