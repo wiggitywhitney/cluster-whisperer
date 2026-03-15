@@ -687,13 +687,6 @@ install_crossplane_providers() {
 
     # Wait for CRD registration with mode-specific targets
     wait_for_crds
-
-    # On GKE, registering hundreds of CRDs can trigger an automatic control plane
-    # resize. The resize temporarily makes the API server unreachable, which kills
-    # subsequent helm installs. Wait for any ongoing operations to complete.
-    if [[ "${MODE}" == "gcp" ]]; then
-        wait_for_gke_operations
-    fi
 }
 
 # Wait for Crossplane provider CRDs to register, showing progress along the way.
@@ -1966,6 +1959,14 @@ main() {
     install_crossplane
     install_crossplane_providers
     install_platform_compositions
+
+    # On GKE, the burst of CRDs + XRDs + Compositions can trigger a control plane
+    # resize. Wait for it to complete before starting helm installs, which need
+    # a stable API server connection.
+    if [[ "${MODE}" == "gcp" ]]; then
+        wait_for_gke_operations
+    fi
+
     install_chroma
     install_qdrant
     verify_vector_dbs
