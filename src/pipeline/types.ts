@@ -56,6 +56,9 @@ export interface DiscoveredResource {
   isCRD: boolean;
   /** kubectl explain --recursive output for LLM analysis */
   schema: string;
+  /** Raw spec description from kubectl explain — organizational details
+   *  (team names, app names, people) indexed alongside the LLM description. */
+  specDescription?: string;
 }
 
 /**
@@ -191,6 +194,9 @@ export interface ResourceCapability {
   exampleYaml: string;
   /** LLM's confidence in its analysis (0 = guessing, 1 = certain) */
   confidence: number;
+  /** Raw spec description from kubectl explain — organizational details
+   *  (team names, app names, people) indexed alongside the LLM description. */
+  specDescription?: string;
 }
 
 /**

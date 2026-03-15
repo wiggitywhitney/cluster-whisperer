@@ -90,22 +90,50 @@ The presenter sets the vector backend based on the vote and adds the vector tool
 ```bash
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant   # (or chroma)
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
+export CLUSTER_WHISPERER_THREAD=demo
 ```
+
+The `--thread` flag enables multi-turn conversation memory. Same thread ID across
+invocations means the agent remembers what was said before.
+
+**Turn 1** — the presenter asks a broad question:
 
 ```bash
-cluster-whisperer "What database should I deploy for my app, and can you set it up?"
+cluster-whisperer "What database should I deploy for my app?"
 ```
 
-The agent searches the vector database, finds the one platform-approved PostgreSQL
-resource among hundreds of CRDs (`managedservices.platform.acme.io`), and recommends it
-with example YAML. But it **cannot deploy** — it doesn't have the apply tool.
+The agent searches the vector database and finds multiple ManagedService resources from
+different teams (Payments, Data, Marketing, Inventory, etc.) — all with similar names
+and capabilities. There are 20 of them. The agent **does not guess**. It asks the
+presenter follow-up questions: what team are you on? What type of app?
 
-> "The agent found the answer, but it can't act on it. Let's give it the ability
-> to deploy — but only from the approved catalog."
+**Turn 2** — the presenter gives a vague answer:
+
+```bash
+cluster-whisperer "I'm not sure about most of that. My team is called the You Choose team. I don't know if it's Postgres or MySQL."
+```
+
+The agent searches again using "You Choose" as context. This time it finds
+`managedservices.platform.acme.io` — the one resource whose description mentions
+"You Choose project" and "Whitney and Viktor." The agent recommends it with example
+YAML and asks: "Would you like me to deploy this?"
+
+**Turn 3** — the presenter says yes:
+
+```bash
+cluster-whisperer "Yes please, will you deploy it for me?"
+```
+
+The agent recognizes it **cannot deploy** — it doesn't have the apply tool. It provides
+the YAML and suggests `kubectl apply` manually.
+
+> "The agent found the needle in the haystack — one resource out of twenty with the
+> same name, because it has semantic understanding of what each one does. But it can't
+> act on it. Let's give it the ability to deploy — but only from the approved catalog."
 
 ### Act 3b: Agent Deploys
 
-The presenter adds the apply tool:
+The presenter adds the apply tool (new thread — clean slate for the deploy):
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
@@ -116,11 +144,12 @@ Now the agent has `kubectl_apply`, but it can only deploy resources from the app
 platform catalog. The tool validates the resource type against the capabilities
 collection before applying — this is enforced in code, not in the prompt.
 
-The agent deploys the platform-approved ManagedService.
+The agent deploys the platform-approved ManagedService. The PostgreSQL database comes
+up, and the demo app transitions from CrashLoopBackOff to Running — the audience sees
+the app come alive.
 
-> "The agent found the right resource out of hundreds of options because it has
-> semantic understanding of what each one does. And it could only deploy resources
-> from the approved catalog — the platform team controls what's allowed."
+> "The agent found the right resource, and it could only deploy from the approved
+> catalog — the platform team controls what's allowed."
 
 But how can platform engineers understand who is using their agent, and how, and for what?
 
@@ -155,10 +184,16 @@ export CLUSTER_WHISPERER_TOOLS=kubectl
 cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 cluster-whisperer "Can you help me fix this? Which database should I deploy?"
 
-# Vote 2 result → Act 3a (vector search, no deploy)
+# Vote 2 result → Act 3a (vector search, multi-turn conversation)
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-cluster-whisperer "What database should I deploy for my app, and can you set it up?"
+export CLUSTER_WHISPERER_THREAD=demo
+cluster-whisperer "What database should I deploy for my app?"
+# Agent finds 20 similar ManagedService resources, asks follow-up questions
+cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
+# Agent narrows to platform.acme.io, recommends it, offers YAML
+cluster-whisperer "Yes please, will you deploy it for me?"
+# Agent says it can't — no apply tool
 
 # Act 3b: add the apply tool → agent can now deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply

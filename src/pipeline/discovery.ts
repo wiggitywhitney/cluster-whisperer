@@ -293,6 +293,11 @@ export async function discoverResources(
       ? `${specDescription}\n\n--- Field structure (recursive) ---\n\n${explainResult.output}`
       : explainResult.output;
 
+    // Extract the DESCRIPTION section — organizational details (team names,
+    // app names, people) are critical for distinguishing similar resources.
+    const descMatch = specDescription.match(/DESCRIPTION:\s*\n([\s\S]*?)(?=\nFIELDS:|\n[A-Z]+:|\s*$)/);
+    const rawSpecDescription = descMatch ? descMatch[1].trim() : undefined;
+
     discovered.push({
       name: fqName,
       apiVersion: resource.apiVersion,
@@ -301,6 +306,7 @@ export async function discoverResources(
       namespaced: resource.namespaced,
       isCRD: crdNames.has(fqName),
       schema: fullSchema,
+      specDescription: rawSpecDescription,
     });
   }
 

@@ -29,7 +29,7 @@ Your job is to extract structured information that helps a developer understand 
    - "medium": Moderate configuration OR needs some coordination with other resources
    - "high": Complex configuration OR requires orchestrating many resources OR both
 
-5. Write a concise **description** (1-2 sentences) of what this resource does. Write for a developer who has never seen this resource before.
+5. Write a concise **description** (1-2 sentences) of what this resource does. Write for a developer who has never seen this resource before. If the schema includes organizational context — team names, application names, project names, or people — preserve those details in the description. This context is critical for distinguishing similar resources from different teams.
 
 6. Write a **useCase** sentence describing when and why a developer would use this resource. Start with a verb like "Deploy", "Configure", "Manage".
 
@@ -39,18 +39,33 @@ Your job is to extract structured information that helps a developer understand 
 
 ## Examples
 
-### High-level database abstraction (Crossplane Composite)
-A resource with fields like `spec.parameters.engine` (postgresql, mysql), `spec.parameters.size`, `spec.parameters.region`, and `spec.compositionRef`:
+### Team-specific platform resource (Crossplane Composite with organizational context)
+A resource in the `payments.acme.io` API group. The spec description says "Platform-provided PostgreSQL database provisioned by the Acme platform team for the Payments division. Used by Sarah Chen's Transaction Processing App." Fields include `spec.engine` (postgresql), `spec.storageGB`, `spec.instanceSize`, `spec.highAvailability`:
 
 ```json
 {
-  "capabilities": ["database", "postgresql", "mysql", "managed-database"],
-  "providers": ["aws", "gcp", "azure"],
+  "capabilities": ["database", "postgresql", "managed-database", "backup", "high-availability"],
+  "providers": [],
   "complexity": "low",
-  "description": "Managed SQL database that abstracts away infrastructure details, supporting multiple database engines.",
-  "useCase": "Deploy a managed SQL database without dealing with provider-specific configuration.",
-  "exampleYaml": "apiVersion: devopstoolkit.live/v1beta1\nkind: SQL\nmetadata:\n  name: my-database\nspec:\n  engine: postgresql\n  size: medium",
-  "confidence": 0.92
+  "description": "Platform-provided PostgreSQL database for the Payments division, used by Sarah Chen's Transaction Processing App. Abstracts away provider details — developers configure engine, size, and storage.",
+  "useCase": "Deploy a managed PostgreSQL database for the Payments division's transaction processing workflows.",
+  "exampleYaml": "apiVersion: payments.acme.io/v1alpha1\nkind: ManagedService\nmetadata:\n  name: transaction-db\nspec:\n  engine: postgresql\n  storageGB: 100\n  instanceSize: medium",
+  "confidence": 0.93
+}
+```
+
+### Team-specific platform resource (different team, same kind)
+A resource in the `data.acme.io` API group. The spec description says "Platform-provided PostgreSQL database provisioned by the Acme platform team for the Data division. Used by Rachel Torres's Data Lake Manager." Fields include `spec.engine` (postgresql), `spec.storageGB`, `spec.instanceSize`:
+
+```json
+{
+  "capabilities": ["database", "postgresql", "managed-database", "backup", "high-availability"],
+  "providers": [],
+  "complexity": "low",
+  "description": "Platform-provided PostgreSQL database for the Data division, used by Rachel Torres's Data Lake Manager. Developers configure engine, size, and storage while the platform handles provisioning.",
+  "useCase": "Deploy a managed PostgreSQL database for the Data division's data lake workflows.",
+  "exampleYaml": "apiVersion: data.acme.io/v1alpha1\nkind: ManagedService\nmetadata:\n  name: data-lake-db\nspec:\n  engine: postgresql\n  storageGB: 500\n  instanceSize: large",
+  "confidence": 0.93
 }
 ```
 

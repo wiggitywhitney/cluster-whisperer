@@ -177,7 +177,7 @@ Make the "needle in the haystack" genuinely hard to find. The agent can't shortc
 - [x] Fix Chroma `$and` filter for multi-key `where` queries (`normalizeWhereFilter` in chroma-backend.ts)
 - [x] Verify: `kubectl get crd | grep managedservice` shows 20 ManagedService CRDs, all equally opaque
 - [x] Verify: both vector DBs synced with 1102 capabilities (1083 original + 19 decoys) — Chroma and Qdrant confirmed
-- [ ] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService
+- [x] Verify: vector search for "database for my app" returns multiple results, agent asks follow-up questions, presenter answers, agent narrows to the correct ManagedService
 
 ### M13: LangGraph Conversation Memory (--thread flag)
 
@@ -187,11 +187,11 @@ Enable multi-turn CLI conversations so the agent can ask follow-up questions and
 - [x] Integrate LangGraph checkpointer (file-based MemorySaver wrapper — avoids @langchain/langgraph-checkpoint-sqlite peer dep conflict)
 - [x] Same thread ID resumes the conversation — agent sees prior messages and tool results
 - [x] Without `--thread`, behavior is unchanged (one-shot, no persistence)
-- [x] Refine investigator system prompt: when using vector search and multiple similar results appear, specifically ask "which team is this for?" among other follow-up questions (builds on M12 prompt work, but needs to be more directive now that conversation memory exists)
+- [x] Refine investigator system prompt and vector_search tool description: ambiguity guidance moved to tool description ("only ONE will work, do NOT guess"), system prompt has light bullet only. Agent decides what follow-up questions to ask — not prescribed.
 - [x] Plumbing ready for Vercel agent to use the same thread mechanism (PRD #49) — checkpointer passed through CreateAgentOptions
 - [x] Discovery pipeline enriched: kubectl explain spec descriptions included alongside recursive field structure, so LLM sees team/app context from XRDs
-- [ ] Verified: two sequential CLI invocations with the same thread ID share conversation context
-- [ ] Verified: vector DB contains Whitney/Viktor context in platform.acme.io description after re-sync
+- [x] Verified: two sequential CLI invocations with the same thread ID share conversation context
+- [x] Verified: vector DB contains Whitney/Viktor context in platform.acme.io description after re-sync
 
 ### M14: Working ManagedService Composition (App Comes Alive)
 
@@ -378,3 +378,10 @@ All changes are additive:
 | 2026-03-15 | Kind-first verification before GKE | GKE cycles take 45+ minutes and cost money. Verify provider-kubernetes, Composition, and ManagedService claim work on Kind first. GKE-specific verification (full demo flow, traces, sync) happens during M11 rehearsal. |
 | 2026-03-15 | Crossplane v2 MRAP activation for provider-kubernetes | Crossplane v2.2.0 uses MRDs + MRAPs instead of registering CRDs directly. The default MRAP (`"*"`) activates all MRDs, but activation is asynchronous — provider becomes Healthy before its MRDs become CRDs. Setup script now waits in two phases: Provider healthy, then CRD activation. |
 | 2026-03-15 | Save demo run outputs for comparison | Demo changes are iterative and tedious. Saving full agent output to `demo/runs/` after each rehearsal enables comparing runs, catching regressions, and tracking improvements. Directory is gitignored (cluster-specific URLs). |
+| 2026-03-15 | Ambiguity guidance in tool description, not system prompt | System-level "ask follow-up questions" could make the agent hesitant during Acts 1-2 (kubectl investigation). Moved ambiguity handling to the vector_search tool description so it only activates when vector search is in use. System prompt just has a light bullet: "ask for context before choosing." |
+| 2026-03-15 | Don't prescribe follow-up questions in prompts | Original prompt told the agent to ask "Which team?" and "What application?" — too on-the-nose for the demo. Updated to just say "only ONE will work, do NOT guess, ask follow-up questions" and let the agent figure out what to ask. Agent independently asks about team, app type, and database preference. |
+| 2026-03-15 | Inference prompt examples with organizational context | Haiku was stripping team names and people from descriptions because all examples produced generic text. Added two examples using real decoy XRD descriptions (Payments/Sarah Chen, Data/Rachel Torres) showing organizational context preserved in output. Haiku follows examples over instruction text. |
+| 2026-03-15 | specDescription safety net in vector DB | LLM inference may summarize away organizational details even with good examples. Raw `kubectl explain` spec description is now extracted during discovery and appended to the vector document as "Resource description: ..." — a safety net for keyword and semantic search. Both the LLM description and raw description are searchable. |
+| 2026-03-15 | File-checkpointer binary serialization fix | MemorySaver's internal storage contains Uint8Array values. JSON.stringify converted them to `{"0":123,...}` objects that lost their type on reload. Fixed with base64 encoding (custom replacer/reviver). Threading now works across CLI invocations. |
+| 2026-03-15 | Act 3a is now a three-turn conversation | Original single question couldn't show the needle-in-haystack + follow-up + tool limitation narrative. New flow: (1) "What database?" → agent finds 20, asks questions; (2) "You Choose team" → agent narrows to platform.acme.io; (3) "Deploy it?" → agent says it can't (no apply tool). Each turn demonstrates a different capability. |
+| 2026-03-15 | Anthropic API key switched to anthropic_key_ddog | Original `anthropic-api-key` secret in GCP had insufficient credits for direct Anthropic API calls (needed when stripping Datadog gateway headers). Switched .vals.yaml to `anthropic_key_ddog` secret. |

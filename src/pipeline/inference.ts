@@ -235,6 +235,8 @@ export async function inferCapability(
     kind: resource.kind,
     // LLM-inferred fields
     ...llmResult,
+    // Raw spec description preserved for search indexing
+    ...(resource.specDescription ? { specDescription: resource.specDescription } : {}),
   };
 }
 
@@ -278,6 +280,10 @@ export async function inferCapabilities(
         onProgress(
           `Inferring capabilities (${i + 1} of ${resources.length}): ${resource.name} [cached]`
         );
+        // Merge specDescription from current discovery (may not exist in old cache entries)
+        if (resource.specDescription && !cached.specDescription) {
+          cached.specDescription = resource.specDescription;
+        }
         results.push(cached);
         continue;
       }

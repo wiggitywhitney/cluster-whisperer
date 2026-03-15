@@ -114,7 +114,7 @@ Collections:
 - "capabilities": Resource type descriptions (CRDs, built-in types). Search here to find WHAT types exist.
 - "instances": Running resource metadata. Search here to find WHAT is deployed.
 
-IMPORTANT: This cluster has many similar resources from different teams (e.g., multiple ManagedService types). If your search returns several results of the same kind, do NOT guess which one is correct. Ask the user which team, application, or person the resource is for, then refine your search with that context.`;
+IMPORTANT: This cluster has many similar-looking resources, but only ONE will work for any given situation. If your search returns multiple results of the same kind, do NOT guess which one is correct — the wrong choice will break things. Ask the user follow-up questions to narrow down to the single correct resource, then refine your search with their answers.`;
 
 /**
  * Execute a unified vector search against the vector database.

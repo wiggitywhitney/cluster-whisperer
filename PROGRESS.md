@@ -5,6 +5,10 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 ## [Unreleased]
 
 ### Changed
+- (2026-03-15) Demo modifications (PRD #48 M12/M13): Ambiguity guidance moved from investigator system prompt to vector_search tool description — activates only when vector search is in use, prevents agent hesitancy during kubectl-only investigation
+- (2026-03-15) Demo modifications (PRD #48 M12/M13): Follow-up questions no longer prescribed in prompts — agent decides what to ask based on search results. Inference prompt updated with team-preserving examples (Haiku now keeps organizational context in descriptions)
+- (2026-03-15) Demo modifications (PRD #48 M13): specDescription pipeline — raw kubectl explain descriptions extracted in discovery, passed through inference (fresh + cached paths), appended to vector DB embedding text as safety net for keyword/semantic search
+- (2026-03-15) Demo modifications (PRD #48 M13): Act 3a updated to three-turn threaded conversation: (1) broad question → agent finds 20 similar results, asks follow-ups; (2) vague answer → agent narrows to platform.acme.io via "You Choose" context; (3) deploy request → agent says it can't (no apply tool)
 - (2026-03-15) Demo cluster (PRD #48 M14): Pared Crossplane providers from 35 to 16 sub-providers (~360 CRDs), keeping database providers + ec2/lambda/compute for variety. Faster setup, lower resource usage.
 - (2026-03-15) Demo cluster (PRD #48 M14): Decoy xRD descriptions reframed as "Platform-provided database provisioned by the Acme platform team" — strengthens needle-in-haystack vector search narrative
 - (2026-03-15) Demo cluster (PRD #48 M14): Replaced AWS RDS Composition with in-cluster PostgreSQL via provider-kubernetes Object resources — app comes alive when agent deploys ManagedService
@@ -84,6 +88,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi
 
 ### Fixed
+- (2026-03-15) Demo modifications (PRD #48 M13): File-checkpointer binary serialization — MemorySaver Uint8Array values now base64-encoded during JSON serialization, fixing thread persistence across CLI invocations
 - (2026-03-14) Demo modifications (PRD #48 M10): QdrantBackend `collectionExists` returned `{ exists: boolean }` not `boolean` — destructuring fix prevents silent collection creation failure
 - (2026-03-14) Demo modifications (PRD #48 M10): Backend constructors now read `CLUSTER_WHISPERER_CHROMA_URL`/`CLUSTER_WHISPERER_QDRANT_URL` env vars — agent connects to ingress URLs when running locally against remote cluster
 - (2026-03-14) Demo modifications (PRD #48 M10): Generated `demo/.env` now includes `OTEL_TRACING_ENABLED=true` and `OTEL_EXPORTER_TYPE=otlp` — tracing was silently disabled without these

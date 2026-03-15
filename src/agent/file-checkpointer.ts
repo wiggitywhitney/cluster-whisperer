@@ -16,6 +16,13 @@
  * 1. On startup: load the JSON file into a fresh MemorySaver
  * 2. Agent runs normally using the MemorySaver checkpointer
  * 3. On shutdown: serialize MemorySaver's storage back to the JSON file
+ *
+ * Binary data handling:
+ * MemorySaver's internal storage contains Uint8Array values (serialized
+ * LangGraph state). Plain JSON.stringify converts these to objects like
+ * {"0":123,"1":34,...} which lose their type. We use a custom replacer/
+ * reviver that encodes Uint8Array as base64 strings with a type marker,
+ * preserving binary data across save/load cycles.
  */
 
 import { MemorySaver } from "@langchain/langgraph";
@@ -24,6 +31,32 @@ import * as path from "path";
 
 /** Default directory for thread checkpoint files */
 const DEFAULT_THREADS_DIR = path.join(process.cwd(), "data", "threads");
+
+/** Marker prefix for base64-encoded Uint8Array values in JSON */
+const UINT8_MARKER = "__uint8__:";
+
+/**
+ * JSON replacer that converts Uint8Array to base64 strings with a type marker.
+ * This preserves binary checkpoint data through JSON serialization.
+ */
+function binaryReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return UINT8_MARKER + Buffer.from(value).toString("base64");
+  }
+  return value;
+}
+
+/**
+ * JSON reviver that converts base64-marked strings back to Uint8Array.
+ * Reverses the binaryReplacer transformation on load.
+ */
+function binaryReviver(_key: string, value: unknown): unknown {
+  if (typeof value === "string" && value.startsWith(UINT8_MARKER)) {
+    const base64 = value.slice(UINT8_MARKER.length);
+    return new Uint8Array(Buffer.from(base64, "base64"));
+  }
+  return value;
+}
 
 /**
  * Creates a MemorySaver pre-populated with checkpoint data from a file.
@@ -41,7 +74,10 @@ export function loadCheckpointer(
 
   if (fs.existsSync(filePath)) {
     try {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      const data = JSON.parse(
+        fs.readFileSync(filePath, "utf-8"),
+        binaryReviver
+      );
       // Restore internal storage and writes from the saved state
       if (data.storage) {
         Object.assign(checkpointer.storage, data.storage);
@@ -84,7 +120,7 @@ export function saveCheckpointer(
     writes: checkpointer.writes,
   };
 
-  fs.writeFileSync(filePath, JSON.stringify(data), "utf-8");
+  fs.writeFileSync(filePath, JSON.stringify(data, binaryReplacer), "utf-8");
 }
 
 /**

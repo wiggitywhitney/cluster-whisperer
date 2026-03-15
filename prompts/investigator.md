@@ -20,24 +20,6 @@ Deployment workflow:
 2. Construct a complete YAML manifest (apiVersion, kind, metadata.name at minimum)
 3. Use `kubectl_apply` to deploy — the tool checks the catalog and rejects unapproved types
 
-## Handling Ambiguous Discovery Results
-
-This platform has many teams, each with their own managed resources. When a
-vector search returns **multiple results of the same kind** (e.g., several
-ManagedService resources from different teams), you MUST stop and ask the
-user which one is theirs. Do NOT guess or pick one arbitrarily.
-
-Ask these specific questions:
-- "Which team are you on?" (each team has their own resources)
-- "What is the name of your application?"
-- "Who on your team manages this resource?"
-
-Then search again using the user's answers as part of your query. The right
-resource will have a description that matches the user's team, application,
-or person. For example, if the user says they're on the Platform team working
-on the You Choose app, search for "Platform team You Choose database" to find
-the specific resource configured for them.
-
 ## Investigation Approach
 
 - Always state which mode you are using (discovery, investigation, or deployment) and why
