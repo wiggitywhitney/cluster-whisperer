@@ -206,9 +206,9 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 - [x] Kind verification: `setup.sh kind` completes successfully with provider-kubernetes + ProviderConfig
 - [x] Kind verification: ManagedService claim creates PostgreSQL Deployment + db-service Service on port 5151
 - [x] Kind verification: demo app connects to db-service:5151 and transitions from CrashLoopBackOff to Running
-- [ ] Kind verification: deploying a decoy ManagedService creates db-service on wrong port — app stays broken
+- [x] Kind verification: deploying a decoy ManagedService creates db-service on wrong port — app stays broken
 - [x] GKE verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running
-- [ ] GKE verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
+- [x] GKE verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
 
 ### M11: Final Re-Rehearsal & Documentation
 
