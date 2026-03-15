@@ -11,7 +11,7 @@
  * the cache automatically misses and the resource is re-inferred.
  *
  * Why this exists:
- * The sync pipeline processes ~1000 CRDs sequentially through Claude Haiku,
+ * The sync pipeline processes hundreds of CRDs sequentially through Claude Haiku,
  * taking ~30 minutes and ~$3 in API costs. If storage fails after inference
  * completes, the entire inference must be re-run without caching.
  *

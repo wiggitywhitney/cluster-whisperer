@@ -4,6 +4,13 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 
 ## [Unreleased]
 
+### Changed
+- (2026-03-15) Demo cluster (PRD #48 M14): Pared Crossplane providers from 35 to 16 sub-providers (~360 CRDs), keeping database providers + ec2/lambda/compute for variety. Faster setup, lower resource usage.
+- (2026-03-15) Demo cluster (PRD #48 M14): Decoy xRD descriptions reframed as "Platform-provided database provisioned by the Acme platform team" — strengthens needle-in-haystack vector search narrative
+- (2026-03-15) Demo cluster (PRD #48 M14): Replaced AWS RDS Composition with in-cluster PostgreSQL via provider-kubernetes Object resources — app comes alive when agent deploys ManagedService
+- (2026-03-15) Demo cluster (PRD #48 M14): Service port 5151 (non-standard) hides PostgreSQL from kubectl describe; decoy Compositions use unique wrong ports (5152-5170)
+- (2026-03-15) Demo cluster (PRD #48 M14): Added provider-kubernetes with ProviderConfig (InjectedIdentity) and RBAC setup to setup.sh
+
 ### Added
 - Demo app (PRD #46 M1): Hono web server with PostgreSQL connection logic, agent-friendly error messages, health and status endpoints, 9 passing tests
 - Demo app (PRD #46 M2): Multi-stage Dockerfile with Node 22 Alpine, verified crash behavior without DATABASE_URL and connection errors with unreachable host
@@ -17,7 +24,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - Demo cluster (PRD #47 M6): Teardown script with Kind and GKE cluster discovery/deletion, billing warnings for GKE, KUBECONFIG cleanup
 - Demo cluster (PRD #47 decisions): Pivoted to GKE as first-class target — Kind single-node overwhelmed by 150 providers (41 GB RAM). Added `kind|gcp` mode design, curated provider subset for Kind
 
-- Demo cluster (PRD #47 M2): Platform PostgreSQL XRD (apiextensions.crossplane.io/v2) and Composition (Pipeline mode with function-patch-and-transform) — the "needle in the haystack" among ~1,000 CRDs
+- Demo cluster (PRD #47 M2): Platform PostgreSQL XRD (apiextensions.crossplane.io/v2) and Composition (Pipeline mode with function-patch-and-transform) — the "needle in the haystack" among ~360 CRDs
 - Demo cluster (PRD #47 M2): XRD defines ManagedService with rich field descriptions (engine, version, storage, HA, backup, network) for inference pipeline discovery
 - Demo cluster (PRD #47 M2): Composition maps to AWS RDS Instance with size-to-instance-class transform, Multi-AZ, and subnet group
 - Demo cluster (PRD #47 M2): setup.sh integration — installs function-patch-and-transform, applies XRD with CRD registration wait, then Composition
@@ -71,7 +78,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored setup.sh kubeconfig handling — export KUBECONFIG after cluster creation, removed ~80 `--kubeconfig` flag occurrences, Kind uses `kind export kubeconfig` for additive merge
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Refactored teardown.sh — surgical removal of per-cluster kubeconfig entries via `kubectl config delete-*` instead of deleting the file
 - (2026-03-12) Demo cluster (PRD #47 M8 prep): Removed vals dependency from setup.sh — reads API keys from plain env vars, auto-sources `.env` from repo root if present
-- Demo cluster (PRD #47 M1): Unified both modes to use curated 35-provider subset (~1,000 CRDs), down from 148 providers (1,900 CRDs). Deleted batch-1 through batch-5 manifests.
+- Demo cluster (PRD #47 M1): Unified both modes to use curated provider subset, down from 148 providers (1,900 CRDs). Later pared to 16 sub-providers (~360 CRDs) — database-focused with a few variety providers.
 - Demo cluster (PRD #47 M1): Switched to n2-standard-4 machine type (n1 hit GCE_STOCKOUT), zonal clusters (regional exceeded CPU quota), zone auto-detection via ipinfo.io timezone
 - Demo cluster (PRD #47 M1): Reduced Crossplane memory 4Gi → 2Gi, increased CRD wait timeout 10min → 20min for cold image pulls
 - Demo cluster (PRD #47 M1): Verified clean GKE run — 1,040 CRDs, all 37 providers healthy, Crossplane stable at 618Mi/2Gi

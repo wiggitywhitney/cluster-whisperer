@@ -25,7 +25,7 @@ spec:
             - containerPort: 3000
           env:
             - name: DATABASE_URL
-              value: "db-service:5432/myapp"
+              value: "db-service:5151/myapp"
           livenessProbe:
             httpGet:
               path: /healthz

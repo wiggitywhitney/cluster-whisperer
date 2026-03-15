@@ -8,8 +8,8 @@
 # providing the "overwhelming Kubernetes environment" for the demo narrative.
 #
 # Usage:
-#   ./demo/cluster/setup.sh kind   # Local Kind cluster (~1,000 CRDs)
-#   ./demo/cluster/setup.sh gcp    # GKE cluster (~1,000 CRDs)
+#   ./demo/cluster/setup.sh kind   # Local Kind cluster (~360 CRDs)
+#   ./demo/cluster/setup.sh gcp    # GKE cluster (~360 CRDs)
 #
 # The script uses a dedicated KUBECONFIG file (~/.kube/config-cluster-whisperer).
 # Credentials are merged into this file (not overwritten), so multiple clusters
@@ -644,8 +644,8 @@ install_crossplane() {
 # =============================================================================
 
 install_crossplane_providers() {
-    log_info "Installing curated Crossplane provider subset (35 sub-providers)..."
-    log_info "This registers ~1,000 CRDs. First run pulls images (slow)."
+    log_info "Installing curated Crossplane provider subset (16 sub-providers)..."
+    log_info "This registers ~365 CRDs. First run pulls images (slow)."
     log_info "Subsequent runs use cached images and are much faster."
 
     # Batch 0 (family providers) is always required — sub-providers depend on it.
@@ -693,8 +693,8 @@ install_crossplane_providers() {
 # Provider family packages install sub-providers that each register their own CRDs.
 # This is the slowest part of setup (5-10 minutes on GKE, 3-5 minutes on Kind).
 wait_for_crds() {
-    local target=800   # Curated 35 sub-providers: ~1,000 CRDs expected
-    local timeout=1800 # 30 minutes — cold starts pull ~37 container images
+    local target=300   # Curated 16 sub-providers: ~365 CRDs expected
+    local timeout=1800 # 30 minutes — cold starts pull ~14 container images
     local elapsed=0
     local interval=10
     local prev_count=0
@@ -741,7 +741,7 @@ wait_for_crds() {
     # Didn't hit target but may still have enough CRDs for the demo.
     # Retry the final count to avoid failing on a transient blip at timeout boundary.
     local final_count
-    local min_acceptable=200  # Minimum CRD count to consider "good enough" for the demo
+    local min_acceptable=150  # Minimum CRD count to consider "good enough" for the demo
     final_count=$(kubectl get crds --no-headers 2>/dev/null | wc -l | tr -d ' ') || final_count=0
     if [[ $final_count -lt $min_acceptable ]]; then
         sleep 2
@@ -789,6 +789,51 @@ EOF
     log_success "function-patch-and-transform installed"
 }
 
+# Configure provider-kubernetes for composing native K8s resources.
+# The provider is installed via the batch manifests; this function waits
+# for its CRDs, grants RBAC, and applies the ProviderConfig.
+configure_provider_kubernetes() {
+    log_info "Configuring provider-kubernetes for in-cluster access..."
+
+    # Wait for the Object CRD to register (provider-kubernetes is installed
+    # in the batch, but CRD registration takes a few seconds)
+    local elapsed=0
+    local timeout=120
+    while [[ $elapsed -lt $timeout ]]; do
+        if kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    if ! kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
+        log_error "provider-kubernetes CRD did not register within ${timeout}s"
+        return 1
+    fi
+    log_success "provider-kubernetes CRDs registered"
+
+    # Grant cluster-admin to provider-kubernetes so it can create
+    # Deployments, Services, and other resources in any namespace
+    local sa_name
+    sa_name=$(kubectl get sa -n crossplane-system -o name 2>/dev/null \
+        | grep provider-kubernetes | head -1 | sed 's|serviceaccount/||') || true
+
+    if [[ -n "${sa_name}" ]]; then
+        kubectl create clusterrolebinding provider-kubernetes-admin-binding \
+            --clusterrole=cluster-admin \
+            --serviceaccount="crossplane-system:${sa_name}" \
+            2>/dev/null || log_info "RBAC binding already exists"
+        log_success "RBAC configured for provider-kubernetes"
+    else
+        log_warning "provider-kubernetes service account not found — RBAC skipped"
+    fi
+
+    # Apply ProviderConfig for in-cluster identity
+    kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"
+    log_success "ProviderConfig kubernetes-in-cluster applied"
+}
+
 # Apply 20 ManagedService XRDs and Compositions — one real (platform.acme.io
 # for Whitney/Viktor's You Choose app) and 19 decoys for fake teams. All 20
 # look identical from `kubectl get crd`, forcing the agent to use vector search
@@ -797,6 +842,7 @@ install_platform_compositions() {
     log_info "Applying 20 ManagedService XRDs and Compositions..."
 
     install_composition_function
+    configure_provider_kubernetes
 
     # Apply the real XRD + Composition first
     kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
@@ -1234,7 +1280,7 @@ verify_trace_pipeline() {
 # =============================================================================
 
 # Run the capability inference pipeline to populate both Chroma and Qdrant
-# vector databases with descriptions of all ~1,000 CRDs. This makes them
+# vector databases with descriptions of all ~360 CRDs. This makes them
 # searchable by meaning (e.g., "PostgreSQL database" finds the platform XRD).
 #
 # Uses MultiBackendVectorStore: a single pipeline run populates both backends,
@@ -1245,7 +1291,7 @@ verify_trace_pipeline() {
 # Requires create_ingress_resources to have run first.
 run_capability_inference() {
     log_info "Running capability inference pipeline..."
-    log_info "This analyzes ~1,000 CRDs via LLM and stores descriptions in both Chroma and Qdrant."
+    log_info "This analyzes ~360 CRDs via LLM and stores descriptions in both Chroma and Qdrant."
     log_info "First run takes 10-15 minutes (LLM inference is the bottleneck)."
 
     if [[ -z "${ANTHROPIC_API_KEY:-}" || -z "${VOYAGE_API_KEY:-}" ]]; then
@@ -1685,8 +1731,8 @@ usage() {
     echo "Usage: $0 <kind|gcp> [--verify-only]"
     echo ""
     echo "Modes:"
-    echo "  kind   Create a local Kind cluster (~1,000 CRDs)"
-    echo "  gcp    Create a GKE cluster (~1,000 CRDs)"
+    echo "  kind   Create a local Kind cluster (~360 CRDs)"
+    echo "  gcp    Create a GKE cluster (~360 CRDs)"
     echo ""
     echo "Options:"
     echo "  --verify-only   Skip cluster creation, only run verification steps"

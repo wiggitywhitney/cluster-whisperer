@@ -493,7 +493,7 @@ This is what the cluster-whisperer agent sees when it investigates. The error me
 
 ## Demo Cluster
 
-The `demo/cluster/` directory contains scripts to provision a complete demo environment on GKE. A single command creates a Kubernetes cluster with ~1,000 Crossplane CRDs, two vector databases, two observability backends, the demo app in CrashLoopBackOff, and a live cluster-whisperer instance — everything needed for the KubeCon "Choose Your Own Adventure" demo.
+The `demo/cluster/` directory contains scripts to provision a complete demo environment on GKE. A single command creates a Kubernetes cluster with ~360 Crossplane CRDs, two vector databases, two observability backends, the demo app in CrashLoopBackOff, and a live cluster-whisperer instance — everything needed for the KubeCon "Choose Your Own Adventure" demo.
 
 ### Prerequisites
 
@@ -550,7 +550,7 @@ Setup takes approximately 45-55 minutes on a cold start (GKE creation ~8 min, CR
 | Component | Namespace | Purpose |
 |-----------|-----------|---------|
 | GKE cluster (3x n2-standard-4) | — | Kubernetes environment |
-| Crossplane + 35 sub-providers | `crossplane-system` | ~1,000 CRDs for discovery |
+| Crossplane + 16 sub-providers | `crossplane-system` | ~360 CRDs for discovery |
 | Platform PostgreSQL XRD/Composition | `crossplane-system` | The "needle in the haystack" |
 | Chroma | `chroma` | Vector database (capabilities + instances) |
 | Qdrant | `qdrant` | Vector database |
@@ -561,7 +561,7 @@ Setup takes approximately 45-55 minutes on a cold start (GKE creation ~8 min, CR
 | k8s-vectordb-sync | `k8s-vectordb-sync` | Controller pushing resource changes |
 | NGINX Ingress | `ingress-nginx` | External access via nip.io DNS |
 
-The setup script also runs the **capability inference pipeline**, which analyzes all ~1,000 CRDs via LLM and stores natural-language descriptions in Chroma. This is what enables semantic search — when the agent searches for "PostgreSQL database for my application", it finds the platform Composition among ~1,000 CRDs because the pipeline generated a description like "Platform-approved PostgreSQL database for application teams."
+The setup script also runs the **capability inference pipeline**, which analyzes all ~360 CRDs via LLM and stores natural-language descriptions in Chroma. This is what enables semantic search — when the agent searches for "PostgreSQL database for my application", it finds the platform Composition among ~360 CRDs because the pipeline generated a description like "Platform-approved PostgreSQL database for application teams."
 
 ### Teardown
 

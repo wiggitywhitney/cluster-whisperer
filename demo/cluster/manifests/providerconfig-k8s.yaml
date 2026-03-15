@@ -1,0 +1,10 @@
+# ProviderConfig for provider-kubernetes using the in-cluster service account.
+# Allows Compositions to create native Kubernetes resources (Deployments, Services)
+# without requiring external kubeconfig secrets.
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: kubernetes-in-cluster
+spec:
+  credentials:
+    source: InjectedIdentity

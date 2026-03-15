@@ -10,7 +10,7 @@ a Kubernetes platform — works regardless of which specific technologies you pi
 ## Setup (before the demo starts)
 
 Run one setup script that creates a GKE cluster with everything pre-deployed — both
-agents, both vector databases, both observability backends, ~1,000 Crossplane CRDs, and
+agents, both vector databases, both observability backends, ~360 Crossplane CRDs, and
 an intentionally broken demo app. Then source a `.env` file that sets infrastructure URLs.
 
 ```bash
@@ -72,7 +72,7 @@ cluster-whisperer "Can you help me fix this? Which database should I deploy?"
 ```
 
 The agent tries to figure out which database to deploy. It runs `kubectl get crd` and
-the audience sees 1,000+ CRDs scroll by. The resource names are opaque — the right
+the audience sees hundreds of CRDs scroll by. The resource names are opaque — the right
 answer is `managedservices.platform.acme.io`, but nothing in that name says "database."
 The agent can't make sense of them without semantic understanding.
 
@@ -97,7 +97,7 @@ cluster-whisperer "What database should I deploy for my app, and can you set it 
 ```
 
 The agent searches the vector database, finds the one platform-approved PostgreSQL
-resource among 1,000+ CRDs (`managedservices.platform.acme.io`), and recommends it
+resource among hundreds of CRDs (`managedservices.platform.acme.io`), and recommends it
 with example YAML. But it **cannot deploy** — it doesn't have the apply tool.
 
 > "The agent found the answer, but it can't act on it. Let's give it the ability
@@ -118,7 +118,7 @@ collection before applying — this is enforced in code, not in the prompt.
 
 The agent deploys the platform-approved ManagedService.
 
-> "The agent found the right resource out of over a thousand options because it has
+> "The agent found the right resource out of hundreds of options because it has
 > semantic understanding of what each one does. And it could only deploy resources
 > from the approved catalog — the platform team controls what's allowed."
 
@@ -228,7 +228,7 @@ The agent has its own kubeconfig passed internally via `CLUSTER_WHISPERER_KUBECO
 | Component | Purpose |
 |-----------|---------|
 | GKE cluster (3x n2-standard-4) | Kubernetes environment |
-| Crossplane + 35 sub-providers (~1,000 CRDs) | The "overwhelming" moment |
+| Crossplane + 16 sub-providers (~360 CRDs) | The "overwhelming" moment |
 | Platform ManagedService XRD/Composition (`managedservices.platform.acme.io`) | The one right answer — needle in the haystack (opaque name forces vector search) |
 | Demo app | Intentionally broken (CrashLoopBackOff without database) |
 | Chroma | Vector DB option A |

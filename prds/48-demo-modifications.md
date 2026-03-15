@@ -153,7 +153,7 @@ This is not a checklist of features — it is a full end-to-end rehearsal from t
 - [x] Act 1: `kubectl get pods` fails (no KUBECONFIG in presenter shell)
 - [x] Act 2 setup: `export CLUSTER_WHISPERER_AGENT=langgraph` and `export CLUSTER_WHISPERER_TOOLS=kubectl`
 - [x] Act 2 question 1: `cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"` — agent uses all three kubectl tools (get, describe, logs), finds missing database
-- [x] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees 1,000+ CRDs, cannot identify the right one by name (CRD wall)
+- [x] Act 2 question 2: `cluster-whisperer "Can you help me fix this? Which database should I deploy?"` — agent sees hundreds of CRDs, cannot identify the right one by name (CRD wall)
 - [x] Act 3a setup (Chroma): `export CLUSTER_WHISPERER_VECTOR_BACKEND=chroma` and `export CLUSTER_WHISPERER_TOOLS=kubectl,vector`
 - [x] Act 3a (Chroma): `cluster-whisperer "What database should I deploy for my app, and can you set it up?"` — agent finds ManagedService via vector search, recommends it with YAML, but cannot deploy (no apply tool)
 - [x] Act 3b: `export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply` — agent finds ManagedService and deploys it
@@ -197,11 +197,11 @@ Enable multi-turn CLI conversations so the agent can ask follow-up questions and
 
 Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL instance. When the agent deploys the ManagedService, a real database comes up and the demo app starts working — the audience sees it go from CrashLoopBackOff to Running.
 
-- [ ] New Composition: deploy in-cluster PostgreSQL (Deployment + Service) instead of AWS RDS (no cloud credentials needed, comes up in seconds)
-- [ ] Service named `db-service` exposed on a non-standard port (e.g., 5151) to hide the PostgreSQL nature from kubectl describe
-- [ ] Update demo app `DATABASE_URL` to use the same non-standard port (`db-service:5151/myapp`)
-- [ ] App code already prepends `postgres://` internally (done in M12)
-- [ ] Update decoy Compositions to also use non-standard ports (different from the real one — each decoy uses a different wrong port)
+- [x] New Composition: deploy in-cluster PostgreSQL (Deployment + Service) instead of AWS RDS (no cloud credentials needed, comes up in seconds)
+- [x] Service named `db-service` exposed on a non-standard port (e.g., 5151) to hide the PostgreSQL nature from kubectl describe
+- [x] Update demo app `DATABASE_URL` to use the same non-standard port (`db-service:5151/myapp`)
+- [x] App code already prepends `postgres://` internally (done in M12)
+- [x] Update decoy Compositions to also use non-standard ports (different from the real one — each decoy uses a different wrong port)
 - [ ] Verified: agent deploys ManagedService → PostgreSQL pod comes up → demo app transitions from CrashLoopBackOff to Running
 - [ ] Verified: deploying a decoy ManagedService would NOT fix the app (wrong port, engine, or config)
 
@@ -354,7 +354,7 @@ All changes are additive:
 | 2026-03-13 | URL port parsing fix for ingress URLs | ChromaBackend and QdrantBackend defaulted to service ports (8000/6333) when no port in URL, breaking ingress URLs on port 80. Fixed to use protocol defaults (80/443). |
 | 2026-03-13 | XRD renamed to opaque `managedservices.platform.acme.io` | Agent found `postgresqlinstances.platform.cluster-whisperer.io` by scanning CRD names, undermining the CRD wall narrative. The opaque name forces the agent to need vector search to discover the resource is a PostgreSQL database. |
 | 2026-03-13 | Multi-backend sync via `MultiBackendVectorStore` wrapper | Setup script needs to populate both Chroma and Qdrant. Running LLM inference twice wastes API costs. Wrapper writes to all backends from a single pipeline run. |
-| 2026-03-13 | Act 2 two-question flow | First question ("Why is my app broken?") finds the problem. Follow-up ("Can you help me fix this? Which database should I deploy?") triggers the CRD wall — agent sees 1,000+ opaque names and can't identify the database without semantic search. |
+| 2026-03-13 | Act 2 two-question flow | First question ("Why is my app broken?") finds the problem. Follow-up ("Can you help me fix this? Which database should I deploy?") triggers the CRD wall — agent sees hundreds of opaque names and can't identify the database without semantic search. |
 | 2026-03-14 | Fix QdrantBackend `collectionExists` destructuring | Qdrant JS client returns `{ exists: boolean }`, not `boolean`. Code checked `if (!exists)` which was always false (truthy object), so collections were never created. Fixed to `const { exists } = ...`. |
 | 2026-03-14 | Backend constructors read `CLUSTER_WHISPERER_*` env vars | Investigate command didn't pass `--chroma-url`/`--qdrant-url` to the agent. Added `CLUSTER_WHISPERER_CHROMA_URL` and `CLUSTER_WHISPERER_QDRANT_URL` fallbacks in ChromaBackend/QdrantBackend constructors so the agent connects to ingress URLs when running locally. |
 | 2026-03-14 | Add `OTEL_TRACING_ENABLED` and `OTEL_EXPORTER_TYPE` to generated `demo/.env` | Tracing requires both vars but setup.sh only generated `OTEL_EXPORTER_OTLP_ENDPOINT`. Without them, tracing was silently disabled during demo runs. |
@@ -367,3 +367,5 @@ All changes are additive:
 | 2026-03-14 | LangGraph conversation memory for multi-turn CLI | CLI is one-shot — agent can ask follow-up questions but can't receive answers. `--thread` flag with LangGraph checkpointing enables multi-turn conversations across CLI invocations. Required for Act 3a. |
 | 2026-03-14 | In-cluster PostgreSQL Composition replaces AWS RDS | AWS RDS Composition can't provision without cloud credentials. In-cluster PostgreSQL comes up in seconds, makes the app actually work. Uses non-standard port (e.g., 5151) so kubectl describe doesn't reveal PostgreSQL. |
 | 2026-03-14 | Keep port 5432 reverted, use non-standard port in M14 | Changing the port now would break the existing demo flow. M14 introduces the non-standard port when the Composition and app are updated together. |
+| 2026-03-15 | Pare Crossplane providers from 35 to 15 (~360 CRDs) | Research using upjet-aws/upjet-gcp repos showed exact CRD counts per provider. 35 providers was overkill — only ~30 CRDs surface during the demo. Kept 8 database providers (rds, dynamodb, elasticache, opensearch, sql, spanner, redis, bigquery) + 7 variety (ec2, s3, iam, lambda, compute, container, storage). 13 providers registered 253 CRDs; adding lambda(11) + compute(96) should bring total to ~360. Faster setup, lower resource usage, same demo narrative. |
+| 2026-03-15 | Decoy xRD descriptions reframed as "platform-provided database" | Original descriptions said "Managed by the X team" — team-specific, not platform. New descriptions lead with "Platform-provided [PostgreSQL/MySQL] database provisioned by the Acme platform team for the X division." Makes vector search for "platform database" return all 20 hits, forcing the agent to dig deeper with organizational context to find the right one. Strengthens the needle-in-haystack demo moment. |

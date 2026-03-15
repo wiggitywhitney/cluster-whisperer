@@ -18,11 +18,12 @@ spec:
           spec:
             type: object
             description: >-
-              PostgreSQL database with TimescaleDB extension for Priya Patel's
-              Metrics Pipeline. Managed by the Analytics team for time-series
-              data ingestion and analysis. Application developers request this
-              resource to get a fully managed PostgreSQL instance without needing
-              to understand provider-specific details.
+              Platform-provided PostgreSQL database provisioned by the Acme
+              platform team for the Analytics division. Used by Priya Patel's
+              Metrics Pipeline for time-series data ingestion and analysis.
+              Application developers request this resource to get a fully
+              managed database instance without needing to understand
+              provider-specific details.
             properties:
               engine:
                 type: string
@@ -121,74 +122,87 @@ spec:
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: managedservice-analytics-aws-rds
+  name: managedservice-analytics-in-cluster-pg
   labels:
-    provider: aws
-    service: rds
+    provider: kubernetes
+    service: postgresql
 spec:
   compositeTypeRef:
     apiVersion: analytics.acme.io/v1alpha1
     kind: ManagedService
   mode: Pipeline
   pipeline:
-  - step: create-rds-instance
+  - step: create-postgresql
     functionRef:
       name: crossplane-contrib-function-patch-and-transform
     input:
       apiVersion: pt.fn.crossplane.io/v1beta1
       kind: Resources
       resources:
-      - name: rds-instance
+      - name: postgresql-deployment
         base:
-          apiVersion: rds.aws.upbound.io/v1beta2
-          kind: Instance
+          apiVersion: kubernetes.crossplane.io/v1alpha2
+          kind: Object
           spec:
+            providerConfigRef:
+              name: kubernetes-in-cluster
             forProvider:
-              engine: postgres
-              publiclyAccessible: false
-              storageType: gp3
-              storageEncrypted: true
-              skipFinalSnapshot: false
-              autoMinorVersionUpgrade: true
-        patches:
-        # Map engine version from XRD to RDS
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.engineVersion
-          toFieldPath: spec.forProvider.engineVersion
-        # Map storage size from XRD to RDS
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.storageGB
-          toFieldPath: spec.forProvider.allocatedStorage
-        # Map instance size to RDS instance class via lookup
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.instanceSize
-          toFieldPath: spec.forProvider.instanceClass
-          transforms:
-          - type: map
-            map:
-              small: db.t3.micro
-              medium: db.r6g.large
-              large: db.r6g.2xlarge
-        # Map high availability to Multi-AZ
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.highAvailability
-          toFieldPath: spec.forProvider.multiAz
-        # Map backup retention
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.backupRetentionDays
-          toFieldPath: spec.forProvider.backupRetentionPeriod
-        # Write endpoint back to XRD status
-        - type: ToCompositeFieldPath
-          fromFieldPath: status.atProvider.endpoint
-          toFieldPath: status.endpoint
-      - name: subnet-group
+              manifest:
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: analytics-postgresql
+                  namespace: default
+                  labels:
+                    app: analytics-postgresql
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: analytics-postgresql
+                  template:
+                    metadata:
+                      labels:
+                        app: analytics-postgresql
+                    spec:
+                      containers:
+                      - name: postgresql
+                        image: postgres:16-alpine
+                        ports:
+                        - containerPort: 5432
+                        env:
+                        - name: POSTGRES_DB
+                          value: myapp
+                        - name: POSTGRES_USER
+                          value: postgres
+                        - name: POSTGRES_PASSWORD
+                          value: demo-password
+                        readinessProbe:
+                          exec:
+                            command:
+                            - pg_isready
+                            - -U
+                            - postgres
+                          initialDelaySeconds: 5
+                          periodSeconds: 5
+      - name: postgresql-service
         base:
-          apiVersion: rds.aws.upbound.io/v1beta2
-          kind: SubnetGroup
+          apiVersion: kubernetes.crossplane.io/v1alpha2
+          kind: Object
           spec:
+            providerConfigRef:
+              name: kubernetes-in-cluster
             forProvider:
-              description: Platform-managed subnet group for PostgreSQL instances
-        patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.networkRef
-          toFieldPath: metadata.annotations["platform.acme.io/network-ref"]
+              manifest:
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: db-service
+                  namespace: default
+                spec:
+                  selector:
+                    app: analytics-postgresql
+                  ports:
+                  - port: 5152
+                    targetPort: 5432
+                    protocol: TCP

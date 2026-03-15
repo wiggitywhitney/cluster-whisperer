@@ -9,7 +9,7 @@
 # Single replica for demo
 replicaCount: 1
 
-# Resource limits appropriate for demo workload (~1,000 CRD descriptions)
+# Resource limits appropriate for demo workload (~360 CRD descriptions)
 resources:
   requests:
     cpu: 100m
