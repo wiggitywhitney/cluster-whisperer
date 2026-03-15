@@ -1422,8 +1422,15 @@ verify_vector_search() {
 build_demo_app_image() {
     local demo_app_dir="${REPO_ROOT}/demo/app"
 
+    # Kind runs on the host architecture; GKE runs amd64.
+    # Build for the native platform in Kind mode to avoid architecture mismatch.
+    local platform_flag=""
+    if [[ "${MODE}" == "gcp" ]]; then
+        platform_flag="--platform linux/amd64"
+    fi
+
     log_info "Building demo app Docker image..."
-    docker build --platform linux/amd64 -t demo-app:latest "${demo_app_dir}" --quiet
+    docker build ${platform_flag} -t demo-app:latest "${demo_app_dir}" --quiet
     log_success "Demo app image built"
 }
 
@@ -1547,8 +1554,14 @@ print_demo_app_diagnostics() {
 
 # Build the cluster-whisperer Docker image from the repo root Dockerfile.
 build_cluster_whisperer_image() {
+    # Kind runs on the host architecture; GKE runs amd64.
+    local platform_flag=""
+    if [[ "${MODE}" == "gcp" ]]; then
+        platform_flag="--platform linux/amd64"
+    fi
+
     log_info "Building cluster-whisperer Docker image..."
-    docker build --platform linux/amd64 -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
+    docker build ${platform_flag} -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
     log_success "cluster-whisperer image built"
 }
 
