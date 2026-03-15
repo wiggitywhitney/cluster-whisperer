@@ -795,20 +795,33 @@ EOF
 configure_provider_kubernetes() {
     log_info "Configuring provider-kubernetes for in-cluster access..."
 
-    # Wait for the Object CRD to register (provider-kubernetes is installed
-    # in the batch, but CRD registration takes a few seconds)
+    # Wait for the provider-kubernetes Provider to become healthy first.
+    # The CRD wait (wait_for_crds) may finish before provider-kubernetes
+    # has pulled its image and registered its CRDs, since the target count
+    # can be reached by the other providers alone.
     local elapsed=0
-    local timeout=120
+    local timeout=600
+    log_info "Waiting for provider-kubernetes to become healthy (timeout: ${timeout}s)..."
     while [[ $elapsed -lt $timeout ]]; do
-        if kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
+        local pk_healthy
+        pk_healthy=$(kubectl get providers.pkg.crossplane.io provider-kubernetes \
+            -o jsonpath='{.status.conditions[?(@.type=="Healthy")].status}' 2>/dev/null || true)
+        if [[ "${pk_healthy}" == "True" ]]; then
             break
         fi
-        sleep 5
-        elapsed=$((elapsed + 5))
+        if (( elapsed % 30 == 0 && elapsed > 0 )); then
+            local pk_status
+            pk_status=$(kubectl get providers.pkg.crossplane.io provider-kubernetes \
+                -o jsonpath='{.status.conditions[*].reason}' 2>/dev/null || echo "unknown")
+            log_info "  [${elapsed}s] provider-kubernetes status: ${pk_status}"
+        fi
+        sleep 10
+        elapsed=$((elapsed + 10))
     done
 
     if ! kubectl get crd objects.kubernetes.crossplane.io &>/dev/null 2>&1; then
         log_error "provider-kubernetes CRD did not register within ${timeout}s"
+        kubectl get providers.pkg.crossplane.io provider-kubernetes -o yaml 2>/dev/null || true
         return 1
     fi
     log_success "provider-kubernetes CRDs registered"
