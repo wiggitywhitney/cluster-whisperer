@@ -797,6 +797,32 @@ wait_for_gke_operations() {
     log_warning "GKE operations still running after ${timeout}s — proceeding anyway"
 }
 
+# Wait until the Kubernetes API server is actually responding to requests.
+# gcloud may report a resize operation as complete slightly before the API
+# server is fully back. This catches that gap.
+wait_for_api_server() {
+    log_info "Verifying API server connectivity..."
+
+    local timeout=300
+    local elapsed=0
+    local interval=10
+
+    while [[ $elapsed -lt $timeout ]]; do
+        if kubectl get nodes --request-timeout=5s &>/dev/null; then
+            log_success "API server is responding"
+            return 0
+        fi
+        if (( elapsed % 30 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] API server not responding yet, waiting..."
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_error "API server did not respond within ${timeout}s"
+    return 1
+}
+
 # =============================================================================
 # Platform Composition (The "Needle in the Haystack")
 # =============================================================================
@@ -1959,16 +1985,17 @@ main() {
     install_crossplane
     install_crossplane_providers
     install_platform_compositions
-
-    # On GKE, the burst of CRDs + XRDs + Compositions can trigger a control plane
-    # resize. Wait for it to complete before starting helm installs, which need
-    # a stable API server connection.
-    if [[ "${MODE}" == "gcp" ]]; then
-        wait_for_gke_operations
-    fi
-
     install_chroma
     install_qdrant
+
+    # The Chroma/Qdrant installs push the cumulative object count past GKE's
+    # control plane resize threshold. The resize starts asynchronously — wait
+    # for it and verify API server connectivity before proceeding.
+    if [[ "${MODE}" == "gcp" ]]; then
+        wait_for_gke_operations
+        wait_for_api_server
+    fi
+
     verify_vector_dbs
     install_jaeger
     install_otel_collector
