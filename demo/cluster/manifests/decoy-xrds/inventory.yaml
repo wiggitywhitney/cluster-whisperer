@@ -140,10 +140,11 @@ spec:
       resources:
       - name: postgresql-deployment
         base:
-          apiVersion: kubernetes.crossplane.io/v1alpha2
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           spec:
             providerConfigRef:
+              kind: ClusterProviderConfig
               name: kubernetes-in-cluster
             forProvider:
               manifest:
@@ -186,10 +187,11 @@ spec:
                           periodSeconds: 5
       - name: postgresql-service
         base:
-          apiVersion: kubernetes.crossplane.io/v1alpha2
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
           kind: Object
           spec:
             providerConfigRef:
+              kind: ClusterProviderConfig
               name: kubernetes-in-cluster
             forProvider:
               manifest:

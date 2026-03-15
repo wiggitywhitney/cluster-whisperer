@@ -875,9 +875,22 @@ configure_provider_kubernetes() {
         log_warning "provider-kubernetes service account not found — RBAC skipped"
     fi
 
-    # Apply ProviderConfig for in-cluster identity
+    # Apply ClusterProviderConfig for in-cluster identity
     kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"
-    log_success "ProviderConfig kubernetes-in-cluster applied"
+    log_success "ClusterProviderConfig kubernetes-in-cluster applied"
+
+    # Restart the provider-kubernetes pod so it picks up the new
+    # ClusterProviderConfig. Without this, the pod starts before the config
+    # exists and silently ignores Object resources.
+    log_info "Restarting provider-kubernetes pod to pick up ClusterProviderConfig..."
+    kubectl delete pod -n crossplane-system \
+        -l "pkg.crossplane.io/revision=$(kubectl get providers.pkg.crossplane.io provider-kubernetes \
+            -o jsonpath='{.status.currentRevision}' 2>/dev/null)" \
+        --wait=false 2>/dev/null || true
+    sleep 10
+    wait_for_pods "crossplane-system" "pkg.crossplane.io/revision=$(kubectl get providers.pkg.crossplane.io provider-kubernetes \
+        -o jsonpath='{.status.currentRevision}' 2>/dev/null)" 120
+    log_success "provider-kubernetes pod restarted"
 }
 
 # Apply 20 ManagedService XRDs and Compositions — one real (platform.acme.io
