@@ -38,10 +38,11 @@
  * the same trace context and export destination.
  */
 
-import { trace, type Tracer } from "@opentelemetry/api";
-import type { SpanExporter } from "@opentelemetry/sdk-trace-node";
+import { trace, type Tracer, type Span as OtelSpan, type Context as OtelContext } from "@opentelemetry/api";
+import type { SpanExporter, ReadableSpan as OtelReadableSpan } from "@opentelemetry/sdk-trace-node";
 import { isQuietMode } from "../quiet-mode";
 import { ToolDefinitionsProcessor } from "./tool-definitions-processor";
+import { VercelSpanProcessor } from "./vercel-span-processor";
 import {
   loadTraceloop,
   loadSdkTraceNode,
@@ -194,6 +195,8 @@ if (isTracingEnabled) {
     if (!quiet) console.log("[OTel] Initializing OpenTelemetry tracing..."); // eslint-disable-line no-console
 
     const exporter = createSpanExporter();
+    const toolDefsProcessor = new ToolDefinitionsProcessor();
+    const vercelProcessor = new VercelSpanProcessor();
 
     /**
      * Initialize OpenLLMetry with our exporter.
@@ -217,10 +220,29 @@ if (isTracingEnabled) {
       traceContent: isCaptureAiPayloads,
       // Silence the default "Traceloop exporting traces to..." message
       silenceInitializationMessage: true,
-      // Custom SpanProcessor that adds gen_ai.tool.definitions to LLM chat spans.
-      // OpenLLMetry's auto-instrumentation creates anthropic.chat spans but doesn't
-      // include tool definitions — our processor fills that gap for LLM Observability.
-      processor: new ToolDefinitionsProcessor(),
+      // Composite SpanProcessor: both processors run on every span.
+      // - ToolDefinitionsProcessor: adds gen_ai.tool.definitions to LLM chat spans
+      // - VercelSpanProcessor: adds gen_ai.operation.name to Vercel SDK spans
+      //   for correct Datadog LLM Observability layer classification (Decision 19)
+      // traceloop.initialize() accepts a single processor, so we compose them.
+      processor: {
+        onStart(span: OtelSpan, ctx: OtelContext) {
+          toolDefsProcessor.onStart(span, ctx);
+          vercelProcessor.onStart(span, ctx);
+        },
+        onEnd(span: OtelReadableSpan) {
+          toolDefsProcessor.onEnd(span);
+          vercelProcessor.onEnd(span);
+        },
+        async shutdown() {
+          await toolDefsProcessor.shutdown();
+          await vercelProcessor.shutdown();
+        },
+        async forceFlush() {
+          await toolDefsProcessor.forceFlush();
+          await vercelProcessor.forceFlush();
+        },
+      },
     });
 
     // Store reference for gracefulExit() to use

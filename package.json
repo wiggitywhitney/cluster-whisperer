@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "telemetry:check": "weaver registry check -r telemetry/registry",
-    "telemetry:resolve": "weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json"
+    "telemetry:resolve": "weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json",
+    "telemetry:docs": "weaver registry generate -r telemetry/registry -t 'https://github.com/open-telemetry/semantic-conventions.git[templates]' markdown docs/telemetry-generated"
   },
   "keywords": [
     "kubernetes",
@@ -27,6 +28,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
     "@hono/node-server": "^1.19.9",
     "@hono/zod-validator": "^0.7.6",
     "@langchain/anthropic": "^0.3.14",
@@ -34,6 +36,7 @@
     "@langchain/langgraph": "^0.2.42",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@qdrant/js-client-rest": "^1.17.0",
+    "ai": "^6.0.116",
     "chromadb": "^3.3.0",
     "commander": "^13.0.0",
     "hono": "^4.12.1",

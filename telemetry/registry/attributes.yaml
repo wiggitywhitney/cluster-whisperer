@@ -10,6 +10,8 @@
 # - root:          Root investigation/tool spans (CLI and MCP mode)
 # - tool:          Agentic tool execution spans
 # - llm:           LLM/chat completion spans (OpenLLMetry auto-instrumented)
+# - vercel_llm:    LLM spans from Vercel AI SDK's experimental_telemetry
+# - vercel_tool:   Tool call spans from Vercel AI SDK's experimental_telemetry
 # - mcp:           MCP tool execution tracking
 # - subprocess:    kubectl subprocess execution
 # - openllmetry:   Traceloop/OpenLLMetry vendor conventions
@@ -51,6 +53,13 @@ groups:
           No OTel semconv exists for invocation mode. The closest analogy is faas.trigger
           (serverless trigger type) but that's scoped to FaaS. This custom attribute follows
           OTel convention of namespacing vendor-specific attributes under the service name.
+
+      - id: cluster_whisperer.agent.framework
+        type: string
+        stability: development
+        brief: Which agent framework is handling the investigation
+        note: Set on CLI root spans. Values correspond to the --agent flag.
+        examples: ["langgraph", "vercel"]
 
       - id: cluster_whisperer.user.question
         type: string
@@ -150,6 +159,220 @@ groups:
           Datadog maps this to meta.tool_definitions in LLM Observability.
           Contains tool names, descriptions, and parameter schemas.
         examples: ['[{"name":"kubectl_get","description":"List Kubernetes resources...","parameters":{...}}]']
+
+  # ==========================================================================
+  # VERCEL AI SDK LLM SPAN ATTRIBUTES
+  # Created by the Vercel AI SDK's experimental_telemetry for streamText calls.
+  # These are the SDK's native spans — different from OpenLLMetry spans.
+  #
+  # Span name mapping (LangGraph vs Vercel):
+  #   LangGraph LLM calls: anthropic.chat (OpenLLMetry auto-instrumentation)
+  #   Vercel LLM calls:    ai.streamText (outer) / ai.streamText.doStream (inner)
+  # Both carry gen_ai.* semconv attributes, but on different span layers.
+  # gen_ai.* attributes (system, model, token usage) are ONLY on the inner
+  # doStream spans — this is what Datadog LLM Observability reads.
+  # ==========================================================================
+  - id: registry.cluster_whisperer.vercel_llm
+    type: attribute_group
+    display_name: Vercel AI SDK LLM Span Attributes
+    brief: Attributes for Vercel AI SDK streamText LLM spans
+    note: >
+      The Vercel AI SDK produces two span layers for each streamText call:
+      an outer ai.streamText span (full multi-step invocation) and inner
+      ai.streamText.doStream spans (per-step LLM API calls). gen_ai.*
+      semantic convention attributes appear ONLY on the inner doStream spans.
+      The outer span carries SDK-specific ai.* attributes for aggregated usage.
+      Span events ai.stream.firstChunk and ai.stream.finish mark streaming
+      lifecycle milestones on the inner doStream spans.
+    attributes:
+      # --- VercelSpanProcessor enrichment ---
+      # These are added by our VercelSpanProcessor based on ai.operationId:
+      # ai.streamText → gen_ai.operation.name: "invoke_agent", gen_ai.agent.name
+      # ai.streamText.doStream → gen_ai.operation.name: "chat"
+      - ref: gen_ai.operation.name
+      - id: gen_ai.agent.name
+        type: string
+        stability: development
+        brief: Agent name for Datadog LLM Obs agent layer classification
+        note: >
+          Set by VercelSpanProcessor on outer ai.streamText spans.
+          Value is "cluster-whisperer". Combined with gen_ai.operation.name: "invoke_agent",
+          this causes Datadog to classify the span as an agent layer.
+        examples: ["cluster-whisperer"]
+
+      - id: ai.operationId
+        type: string
+        stability: development
+        brief: Vercel AI SDK operation identifier (SDK-generated, read by VercelSpanProcessor)
+        note: >
+          Set by the Vercel AI SDK's experimental_telemetry. Our VercelSpanProcessor
+          reads this to determine which gen_ai.operation.name to add.
+          Values: ai.streamText (outer), ai.streamText.doStream (inner), ai.toolCall (tool).
+        examples: ["ai.streamText", "ai.streamText.doStream", "ai.toolCall"]
+
+      # --- Outer span: ai.streamText ---
+      # Wraps the full multi-step agent invocation (all LLM calls + tool executions)
+      - id: ai.model.id
+        type: string
+        stability: development
+        brief: Model identifier on the outer ai.streamText span
+        examples: ["claude-sonnet-4-20250514"]
+
+      - id: ai.model.provider
+        type: string
+        stability: development
+        brief: Provider identifier on the outer ai.streamText span
+        examples: ["anthropic.messages"]
+
+      - id: ai.usage.promptTokens
+        type: int
+        stability: development
+        brief: Aggregated prompt token count across all steps (outer span)
+        note: SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.input_tokens.
+        examples: [1500, 3000]
+
+      - id: ai.usage.completionTokens
+        type: int
+        stability: development
+        brief: Aggregated completion token count across all steps (outer span)
+        note: SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.output_tokens.
+        examples: [500, 1200]
+
+      - id: ai.telemetry.functionId
+        type: string
+        stability: development
+        brief: Logical function identifier for the telemetry-enabled call
+        note: Set via experimental_telemetry.functionId in the streamText config.
+        examples: ["cluster-whisperer-investigate"]
+
+      - id: ai.telemetry.metadata.agent
+        type: string
+        stability: development
+        brief: Custom metadata identifying the agent framework
+        note: Set via experimental_telemetry.metadata in the streamText config.
+        examples: ["vercel"]
+
+      # --- Inner span: ai.streamText.doStream ---
+      # Per-step LLM API call — carries gen_ai.* semconv attributes
+      - ref: gen_ai.system
+      - ref: gen_ai.request.model
+      - ref: gen_ai.usage.input_tokens
+      - ref: gen_ai.usage.output_tokens
+      - ref: gen_ai.response.model
+      - ref: gen_ai.response.id
+      - ref: gen_ai.response.finish_reasons
+
+      - id: ai.prompt.messages
+        type: string
+        stability: development
+        brief: JSON-stringified prompt messages sent to the LLM (content-gated)
+        note: Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. On inner doStream spans.
+        examples: ['[{"role":"system","content":"You are a Kubernetes investigator..."}]']
+
+      - id: ai.prompt.tools
+        type: string
+        stability: development
+        brief: JSON-stringified tool definitions available to the LLM
+        note: On inner doStream spans. Contains tool names, descriptions, and input schemas.
+        examples: ['[{"name":"kubectl_get","description":"List Kubernetes resources..."}]']
+
+      - id: ai.response.msToFirstChunk
+        type: int
+        stability: development
+        brief: Milliseconds from request start to first response chunk
+        note: On inner doStream spans. Measures time-to-first-token latency.
+        examples: [450, 1200]
+
+      - id: ai.response.msToFinish
+        type: int
+        stability: development
+        brief: Milliseconds from request start to stream completion
+        note: On inner doStream spans. Measures total LLM call duration.
+        examples: [3500, 8000]
+
+      # --- Span events on doStream spans ---
+      # These are OTel span events (not separate spans). Recorded as events
+      # on ai.streamText.doStream spans to mark streaming lifecycle milestones.
+      # Event: ai.stream.firstChunk — when the first response chunk arrives
+      # Event: ai.stream.finish — when the stream completes
+      # Weaver doesn't model span events natively; documented here for reference.
+
+  # ==========================================================================
+  # VERCEL AI SDK TOOL CALL SPAN ATTRIBUTES
+  # Created by the Vercel AI SDK when the LLM invokes a tool.
+  # These are IN ADDITION to our withToolTracing() spans (<toolName>.tool).
+  # Both coexist in traces intentionally:
+  #   ai.toolCall spans: SDK-generated, carry ai.toolCall.* attributes
+  #   <toolName>.tool spans: our custom spans, carry cluster_whisperer.* attributes
+  # ==========================================================================
+  - id: registry.cluster_whisperer.vercel_tool
+    type: attribute_group
+    display_name: Vercel AI SDK Tool Call Attributes
+    brief: Attributes for Vercel AI SDK ai.toolCall spans
+    note: >
+      The Vercel AI SDK creates ai.toolCall spans for each tool invocation during
+      a streamText agent loop. These are separate from our withToolTracing() spans
+      (<toolName>.tool) which carry cluster_whisperer.* attributes. Both span types
+      appear in traces and serve different observability purposes: SDK spans show
+      the framework's view of tool execution; our spans show domain-specific context.
+    attributes:
+      - id: ai.toolCall.name
+        type: string
+        stability: development
+        brief: Name of the tool being called
+        examples: ["kubectl_get", "kubectl_describe", "kubectl_logs", "vector_search", "kubectl_apply"]
+
+      - id: ai.toolCall.id
+        type: string
+        stability: development
+        brief: Unique identifier for this tool call instance
+        examples: ["toolu_01ABC123"]
+
+      - id: ai.toolCall.args
+        type: string
+        stability: development
+        brief: JSON-stringified tool input arguments
+        examples: ['{"resource":"pods","namespace":"all"}']
+
+      - id: ai.toolCall.result
+        type: string
+        stability: development
+        brief: JSON-stringified tool execution result
+        examples: ["NAME  READY  STATUS  RESTARTS  AGE\nnginx  1/1  Running  0  5m"]
+
+  # ==========================================================================
+  # KUBECTL APPLY ATTRIBUTES
+  # Used by kubectl-apply tool spans (src/tools/core/kubectl-apply.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.kubectl_apply
+    type: attribute_group
+    display_name: kubectl_apply Tool Attributes
+    brief: Attributes specific to the kubectl_apply tool's catalog validation
+    note: >
+      Set on kubectl_apply tool spans during platform catalog validation.
+      These attributes let you filter traces by resource kind and see whether
+      the apply was approved by the catalog.
+    attributes:
+      - id: cluster_whisperer.k8s.resource_kind
+        type: string
+        stability: development
+        brief: Kubernetes resource kind extracted from the YAML manifest
+        examples: ["ManagedService", "Deployment", "Pod"]
+
+      - id: cluster_whisperer.k8s.api_group
+        type: string
+        stability: development
+        brief: Kubernetes API group extracted from the YAML manifest
+        note: Empty string for core API resources (e.g., Pod, Service).
+        examples: ["platform.acme.io", "apps", ""]
+
+      - id: cluster_whisperer.catalog.approved
+        type: boolean
+        stability: development
+        brief: Whether the resource type passed platform catalog validation
+        note: >
+          True if the resource kind+apiGroup was found in the capabilities
+          collection. False means the apply was rejected.
 
   # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES

@@ -4,7 +4,7 @@ This document explains how tracing works in cluster-whisperer, the architectural
 
 **Audience**: Developers implementing tracing for new entry points (MCP server, future APIs)
 
-> **Attribute Definitions**: For the complete list of span attributes (names, types, descriptions), see the Weaver schema in `telemetry/registry/attributes.yaml`. This document focuses on architecture, context propagation, and design rationale.
+> **Attribute Definitions**: For the complete list of span attributes (names, types, descriptions), see the [auto-generated attribute reference](telemetry-generated/attributes/cluster-whisperer.md) produced by `npm run telemetry:docs`. The source of truth is the Weaver schema in `telemetry/registry/attributes.yaml`. This document focuses on architecture, context propagation, and design rationale.
 
 ---
 
@@ -14,27 +14,59 @@ This document explains how tracing works in cluster-whisperer, the architectural
 2. [Root Span Conventions](#root-span-conventions)
 3. [Tool Span Conventions](#tool-span-conventions)
 4. [Subprocess Span Conventions](#subprocess-span-conventions)
-5. [Context Propagation](#context-propagation)
-6. [Content Gating](#content-gating)
-7. [Deviations from Standards](#deviations-from-standards)
+5. [Vercel Agent Tracing](#vercel-agent-tracing)
+6. [Context Propagation](#context-propagation)
+7. [Content Gating](#content-gating)
+8. [Deviations from Standards](#deviations-from-standards)
 
 ---
 
 ## Span Hierarchy
 
-Both CLI and MCP modes produce the same three-level hierarchy:
+Both CLI and MCP modes share a root span and tool spans. The CLI agent adds framework-specific spans between root and tool levels.
+
+### LangGraph Agent
 
 ```text
-root span (workflow)
-└── tool span (e.g., kubectl_get)
-    └── subprocess span (e.g., kubectl get pods)
+cluster-whisperer.cli.investigate          (root, workflow layer)
+├── anthropic.chat                         (OpenLLMetry, llm layer)
+├── kubectl_get.tool                       (withToolTracing, tool layer)
+│   └── kubectl get pods -A                (subprocess)
+└── kubectl_describe.tool                  (withToolTracing, tool layer)
+    └── kubectl describe pod demo-app-xxx  (subprocess)
 ```
 
-| Level | CLI Mode | MCP Mode |
-|-------|----------|----------|
-| Root | `cluster-whisperer.investigate` | `cluster-whisperer.mcp.<tool>` |
-| Tool | Created by `withTool()` | Created by `withTool()` |
-| Subprocess | `kubectl {op} {resource}` | `kubectl {op} {resource}` |
+### Vercel Agent
+
+```text
+cluster-whisperer.cli.investigate          (root, workflow layer)
+├── vercel.agent                           (SDK, ai.operationId=ai.streamText, agent layer)
+│   ├── text.stream                        (SDK, ai.operationId=ai.streamText.doStream, llm layer)
+│   │   └── cluster-whisperer-investigate  (SDK, ai.operationId=ai.toolCall, tool layer)
+│   └── text.stream                        (step 2, llm layer)
+├── kubectl_get.tool                       (withToolTracing, tool layer)
+│   └── kubectl get pods -A                (subprocess)
+└── kubectl_describe.tool                  (withToolTracing, tool layer)
+    └── kubectl describe pod demo-app-xxx  (subprocess)
+```
+
+The Vercel agent produces **double tool spans**: SDK `ai.toolCall` spans alongside our `<toolName>.tool` spans. Both appear in traces intentionally — SDK spans carry `ai.toolCall.*` attributes, ours carry `gen_ai.tool.*` attributes for the shared contract.
+
+### MCP Mode
+
+```text
+cluster-whisperer.mcp.<tool>               (root, workflow layer)
+└── <tool>.tool                            (withToolTracing, tool layer)
+    └── kubectl {op} {resource}            (subprocess)
+```
+
+| Level | CLI LangGraph | CLI Vercel | MCP Mode |
+|-------|---------------|------------|----------|
+| Root | `cluster-whisperer.cli.investigate` | `cluster-whisperer.cli.investigate` | `cluster-whisperer.mcp.<tool>` |
+| Agent | — | `vercel.agent` (SDK) | — |
+| LLM | `anthropic.chat` (OpenLLMetry) | `text.stream` (SDK) | — |
+| Tool | `<tool>.tool` (withToolTracing) | `<tool>.tool` + SDK `ai.toolCall` | `<tool>.tool` (withToolTracing) |
+| Subprocess | `kubectl {op} {resource}` | `kubectl {op} {resource}` | `kubectl {op} {resource}` |
 
 ---
 
@@ -127,6 +159,77 @@ These flags have their values redacted in `process.command_args`:
 - `--kubeconfig`
 
 Example: `["kubectl", "--token", "[REDACTED]", "get", "pods"]`
+
+---
+
+## Vercel Agent Tracing
+
+The Vercel AI SDK produces its own spans via `experimental_telemetry`. These coexist with our shared tracing infrastructure (`withToolTracing`, subprocess spans).
+
+### SDK Telemetry Configuration
+
+**File**: `src/agent/vercel-agent.ts`
+
+```typescript
+experimental_telemetry: {
+  isEnabled: true,
+  functionId: 'cluster-whisperer-investigate',
+  metadata: { agent: 'vercel' },
+  tracer: trace.getTracer('ai'),  // Uses our registered TracerProvider
+}
+```
+
+The `tracer` parameter ensures Vercel SDK spans nest under our root span (same TracerProvider, same trace context).
+
+### LLM Span Name Differences
+
+The two agent frameworks produce different LLM span names because they use different instrumentation libraries:
+
+| Aspect | LangGraph | Vercel |
+|--------|-----------|--------|
+| LLM instrumentation | OpenLLMetry auto-instrumentation | SDK `experimental_telemetry` |
+| LLM span name | `anthropic.chat` | `text.stream` |
+| Outer agent span | — | `vercel.agent` |
+| `gen_ai.*` attributes on | `anthropic.chat` spans | `text.stream` spans (inner only) |
+
+Both carry the same `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes — Datadog LLM Observability reads these for token usage dashboards regardless of span name.
+
+### VercelSpanProcessor
+
+**File**: `src/tracing/vercel-span-processor.ts`
+
+The Vercel AI SDK sets `gen_ai.*` attributes on its spans but does **not** set `gen_ai.operation.name`. Without this attribute, Datadog classifies all spans as "workflow" regardless of their role.
+
+The `VercelSpanProcessor` reads `ai.operationId` (set by the SDK) and adds the missing attribute:
+
+| `ai.operationId` | Added `gen_ai.operation.name` | Datadog Layer |
+|-------------------|-------------------------------|---------------|
+| `ai.streamText.doStream` | `"chat"` | llm |
+| `ai.streamText` | `"invoke_agent"` | agent |
+| `ai.toolCall` | Already has `"execute_tool"` | tool |
+
+The processor also adds `gen_ai.agent.name: "cluster-whisperer"` to `ai.streamText` spans for the agent layer.
+
+Registered in `src/tracing/index.ts` alongside the existing `ToolDefinitionsProcessor` via a `MultiSpanProcessor`.
+
+### Datadog LLM Observability Layers
+
+With the SpanProcessor enrichment, both agents produce readable investigation stories in Datadog:
+
+| Layer | LangGraph Source | Vercel Source |
+|-------|-----------------|---------------|
+| **workflow** | Root span (no `gen_ai.operation.name`) | Root span (no `gen_ai.operation.name`) |
+| **agent** | — | `vercel.agent` span (`gen_ai.operation.name: "invoke_agent"`) |
+| **llm** | `anthropic.chat` (OpenLLMetry sets `gen_ai.operation.name: "chat"`) | `text.stream` spans (`gen_ai.operation.name: "chat"` via SpanProcessor) |
+| **tool** | `<tool>.tool` spans (`gen_ai.operation.name: "execute_tool"`) | `<tool>.tool` + SDK `ai.toolCall` spans |
+
+The Vercel agent has an additional **agent** layer that LangGraph does not — acceptable asymmetry since the Vercel SDK provides richer hierarchy.
+
+See `docs/research/49-m7-datadog-llmobs-otel-mapping.md` for the full mapping research.
+
+### Summarized Thinking Output
+
+Both agents show condensed reasoning in "Thinking:" blocks, not full thinking tokens. The LangGraph agent receives summarized thinking from LangChain's event stream. The Vercel agent receives `reasoning-delta` parts which contain the model's summarized reasoning text. The CLI output looks identical for both — the audience cannot tell which agent framework is running.
 
 ---
 
@@ -318,16 +421,24 @@ All custom attributes use the `cluster_whisperer.*` namespace to avoid conflicts
 
 | File | Purpose |
 |------|---------|
-| `src/tracing/index.ts` | OTel initialization, exporter setup |
+| `src/tracing/index.ts` | OTel initialization, exporter setup, SpanProcessor registration |
 | `src/tracing/context-bridge.ts` | AsyncLocalStorage context bridging |
 | `src/tracing/tool-tracing.ts` | Tool span wrapper |
+| `src/tracing/tool-definitions-processor.ts` | Adds tool definitions to LLM spans |
+| `src/tracing/vercel-span-processor.ts` | Enriches Vercel SDK spans for Datadog LLM Obs |
 | `src/utils/kubectl.ts` | Subprocess execution with spans |
 
 ### Span Summary
 
-| Span | Kind | Key Attributes |
-|------|------|----------------|
-| `cluster-whisperer.investigate` | INTERNAL | `traceloop.span.kind=workflow` |
-| `cluster-whisperer.mcp.<tool>` | INTERNAL | `traceloop.span.kind=workflow`, `cluster_whisperer.mcp.tool.name` |
-| `<tool>.tool` | INTERNAL | `traceloop.span.kind=tool` |
-| `kubectl {op} {resource}` | CLIENT | `process.*`, `cluster_whisperer.k8s.namespace`, `cluster_whisperer.k8s.output_size_bytes` |
+| Span | Kind | Agent | Key Attributes |
+|------|------|-------|----------------|
+| `cluster-whisperer.cli.investigate` | INTERNAL | Both | `traceloop.span.kind=workflow`, `cluster_whisperer.agent.framework` |
+| `cluster-whisperer.mcp.<tool>` | INTERNAL | N/A | `traceloop.span.kind=workflow`, `cluster_whisperer.mcp.tool.name` |
+| `anthropic.chat` | INTERNAL | LangGraph | `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` |
+| `vercel.agent` | INTERNAL | Vercel | `ai.operationId=ai.streamText`, `gen_ai.operation.name=invoke_agent` |
+| `text.stream` | INTERNAL | Vercel | `ai.operationId=ai.streamText.doStream`, `gen_ai.request.model`, `gen_ai.usage.*` |
+| `<tool>.tool` | INTERNAL | Both | `traceloop.span.kind=tool`, `gen_ai.tool.name` |
+| `cluster-whisperer-investigate` | INTERNAL | Vercel | `ai.operationId=ai.toolCall` (SDK tool span) |
+| `kubectl {op} {resource}` | CLIENT | Both | `process.*`, `cluster_whisperer.k8s.namespace` |
+
+For the complete attribute reference, see [`docs/telemetry-generated/attributes/cluster-whisperer.md`](telemetry-generated/attributes/cluster-whisperer.md).

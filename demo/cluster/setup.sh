@@ -603,6 +603,10 @@ CLUSTER_WHISPERER_QDRANT_URL=http://qdrant.${BASE_DOMAIN}
 OTEL_TRACING_ENABLED=true
 OTEL_EXPORTER_TYPE=otlp
 OTEL_EXPORTER_OTLP_ENDPOINT=${otel_endpoint}
+
+# Enable AI payload capture for Datadog LLM Observability CONTENT column
+# This populates gen_ai.input.messages and gen_ai.output.messages on root spans
+OTEL_CAPTURE_AI_PAYLOADS=true
 EOF
 
     log_success "Demo environment file generated: ${demo_env}"
