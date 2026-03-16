@@ -87,12 +87,17 @@ if kubectl get svc db-service -n default --no-headers 2>/dev/null | grep -q db-s
 fi
 
 # ─── Step 3: Restart demo app so it's back in CrashLoopBackOff ───────────────
-log_info "Restarting demo app..."
-kubectl rollout restart deployment/demo-app -n default
+# Scale to 0 then back to 1 instead of rollout restart. This avoids the old
+# ReplicaSet's pod lingering while the new crashing pod ramps up (rollout restart
+# keeps the old pod running because the new one never becomes Ready).
+log_info "Restarting demo app (scale 0 → 1)..."
+kubectl scale deployment/demo-app -n default --replicas=0
+sleep 5
+kubectl scale deployment/demo-app -n default --replicas=1
 
 # Wait for the new pod to start crashing
 log_info "Waiting for demo app to enter CrashLoopBackOff..."
-sleep 15
+sleep 20
 
 pod_status=$(kubectl get pods -n default -l app=demo-app --no-headers 2>/dev/null | grep -v Terminating | awk '{print $3}' | head -1)
 if [[ "${pod_status}" == "CrashLoopBackOff" ]] || [[ "${pod_status}" == "Error" ]]; then
