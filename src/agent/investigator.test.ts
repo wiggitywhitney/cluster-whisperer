@@ -120,8 +120,10 @@ describe("getInvestigatorAgent", () => {
     getInvestigatorAgent();
 
     const callArgs = mockCreateReactAgent.mock.calls[0][0];
-    expect(callArgs.stateModifier).toBeTruthy();
-    expect(callArgs.stateModifier).toContain("Kubernetes");
+    // Uses `prompt` (not deprecated `stateModifier`) per LangGraph v0.2.46+
+    expect(callArgs.prompt).toBeTruthy();
+    expect(callArgs.prompt).toContain("Kubernetes");
+    expect(callArgs.stateModifier).toBeUndefined();
   });
 
   it("filters to kubectl-only when toolGroups is ['kubectl']", async () => {
