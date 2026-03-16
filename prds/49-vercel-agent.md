@@ -134,8 +134,8 @@ Build a Vercel AI SDK agent that:
 **Verification**:
 - [x] `npm test` passes — all existing tests pass (with updated mocks in `agent-factory.test.ts`), plus new `LangGraphAdapter` unit tests
 - [x] `npm run build` succeeds with no TypeScript errors
-- [ ] Manual test: run `cluster-whisperer --agent langgraph --tools kubectl "What pods are running?"` against a cluster and confirm CLI output is identical to before the refactor (thinking blocks in italic, 🔧 tool calls, truncated results, ─ separator, "Answer:" label)
-- [ ] Manual test: run with `--thread test-refactor` twice — second run sees prior conversation context (proves memory save/load still works through the adapter)
+- [x] Manual test: run `cluster-whisperer --agent langgraph --tools kubectl "What pods are running?"` against a cluster and confirm CLI output is identical to before the refactor (thinking blocks in italic, 🔧 tool calls, truncated results, ─ separator, "Answer:" label)
+- [x] Manual test: run with `--thread test-refactor` twice — second run sees prior conversation context (proves memory save/load still works through the adapter)
 
 ### M4: Vercel Tool Wrappers
 - [x] Create `src/tools/vercel/index.ts` with AI SDK 6 `tool()` wrappers (import from `'ai'`, NOT `@langchain/core/tools`). The `tools` parameter in `streamText` is `Record<string, Tool>` — tool names are the object keys:
