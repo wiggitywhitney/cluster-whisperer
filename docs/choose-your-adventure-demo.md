@@ -150,6 +150,11 @@ The agent deploys the platform-approved ManagedService. The PostgreSQL database 
 up, and the demo app transitions from CrashLoopBackOff to Running — the audience sees
 the app come alive.
 
+The demo app is accessible at `http://demo-app.<base-domain>` (the `DEMO_APP_URL` from
+`demo/.env`). While the app was crashing, this URL returned 502. Now it serves a spider
+page with clickable zones linking to Whitney's and Viktor's YouTube channels. The presenter
+can share this URL with the audience or open it on screen as the payoff moment.
+
 > "The agent found the right resource, and it could only deploy from the approved
 > catalog — the platform team controls what's allowed."
 
@@ -200,6 +205,7 @@ cluster-whisperer "Yes please, will you deploy it for me?"
 # Act 3b: add the apply tool → agent remembers which database, now it can deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
 cluster-whisperer "Go ahead and deploy it"
+# After deploy: open $DEMO_APP_URL in browser → spider page with YouTube links
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser
