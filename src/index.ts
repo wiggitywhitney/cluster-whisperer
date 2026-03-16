@@ -304,17 +304,17 @@ async function main() {
             case "thinking":
               // Display thinking so users can see the reasoning process
               // \x1b[3m starts italic, \x1b[0m resets formatting
-              console.log(`\x1b[3mThinking: ${event.content}\x1b[0m\n`);
+              console.log(`\x1b[3mThinking: ${event.content}\x1b[0m\n`); // eslint-disable-line no-console
               break;
 
             case "tool_start":
-              console.log(`🔧 Tool: ${event.toolName}`);
-              console.log(`   Args: ${JSON.stringify(event.args)}`);
+              console.log(`🔧 Tool: ${event.toolName}`); // eslint-disable-line no-console
+              console.log(`   Args: ${JSON.stringify(event.args)}`); // eslint-disable-line no-console
               break;
 
             case "tool_result":
-              console.log(`   Result:\n${truncate(event.result, 1100)}`);
-              console.log(); // blank line between tool calls
+              console.log(`   Result:\n${truncate(event.result, 1100)}`); // eslint-disable-line no-console
+              console.log(); // eslint-disable-line no-console
               break;
 
             case "final_answer":
