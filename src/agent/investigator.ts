@@ -312,7 +312,7 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
     const agent = createReactAgent({
       llm: model,
       tools,
-      stateModifier: getSystemPrompt(),
+      prompt: getSystemPrompt(),
       // Checkpointer enables conversation memory — the agent saves state
       // after each step so multi-turn conversations persist across CLI invocations.
       // Without a checkpointer, each invocation starts fresh (one-shot mode).
