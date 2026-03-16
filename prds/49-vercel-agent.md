@@ -501,37 +501,11 @@ await withAgentTracing(question, async () => {
 
 ### Agent Implementation
 
-Two approaches are available. The `ToolLoopAgent` class (recommended by Vercel for AI SDK 6)
-or the lower-level `streamText` with `stopWhen`. Either works — `ToolLoopAgent` is cleaner
-for our use case:
-
-```typescript
-import { ToolLoopAgent, stepCountIs } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
-
-const agent = new ToolLoopAgent({
-  model: anthropic('claude-sonnet-4-20250514'),
-  system: investigatorPrompt,  // Same prompt as LangGraph
-  tools: filteredTools,        // From --tools flag
-  stopWhen: stepCountIs(50),   // Matches RECURSION_LIMIT
-  providerOptions: {
-    anthropic: {
-      thinking: { type: 'enabled', budgetTokens: 4000 },
-      headers: { 'anthropic-beta': 'interleaved-thinking-2025-05-14' },
-    },
-  },
-});
-
-// Stream for CLI output
-const result = agent.stream('Why is my app broken?', {
-  experimental_telemetry: {
-    isEnabled: true,
-    functionId: 'cluster-whisperer-investigate',
-  },
-});
-```
-
-Alternatively, using `streamText` directly:
+M1 research confirmed `streamText` is the right choice over `ToolLoopAgent`. While
+`ToolLoopAgent` is Vercel's recommended convenience wrapper, `streamText` provides direct
+access to `fullStream` with fine-grained stream parts (`reasoning`, `tool-call`,
+`tool-result`, `step-finish`) needed for the `AgentEvent` adapter. See
+`docs/research/m1-vercel-ai-sdk-research.md` for the full rationale.
 
 ```typescript
 import { streamText, stepCountIs } from 'ai';
@@ -556,20 +530,24 @@ const result = streamText({
 });
 ```
 
-M1 research should confirm which approach (`ToolLoopAgent.stream()` vs `streamText`)
-provides better access to intermediate reasoning parts for the `AgentEvent` translation.
-
 ### Streaming to CLI
 
-The Vercel AI SDK's `streamText` (or `ToolLoopAgent.stream()`) provides streaming access
-to intermediate events. The SDK offers lifecycle callbacks (`onStepFinish`,
-`experimental_onToolCallStart`, `experimental_onToolCallFinish`) and reasoning parts in
-the stream. The `AgentEvent` adapter translates these into the shared event types.
+The `streamText` result exposes a `fullStream` property — an `AsyncIterable<TextStreamPart>`
+that emits all events during a multi-step agent run. The `AgentEvent` adapter iterates
+over `fullStream` and translates part types:
 
-For extended thinking, the stream includes reasoning parts accessible via the result's
-parts or steps. The SDK also exposes `result.reasoningText` for the aggregated thinking
-output. The specific stream iteration pattern depends on M1's hands-on testing of which
-approach gives the cleanest access to interleaved thinking blocks between tool calls.
+- `'reasoning'` (with `textDelta`) → `AgentEvent.thinking`
+- `'tool-call'` (with `toolName`, `args`) → `AgentEvent.tool_start`
+- `'tool-result'` (with `toolName`, `result`) → `AgentEvent.tool_result`
+- `'text-delta'` (with `textDelta`) → accumulate for `AgentEvent.final_answer`
+- `'step-finish'` → detect final step (finishReason === 'stop') to emit final answer
+
+The SDK also offers lifecycle callbacks (`onStepFinish`, `experimental_onToolCallStart`,
+`experimental_onToolCallFinish`) as supplements, but the stream parts are sufficient.
+
+For extended thinking, `fullStream` emits `reasoning` parts between tool calls when
+interleaved thinking is enabled. `result.reasoningText` gives aggregated thinking after
+the stream completes; for real-time CLI output, use the stream parts.
 
 ### OTel Integration
 
@@ -670,6 +648,6 @@ These existing files are directly relevant to implementation. Read before starti
 | 2026-03-16 | Pre-research confirms extended thinking works | AI SDK Anthropic provider supports `thinking: { type: 'enabled', budgetTokens: 4000 }` with `anthropic-beta: interleaved-thinking-2025-05-14`. Biggest risk eliminated. |
 | 2026-03-16 | Tool API uses `inputSchema` not `parameters` | AI SDK 6 changed the tool definition API. Core Zod schemas pass directly to `inputSchema`. |
 | 2026-03-16 | `streamText` span names confirmed | `ai.streamText` (outer), `ai.streamText.doStream` (inner, has `gen_ai.*` attrs), `ai.toolCall`. Different from OpenLLMetry's `anthropic.chat`. |
-| 2026-03-16 | `ToolLoopAgent` is the recommended approach | AI SDK 6 introduced `ToolLoopAgent` as a class-based agent wrapper. M1 should confirm whether `.stream()` gives better access to intermediate reasoning than raw `streamText`. |
+| 2026-03-16 | Use `streamText` directly (not `ToolLoopAgent`) | M1 research confirmed `streamText` provides better access to `fullStream` with fine-grained stream parts (`reasoning`, `tool-call`, `tool-result`) needed for the AgentEvent adapter. `ToolLoopAgent` is a convenience wrapper that hides the low-level events. See `docs/research/m1-vercel-ai-sdk-research.md`. |
 | 2026-03-16 | No setup.sh changes needed | Cluster infrastructure is agent-framework-agnostic. The Vercel agent is local code only. |
 | 2026-03-16 | M1–M4 don't need a cluster | Spin up GCP cluster when starting M5. |

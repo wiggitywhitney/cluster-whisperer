@@ -16,7 +16,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-15) Demo cluster (PRD #48 M14): Added provider-kubernetes with ProviderConfig (InjectedIdentity) and RBAC setup to setup.sh
 
 ### Added
-- (2026-03-16) Vercel AI SDK research (PRD #49 M1): Investigated AI SDK 6 agent API, Anthropic provider, streaming events, telemetry spans, extended thinking, and conversation memory. All pre-research findings confirmed — no PRD changes needed. Decision: use streamText directly (not ToolLoopAgent) for better streaming control over reasoning parts. Research summary at docs/research/m1-vercel-ai-sdk-research.md
+- (2026-03-16) Vercel AI SDK research (PRD #49 M1): Investigated AI SDK 6 agent API, provider configuration, streaming events, telemetry spans, extended thinking, and conversation memory. All pre-research findings confirmed. Decision: use streamText directly (not ToolLoopAgent) for better streaming control over reasoning parts. PRD Technical Design and Decision Log updated to reflect decision. Research summary at docs/research/m1-vercel-ai-sdk-research.md
 
 - Demo app (PRD #46 M1): Hono web server with PostgreSQL connection logic, agent-friendly error messages, health and status endpoints, 9 passing tests
 - Demo app (PRD #46 M2): Multi-stage Dockerfile with Node 22 Alpine, verified crash behavior without DATABASE_URL and connection errors with unreachable host
