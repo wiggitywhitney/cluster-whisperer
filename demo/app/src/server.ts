@@ -84,7 +84,7 @@ export function createApp(deps: AppDependencies): Hono {
    * Single static asset — no middleware needed.
    */
   app.get("/Spider-v3.png", (c) => {
-    const imagePath = path.join(__dirname, "../public/Spider-v3.png");
+    const imagePath = path.resolve(process.cwd(), "public", "Spider-v3.png");
     try {
       const imageBuffer = fs.readFileSync(imagePath);
       return new Response(imageBuffer, {
