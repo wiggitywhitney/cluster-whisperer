@@ -61,15 +61,21 @@ Build a Vercel AI SDK agent that:
 **Verification**: Research summary document exists with clear answers to each question above. If any answer is "not supported," the PRD has been updated with an alternative approach before proceeding to M2.
 
 ### M2: Weaver Schema Update
-- [ ] Review M1 findings: what span names and attributes does the Vercel AI SDK's `experimental_telemetry` actually produce?
-- [ ] Compare against existing attribute groups in `telemetry/registry/attributes.yaml`: root, tool, llm, mcp, subprocess, openllmetry, vectorstore, embedding, pipeline, http
-- [ ] If the Vercel SDK produces different LLM span names than OpenLLMetry (e.g., `ai.generateText` instead of `anthropic.chat`): add a new attribute group `registry.cluster_whisperer.vercel_llm` documenting the Vercel SDK's LLM span attributes
-- [ ] If the Vercel SDK uses different attribute names for token usage or model info: document the mapping so both agents' traces are understandable in Datadog
-- [ ] Goal: after this milestone, every span name and attribute that will appear in traces from either agent is defined in the Weaver schema
+- [ ] Add new attribute group `registry.cluster_whisperer.vercel_llm` to `telemetry/registry/attributes.yaml` with the Vercel SDK's LLM span attributes (M1 confirmed these differ from OpenLLMetry):
+  - Outer span name: `ai.streamText` — attributes: `ai.model.id`, `ai.model.provider`, `ai.usage.promptTokens`, `ai.usage.completionTokens`, `ai.telemetry.functionId`, `ai.telemetry.metadata.*`
+  - Inner span name: `ai.streamText.doStream` — attributes: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `ai.prompt.messages`, `ai.prompt.tools`, `ai.response.msToFirstChunk`, `ai.response.msToFinish`
+  - Note: `gen_ai.*` semconv attributes are ONLY on the inner `doStream` spans (not the outer `ai.streamText` span). This is what Datadog LLM Observability reads for token usage.
+- [ ] Add new attribute group `registry.cluster_whisperer.vercel_tool` for the SDK's own tool spans:
+  - Span name: `ai.toolCall` — attributes: `ai.toolCall.name`, `ai.toolCall.id`, `ai.toolCall.args`, `ai.toolCall.result`
+  - Note: These are in ADDITION to our `withToolTracing()` spans (`<toolName>.tool`). Both will appear in traces. Document the relationship: `ai.toolCall` is the SDK-generated span; `<toolName>.tool` is our custom span with `cluster_whisperer.*` attributes.
+- [ ] Add span events to the schema: `ai.stream.firstChunk` and `ai.stream.finish` (events on `doStream` spans, not separate spans)
+- [ ] Document the mapping between OpenLLMetry (LangGraph) and Vercel SDK span names so both agents' traces are understandable in Datadog:
+  - LangGraph LLM calls: `anthropic.chat` (OpenLLMetry) → Vercel LLM calls: `ai.streamText.doStream` (SDK telemetry)
+  - Both carry `gen_ai.*` attributes with the same semantic conventions
 - [ ] Run `npm run telemetry:check` — must pass
 - [ ] Run `npm run telemetry:resolve` — must pass, regenerate `resolved.json`
 
-**Verification**: `npm run telemetry:check` and `npm run telemetry:resolve` both pass. The schema diff shows new attribute groups covering Vercel SDK span names and attributes identified in M1.
+**Verification**: `npm run telemetry:check` and `npm run telemetry:resolve` both pass. `git diff telemetry/registry/attributes.yaml` shows new attribute groups for `vercel_llm` and `vercel_tool` covering all Vercel SDK span names and attributes.
 
 ### M3: Shared Agent Interface
 - [ ] Define `AgentEvent` union type in `src/agent/agent-events.ts`:
@@ -136,51 +142,140 @@ Build a Vercel AI SDK agent that:
 - [ ] Manual test: run with `--thread test-refactor` twice — second run sees prior conversation context (proves memory save/load still works through the adapter)
 
 ### M4: Vercel Tool Wrappers
-- [ ] Create `src/tools/vercel/index.ts` with Vercel AI SDK `tool()` wrappers for all 5 core tools:
+- [ ] Create `src/tools/vercel/index.ts` with AI SDK 6 `tool()` wrappers (import from `'ai'`, NOT `@langchain/core/tools`). The `tools` parameter in `streamText` is `Record<string, Tool>` — tool names are the object keys:
+  ```typescript
+  import { tool } from 'ai';
+  import { kubectlGetSchema, kubectlGet, kubectlGetDescription } from '../core/kubectl-get';
+  import { withToolTracing } from '../../tracing/tool-tracing';
+
+  // SDK 6 uses inputSchema (not parameters or schema)
+  const kubectl_get = tool({
+    description: kubectlGetDescription,
+    inputSchema: kubectlGetSchema,  // Zod schema from core
+    execute: withToolTracing(
+      { name: 'kubectl_get', description: kubectlGetDescription },
+      async (input) => {
+        const { output } = await kubectlGet(input, options);
+        return output;
+      }
+    ),
+  });
+  ```
+- [ ] Wrap all 5 core tools:
   1. `kubectl_get` — wraps `kubectlGet` from `src/tools/core/kubectl-get.ts`
   2. `kubectl_describe` — wraps `kubectlDescribe` from `src/tools/core/kubectl-describe.ts`
   3. `kubectl_logs` — wraps `kubectlLogs` from `src/tools/core/kubectl-logs.ts`
   4. `vector_search` — wraps `vectorSearch` from `src/tools/core/vector-search.ts`
   5. `kubectl_apply` — wraps `kubectlApply` from `src/tools/core/kubectl-apply.ts`
-- [ ] Each wrapper: Zod input schema (from core), description string (from core), execute function calling core logic
-- [ ] Kubeconfig factory pattern: create `createKubectlTools(options?: KubectlOptions)` mirroring `src/tools/langchain/index.ts` — kubectl tools capture kubeconfig path via closure at creation time
-- [ ] Vector tool factory: create `createVectorTools(vectorStore: VectorStore)` mirroring `src/tools/langchain/index.ts` — vector and apply tools share a VectorStore instance with lazy initialization
-- [ ] Apply tool factory: create `createApplyTools(vectorStore: VectorStore, kubectlOptions?: KubectlOptions)` mirroring the LangChain apply tool pattern — the apply tool needs both a VectorStore (for catalog validation) and optional kubeconfig
-- [ ] Each tool's execute function must be wrapped with `withToolTracing()` from `src/tracing/tool-tracing.ts` — same as the LangChain wrappers. This ensures tool spans have identical names and attributes regardless of which agent framework calls them
-- [ ] Unit tests for each wrapper: verify tool name, description, and that execute calls the core function with correct arguments
+- [ ] Kubeconfig factory: `createKubectlTools(options?: KubectlOptions)` returning `Record<string, Tool>` — mirrors `src/tools/langchain/index.ts` pattern, captures kubeconfig via closure
+- [ ] Vector tool factory: `createVectorTools(vectorStore: VectorStore)` returning `Record<string, Tool>` — mirrors LangChain pattern with lazy initialization and graceful degradation
+- [ ] Apply tool factory: `createApplyTools(vectorStore: VectorStore, kubectlOptions?: KubectlOptions)` returning `Record<string, Tool>`
+- [ ] Each tool's execute function MUST be wrapped with `withToolTracing()` — this ensures tool spans (`<toolName>.tool`) have identical names and attributes regardless of which agent framework calls them
+- [ ] **Double-spanning concern**: The Vercel SDK's `experimental_telemetry` also creates `ai.toolCall` spans. Both our `withToolTracing()` spans AND the SDK's `ai.toolCall` spans will appear in traces. This is acceptable — they serve different purposes (ours have `cluster_whisperer.*` attributes; the SDK's have `ai.toolCall.*` attributes). Document this in M2's Weaver schema. Do NOT remove `withToolTracing()` — it's the shared contract between agents.
+- [ ] Unit tests for each wrapper: verify tool has correct description, `inputSchema` matches core schema, and `execute()` delegates to the core function with correct arguments
 
 **Verification**:
 - [ ] `npm test` passes — new unit tests for all 5 Vercel tool wrappers pass
 - [ ] `npm run build` succeeds
-- [ ] Each wrapper test verifies: tool has correct `name` string, correct `description` string (matches core export), and `execute()` delegates to the core function with the input parameters
+- [ ] Each wrapper test verifies: tool has correct `description` string (matches core export), `inputSchema` is the core Zod schema, and `execute()` delegates to the core function with the input parameters
+- [ ] Verify the factory functions return `Record<string, Tool>` objects (not arrays) — `streamText` requires this format
 
 ### M5: Vercel Agent Implementation
 - [ ] Create `src/agent/vercel-agent.ts` implementing the `InvestigationAgent` interface
-- [ ] Same system prompt as LangGraph agent — loaded from `prompts/investigator.md` using the same path pattern (`path.join(__dirname, "../../prompts/investigator.md")`)
-- [ ] Same Claude model: `claude-sonnet-4-20250514` (use the `ANTHROPIC_MODEL` constant exported from `src/agent/investigator.ts`, or define a shared constant)
-- [ ] If M1 confirms interleaved thinking support: enable it with budget_tokens 4000 and `anthropic-beta: interleaved-thinking-2025-05-14` header
-- [ ] If M1 shows no interleaved thinking support: document the limitation. The CLI will still work but "Thinking:" blocks won't appear, which the audience may notice. Add a note to M8 to document this difference
-- [ ] `investigate()` method returns `AsyncIterable<AgentEvent>` by iterating over the Vercel SDK's streaming response and translating events (the specific translation depends on M1 research into the streaming event model)
-- [ ] `maxSteps` set to 50 to match `RECURSION_LIMIT` from `src/agent/investigator.ts`
-- [ ] Tool-set filtering: the factory passes the filtered Vercel tool array (from M4's factories), same as LangGraph receives filtered LangChain tools
+- [ ] Same system prompt as LangGraph agent — loaded from `prompts/investigator.md` using `path.join(__dirname, "../../prompts/investigator.md")` (same pattern as `src/agent/investigator.ts`)
+- [ ] Same Claude model: `claude-sonnet-4-20250514` (use the `ANTHROPIC_MODEL` constant exported from `src/agent/investigator.ts`)
+- [ ] The `investigate()` method calls `streamText` (from `'ai'`) with these exact parameters:
+  ```typescript
+  import { streamText, stepCountIs } from 'ai';
+  import { anthropic } from '@ai-sdk/anthropic';
+
+  const result = streamText({
+    model: anthropic(ANTHROPIC_MODEL),
+    system: systemPrompt,          // SDK 6 renamed to 'instructions' but 'system' still works
+    prompt: question,              // For single-turn; or use messages: [...] for multi-turn
+    tools: filteredTools,          // Record<string, Tool> from M4 factories
+    stopWhen: stepCountIs(50),     // Matches RECURSION_LIMIT (SDK 6: NOT maxSteps)
+    providerOptions: {
+      anthropic: {
+        thinking: { type: 'enabled', budgetTokens: 4000 },
+        headers: { 'anthropic-beta': 'interleaved-thinking-2025-05-14' },
+      },
+    },
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: 'cluster-whisperer-investigate',
+      metadata: { agent: 'vercel' },
+    },
+  });
+  ```
+- [ ] M1 CONFIRMED: Extended thinking with interleaved thinking IS supported. Enable it with `budgetTokens: 4000` + `anthropic-beta: interleaved-thinking-2025-05-14` header. "Thinking:" blocks will appear in CLI output for both agents.
+- [ ] The `investigate()` method translates `fullStream` parts into `AgentEvent` objects. The exact mapping (from M1 Q3, verified property names):
+  ```typescript
+  async function* investigate(question, options): AsyncIterable<AgentEvent> {
+    let textBuffer = '';
+    for await (const part of result.fullStream) {
+      switch (part.type) {
+        case 'reasoning-delta':
+          yield { type: 'thinking', content: part.delta };
+          break;
+        case 'tool-call':
+          yield { type: 'tool_start', name: part.toolName, args: part.input };
+          break;
+        case 'tool-result':
+          yield { type: 'tool_result', content: String(part.output) };
+          break;
+        case 'text-delta':
+          textBuffer += part.delta;
+          break;
+        case 'finish-step':
+          if (part.finishReason === 'stop' && textBuffer) {
+            yield { type: 'final_answer', content: textBuffer };
+            textBuffer = '';
+          }
+          break;
+      }
+    }
+    // Edge case: if stream ends without finish-step with 'stop'
+    if (textBuffer) {
+      yield { type: 'final_answer', content: textBuffer };
+    }
+  }
+  ```
+  **IMPORTANT property name caution**: M1 research found a known inconsistency (vercel/ai#8756) between TypeScript types and runtime values for `delta` vs `textDelta` vs `text`. The code above uses `part.delta` based on the SDK 6 research. If TypeScript complains or runtime values differ, try `part.textDelta` or `(part as any).text`. Document whichever works in a code comment.
+- [ ] Tool-set filtering: the agent factory passes the filtered `Record<string, Tool>` from M4's factories (merged via object spread: `{ ...kubectlTools, ...vectorTools, ...applyTools }`)
 - [ ] Agent factory integration: update the `case "vercel"` branch in `src/agent/agent-factory.ts` to construct and return the Vercel agent (replacing the "not yet implemented" error)
 
 **Verification**:
-- [ ] `npm test` passes — unit tests for the Vercel agent mock the AI SDK, verify it calls the streaming API with correct parameters: model, system prompt, tools, maxSteps
-- [ ] `npm run build` succeeds
+- [ ] `npm test` passes — unit tests for the Vercel agent mock `streamText` from `'ai'`, verify it's called with: correct model (`anthropic(ANTHROPIC_MODEL)`), system prompt, tools (Record shape), `stopWhen: stepCountIs(50)`, `providerOptions.anthropic.thinking`, and `experimental_telemetry.isEnabled: true`
+- [ ] `npm run build` succeeds with no TypeScript errors
 - [ ] `agent-factory.test.ts` updated: the "vercel" case now returns a valid `InvestigationAgent` instead of throwing
 - [ ] Manual test against a real cluster: `CLUSTER_WHISPERER_AGENT=vercel CLUSTER_WHISPERER_TOOLS=kubectl vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"` completes successfully, shows tool calls and a final answer
-- [ ] If extended thinking is supported: verify "Thinking:" blocks appear in italic in CLI output
+- [ ] Verify "Thinking:" blocks appear in italic in CLI output (interleaved thinking is confirmed working)
+- [ ] Verify the `fullStream` property names at runtime match the code — if `part.delta` doesn't work, update to `part.textDelta` or `part.text` and document the finding
 
 ### M6: Conversation Memory
-- [ ] Implement message history persistence for the Vercel agent's `--thread` flag
-- [ ] The Vercel AI SDK does not have LangGraph's `MemorySaver` checkpointer. Implement a conversation history store:
-  - After each `investigate()` call, serialize the full message array (system, user, assistant, tool_call, tool_result messages) to a JSON file
-  - File location: `data/threads/` directory (same as the LangGraph checkpointer files from `src/agent/file-checkpointer.ts`)
-  - File naming: `vercel-<threadId>.json` (prefixed to avoid collision with LangGraph thread files which are named `<threadId>.json`)
-  - On resume with the same thread ID, load prior messages and prepend to the new Vercel SDK call
-- [ ] The `investigate()` method in `vercel-agent.ts` handles load/save internally — the CLI just passes `threadId` through `options` (same pattern as `LangGraphAdapter`)
-- [ ] Handle edge cases: missing file (start fresh), corrupt JSON (start fresh — same pattern as `file-checkpointer.ts`), different thread IDs are independent
+- [ ] Implement message history persistence for the Vercel agent's `--thread` flag using the SDK's `ModelMessage[]` format (renamed from `CoreMessage` in SDK 5→6)
+- [ ] The conversation memory lifecycle inside `investigate()`:
+  1. **Load**: If `threadId` is provided, read `data/threads/vercel-<threadId>.json`. Parse as `ModelMessage[]`. If file missing or corrupt JSON → start fresh.
+  2. **Build messages**: Combine prior messages + new user message:
+     ```typescript
+     const messages: ModelMessage[] = [
+       ...priorMessages,
+       { role: 'user', content: question },
+     ];
+     ```
+     The system prompt is passed as the `system` parameter to `streamText`, NOT in the messages array.
+  3. **Call streamText** with `messages` instead of `prompt` (multi-turn mode)
+  4. **Save**: After the stream completes, get the new messages via `await result.response` → `response.messages` (returns `ModelMessage[]` containing all assistant + tool messages from ALL steps). Append to input messages and serialize:
+     ```typescript
+     const response = await result.response;
+     const fullHistory = [...messages, ...response.messages];
+     fs.writeFileSync(threadFile, JSON.stringify(fullHistory, null, 2));
+     ```
+- [ ] File location: `data/threads/` directory (same as LangGraph checkpointer files from `src/agent/file-checkpointer.ts`)
+- [ ] File naming: `vercel-<threadId>.json` (prefixed to avoid collision with LangGraph thread files named `<threadId>.json`)
+- [ ] Handle edge cases: missing file (start fresh), corrupt JSON (start fresh — same pattern as `file-checkpointer.ts`), different thread IDs are independent, sanitize thread IDs for filesystem safety
+- [ ] `ModelMessage` objects are plain JSON-serializable — `JSON.stringify`/`JSON.parse` round-trips cleanly. No special serialization needed (unlike LangGraph's `MemorySaver` which has `Uint8Array` values requiring base64 encoding).
 
 **Verification**:
 - [ ] Unit tests: round-trip save/load of conversation history (mirror the test patterns in `src/agent/file-checkpointer.test.ts`: fresh start, round-trip, directory creation, ID sanitization, corrupt file recovery, independent threads)
@@ -198,15 +293,28 @@ Build a Vercel AI SDK agent that:
   # Agent says it can't — no apply tool
   ```
 - [ ] Verify: the second and third invocations reference information from prior turns
-- [ ] Verify: `data/threads/vercel-demo-vercel.json` file exists after the conversation
+- [ ] Verify: `data/threads/vercel-demo-vercel.json` file exists and contains valid JSON with `role: 'assistant'`, `role: 'tool'`, `role: 'user'` messages
+- [ ] Verify: tool calls in the serialized history have `{ type: 'tool-call', toolCallId, toolName, args }` parts and tool results have `{ type: 'tool-result', toolCallId, toolName, output }` parts
 - [ ] Verify: deleting the thread file and re-running starts a fresh conversation
 
 ### M7: OTel Instrumentation
-- [ ] Enable `experimental_telemetry: { isEnabled: true }` on all AI SDK calls in `vercel-agent.ts`
-- [ ] The root investigation span is already provided by `withAgentTracing()` wrapping the `agent.investigate()` loop in `src/index.ts` (from M3 refactor). No additional work needed for the root span — it's framework-agnostic
-- [ ] Tool execution spans are already provided by `withToolTracing()` wrapping each Vercel tool's execute function (from M4). No additional work needed for tool spans
-- [ ] `setTraceOutput()` is already called when the `final_answer` event is received in the CLI rendering loop (from M3 refactor). No additional work needed for output recording
-- [ ] Verify: the Vercel SDK's `experimental_telemetry` spans nest correctly under our root span (their parent IDs chain back to the root `cluster-whisperer.cli.investigate` span). If they don't (same AsyncLocalStorage context loss that LangGraph had — see OpenLLMetry-JS Issue #476 and `src/tracing/context-bridge.ts`), apply the `withStoredContext()` bridge
+- [ ] The `experimental_telemetry` config in M5's `streamText` call already enables telemetry. M7 focuses on verifying span nesting and context propagation.
+- [ ] **Context propagation via `tracer` parameter**: The SDK's `experimental_telemetry` accepts a `tracer` field. Pass our existing TracerProvider's tracer to ensure Vercel SDK spans nest under our root span:
+  ```typescript
+  import { trace } from '@opentelemetry/api';
+
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: 'cluster-whisperer-investigate',
+    tracer: trace.getTracer('ai'),  // Uses our registered TracerProvider
+  }
+  ```
+  If this isn't sufficient for context propagation (same AsyncLocalStorage issue as LangGraph — see `src/tracing/context-bridge.ts`), wrap the `streamText` call with `withStoredContext()`.
+- [ ] The root investigation span is already provided by `withAgentTracing()` in `src/index.ts` (from M3 refactor) — framework-agnostic, no additional work needed
+- [ ] Tool execution spans are already provided by `withToolTracing()` in each Vercel tool's execute function (from M4) — no additional work needed
+- [ ] `setTraceOutput()` is already called when `final_answer` is received in the CLI loop (from M3 refactor) — no additional work needed
+- [ ] **Double tool spans are expected**: Both our `withToolTracing()` spans (`kubectl_get.tool`) and the SDK's `ai.toolCall` spans will appear. This is by design — our spans carry `cluster_whisperer.*` attributes for the shared contract; the SDK spans carry `ai.toolCall.*` attributes. Do NOT remove either.
+- [ ] **`gen_ai.*` attributes location**: The `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `ai.streamText.doStream` spans (inner, per-step), NOT on the outer `ai.streamText` span. Datadog LLM Observability reads these from the inner spans — verify they appear correctly.
 
 **Verification procedure — console exporter** (run this first):
 ```bash
@@ -221,9 +329,11 @@ vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"
 ```
 
 - [ ] Console output shows root span: name `cluster-whisperer.cli.investigate`, attribute `cluster_whisperer.invocation.mode: cli`
-- [ ] Console output shows tool spans (e.g., `kubectl_get.tool`) with `parentId` pointing to root span's `spanId`
-- [ ] Console output shows Vercel SDK LLM spans (span name from M1 research) with `gen_ai.request.model` attribute
-- [ ] All spans share the same `traceId` (single trace, not fragmented)
+- [ ] Console output shows our tool spans (e.g., `kubectl_get.tool`) with `cluster_whisperer.*` attributes
+- [ ] Console output shows SDK tool spans (`ai.toolCall`) with `ai.toolCall.name` attribute — these are separate from our `withToolTracing` spans
+- [ ] Console output shows Vercel SDK LLM spans: outer `ai.streamText` and inner `ai.streamText.doStream` with `gen_ai.request.model` attribute
+- [ ] The `gen_ai.*` attributes (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) appear on `ai.streamText.doStream` spans, NOT on the outer `ai.streamText` span
+- [ ] All spans share the same `traceId` (single trace, not fragmented — proves context propagation works)
 - [ ] Root span has `gen_ai.input.messages` attribute (requires `OTEL_CAPTURE_AI_PAYLOADS=true`)
 - [ ] After investigation completes, root span has `gen_ai.output.messages` attribute containing the final answer text
 
@@ -243,20 +353,21 @@ vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell m
 - [ ] Trace appears in Datadog LLM Observability with CONTENT column showing clean INPUT and OUTPUT text (not raw JSON, not "No content")
 - [ ] Token usage is populated in the Datadog LLM Observability view
 
-**Target span hierarchy** (confirmed from AI SDK telemetry docs):
+**Target span hierarchy** (confirmed from M1 research — includes both our spans and SDK spans):
 ```text
 cluster-whisperer.cli.investigate          (root, withAgentTracing)
-├── ai.streamText                          (Vercel SDK outer span)
-│   └── ai.streamText.doStream             (LLM API call, has gen_ai.* attrs)
-├── kubectl_get.tool                       (withToolTracing)
+├── ai.streamText                          (Vercel SDK outer span, wraps all steps)
+│   ├── ai.streamText.doStream             (step 1: LLM call, has gen_ai.* attrs)
+│   │   └── ai.toolCall                    (SDK tool span: ai.toolCall.name=kubectl_get)
+│   ├── ai.streamText.doStream             (step 2: LLM with tool result)
+│   │   └── ai.toolCall                    (SDK tool span: ai.toolCall.name=kubectl_describe)
+│   └── ai.streamText.doStream             (step 3: final answer, no tool call)
+├── kubectl_get.tool                       (our withToolTracing span, cluster_whisperer.* attrs)
 │   └── kubectl get pods                   (subprocess span)
-├── ai.streamText                          (next step)
-│   └── ai.streamText.doStream
-├── kubectl_describe.tool
-│   └── kubectl describe pod demo-app-xxx
-└── ai.streamText                          (final step)
-    └── ai.streamText.doStream
+└── kubectl_describe.tool                  (our withToolTracing span)
+    └── kubectl describe pod demo-app-xxx  (subprocess span)
 ```
+Note: Both `ai.toolCall` (SDK) and `<toolName>.tool` (ours) spans appear for each tool execution. They serve different observability purposes and coexist intentionally.
 
 ### M8: Equivalence Testing
 - [ ] Run both agents against the same demo scenario using the exact commands from `docs/choose-your-adventure-demo.md`
@@ -330,8 +441,10 @@ cluster-whisperer "Go ahead and deploy it"
 - [ ] Run Test 1 with both agents with `OTEL_TRACING_ENABLED=true OTEL_EXPORTER_TYPE=otlp`
 - [ ] Open both traces in Datadog
 - [ ] Root spans have identical names (`cluster-whisperer.cli.investigate`) and identical `cluster_whisperer.*` attributes
-- [ ] Tool spans have identical names (`kubectl_get.tool`, etc.) and attributes
-- [ ] LLM span names differ (expected: `anthropic.chat` vs `ai.streamText.doStream`) — this is documented in the Weaver schema (M2)
+- [ ] Our tool spans have identical names (`kubectl_get.tool`, etc.) and identical `cluster_whisperer.*` attributes in both agents
+- [ ] LLM span names differ (expected: `anthropic.chat` for LangGraph vs `ai.streamText.doStream` for Vercel) — this is documented in the Weaver schema (M2)
+- [ ] Both agents' inner LLM spans carry `gen_ai.*` attributes (model, token usage) — verify Datadog LLM Observability shows token usage for both
+- [ ] Vercel traces have additional `ai.toolCall` spans alongside our `<toolName>.tool` spans — this is expected and documented
 - [ ] Both traces tell a readable investigation story in the Datadog flame graph
 
 **Test 6: Save demo runs**:
@@ -339,10 +452,15 @@ cluster-whisperer "Go ahead and deploy it"
 - [ ] File names: `<timestamp>-vercel-act2.txt`, `<timestamp>-langgraph-act2.txt`, etc.
 
 ### M9: Documentation
-- [ ] Update README using `/write-docs` to document the Vercel agent and `--agent` flag
-- [ ] Update `docs/choose-your-adventure-demo.md` if any demo flow adjustments are needed
-- [ ] Update `docs/tracing-conventions.md` with Vercel-specific notes (different LLM span names, how experimental_telemetry integrates with our root span)
-- [ ] If M1 reveals any Vercel SDK limitations not caught in pre-research: document them prominently
+- [ ] Update README using `/write-docs` to document the Vercel agent and `--agent vercel` flag
+- [ ] Update `docs/choose-your-adventure-demo.md` if any demo flow adjustments are needed (unlikely — the demo flow is agent-agnostic by design)
+- [ ] Update `docs/tracing-conventions.md` with Vercel-specific notes:
+  - Different LLM span names: `ai.streamText.doStream` vs `anthropic.chat`
+  - Double tool spans: `ai.toolCall` (SDK) + `<toolName>.tool` (ours) — explain why both exist
+  - `experimental_telemetry` configuration and the `tracer` parameter for context propagation
+  - `gen_ai.*` attributes are on inner `doStream` spans only
+- [ ] Document the known property name inconsistency in the Vercel SDK (vercel/ai#8756) if it caused any adapter adjustments during M5
+- [ ] Document that summarized thinking output means both agents show condensed reasoning (not full thinking tokens)
 
 **Verification**: All documentation changes reviewed. `docs/choose-your-adventure-demo.md` is accurate for both agent options. A new reader could understand `--agent vercel` and any behavioral differences from reading the docs alone.
 
@@ -440,19 +558,30 @@ src/tools/langchain/index.ts       ← LangGraph wrappers (existing)
 src/tools/vercel/index.ts          ← Vercel AI SDK wrappers (new)
 ```
 
-Vercel tool definition (AI SDK 6 uses `inputSchema`, not `parameters`):
+Vercel tool definition (AI SDK 6 uses `inputSchema`, not `parameters`). The `tools`
+parameter to `streamText` is `Record<string, Tool>` — tool names are object keys:
 ```typescript
 import { tool } from 'ai';
 import { kubectlGetSchema, kubectlGet, kubectlGetDescription } from '../core/kubectl-get';
+import { withToolTracing } from '../../tracing/tool-tracing';
 
-export const kubectlGetTool = tool({
-  description: kubectlGetDescription,
-  inputSchema: kubectlGetSchema,  // Zod schema from core — AI SDK 6 uses inputSchema
-  execute: async (params) => {
-    const { output } = await kubectlGet(params);
-    return output;
-  },
-});
+// Factory returns Record<string, Tool> for streamText's tools parameter
+export function createKubectlTools(options?: KubectlOptions): Record<string, Tool> {
+  return {
+    kubectl_get: tool({
+      description: kubectlGetDescription,
+      inputSchema: kubectlGetSchema,
+      execute: withToolTracing(
+        { name: 'kubectl_get', description: kubectlGetDescription },
+        async (input) => {
+          const { output } = await kubectlGet(input, options);
+          return output;
+        }
+      ),
+    }),
+    // ... kubectl_describe, kubectl_logs
+  };
+}
 ```
 
 ### Shared Agent Interface
@@ -533,19 +662,24 @@ const result = streamText({
 ### Streaming to CLI
 
 The `streamText` result exposes a `fullStream` property — an `AsyncIterable<TextStreamPart>`
-that emits all events during a multi-step agent run. The `AgentEvent` adapter iterates
-over `fullStream` and translates part types:
+that emits all events during a multi-step agent run. SDK 6 uses start/delta/end patterns.
+The `AgentEvent` adapter iterates over `fullStream` and translates part types:
 
-- `'reasoning'` (with `textDelta`) → `AgentEvent.thinking`
-- `'tool-call'` (with `toolName`, `args`) → `AgentEvent.tool_start`
-- `'tool-result'` (with `toolName`, `result`) → `AgentEvent.tool_result`
-- `'text-delta'` (with `textDelta`) → accumulate for `AgentEvent.final_answer`
-- `'step-finish'` → detect final step (finishReason === 'stop') to emit final answer
+- `'reasoning-delta'` (with `delta`) → `AgentEvent.thinking`
+- `'tool-call'` (with `toolName`, `input`) → `AgentEvent.tool_start`
+- `'tool-result'` (with `toolName`, `output`) → `AgentEvent.tool_result`
+- `'text-delta'` (with `delta`) → accumulate for `AgentEvent.final_answer`
+- `'finish-step'` (with `finishReason`, `stepType`) → detect final step to emit final answer
+
+**Property name caution**: M1 found a known inconsistency (vercel/ai#8756) between
+TypeScript types and runtime values for the text property on delta parts. The implementation
+should try `part.delta` first; if it's undefined at runtime, fall back to `part.textDelta`
+or `(part as any).text`. Document whichever works.
 
 The SDK also offers lifecycle callbacks (`onStepFinish`, `experimental_onToolCallStart`,
 `experimental_onToolCallFinish`) as supplements, but the stream parts are sufficient.
 
-For extended thinking, `fullStream` emits `reasoning` parts between tool calls when
+For extended thinking, `fullStream` emits `reasoning-delta` parts between tool calls when
 interleaved thinking is enabled. `result.reasoningText` gives aggregated thinking after
 the stream completes; for real-time CLI output, use the stream parts.
 
@@ -575,10 +709,13 @@ LangGraph uses a `MemorySaver` checkpointer (wrapped with file persistence in
 `src/agent/file-checkpointer.ts`) that saves/restores full agent state between CLI
 invocations. Files are stored in `data/threads/<threadId>.json`.
 
-The Vercel agent manages conversation memory manually:
-1. After each investigation, serialize the full message array to `data/threads/vercel-<threadId>.json`
-2. On the next invocation with the same thread ID, deserialize and prepend to the new call
-3. Handle corrupt/missing files gracefully (start fresh, same pattern as `file-checkpointer.ts`)
+The Vercel agent manages conversation memory manually via `ModelMessage[]` (SDK 6 type,
+renamed from `CoreMessage` in SDK 5):
+1. After each investigation, get new messages via `await result.response` → `response.messages` (returns `ModelMessage[]` with all assistant + tool messages from all steps)
+2. Combine input messages + response messages → serialize to `data/threads/vercel-<threadId>.json`
+3. On resume: deserialize, append new user message, pass as `messages` parameter to `streamText`
+4. System prompt is passed as the `system` parameter, NOT in the messages array
+5. `ModelMessage` objects are plain JSON-serializable — no special encoding needed (unlike LangGraph's `Uint8Array` values requiring base64)
 
 ### Telemetry Contract
 
