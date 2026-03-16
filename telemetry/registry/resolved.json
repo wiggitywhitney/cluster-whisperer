@@ -316,6 +316,54 @@
       "display_name": "HTTP Server Attributes"
     },
     {
+      "id": "registry.cluster_whisperer.kubectl_apply",
+      "type": "attribute_group",
+      "brief": "Attributes specific to the kubectl_apply tool's catalog validation",
+      "note": "Set on kubectl_apply tool spans during platform catalog validation. These attributes let you filter traces by resource kind and see whether the apply was approved by the catalog.\n",
+      "attributes": [
+        {
+          "name": "cluster_whisperer.catalog.approved",
+          "type": "boolean",
+          "brief": "Whether the resource type passed platform catalog validation",
+          "requirement_level": "recommended",
+          "note": "True if the resource kind+apiGroup was found in the capabilities collection. False means the apply was rejected.\n",
+          "stability": "development"
+        },
+        {
+          "name": "cluster_whisperer.k8s.api_group",
+          "type": "string",
+          "brief": "Kubernetes API group extracted from the YAML manifest",
+          "examples": [
+            "platform.acme.io",
+            "apps",
+            ""
+          ],
+          "requirement_level": "recommended",
+          "note": "Empty string for core API resources (e.g., Pod, Service).",
+          "stability": "development"
+        },
+        {
+          "name": "cluster_whisperer.k8s.resource_kind",
+          "type": "string",
+          "brief": "Kubernetes resource kind extracted from the YAML manifest",
+          "examples": [
+            "ManagedService",
+            "Deployment",
+            "Pod"
+          ],
+          "requirement_level": "recommended",
+          "stability": "development"
+        }
+      ],
+      "lineage": {
+        "provenance": {
+          "registry_id": "cluster_whisperer",
+          "path": "telemetry/registry/attributes.yaml"
+        }
+      },
+      "display_name": "kubectl_apply Tool Attributes"
+    },
+    {
       "id": "registry.cluster_whisperer.llm",
       "type": "attribute_group",
       "brief": "GenAI semantic convention attributes for LLM/chat completion spans",
@@ -668,6 +716,18 @@
       "type": "attribute_group",
       "brief": "Attributes for root investigation/tool spans",
       "attributes": [
+        {
+          "name": "cluster_whisperer.agent.framework",
+          "type": "string",
+          "brief": "Which agent framework is handling the investigation",
+          "examples": [
+            "langgraph",
+            "vercel"
+          ],
+          "requirement_level": "recommended",
+          "note": "Set on CLI root spans. Values correspond to the --agent flag.",
+          "stability": "development"
+        },
         {
           "name": "cluster_whisperer.invocation.mode",
           "type": {
@@ -1554,6 +1614,19 @@
           "stability": "development"
         },
         {
+          "name": "ai.operationId",
+          "type": "string",
+          "brief": "Vercel AI SDK operation identifier (SDK-generated, read by VercelSpanProcessor)",
+          "examples": [
+            "ai.streamText",
+            "ai.streamText.doStream",
+            "ai.toolCall"
+          ],
+          "requirement_level": "recommended",
+          "note": "Set by the Vercel AI SDK's experimental_telemetry. Our VercelSpanProcessor reads this to determine which gen_ai.operation.name to add. Values: ai.streamText (outer), ai.streamText.doStream (inner), ai.toolCall (tool).\n",
+          "stability": "development"
+        },
+        {
           "name": "ai.prompt.messages",
           "type": "string",
           "brief": "JSON-stringified prompt messages sent to the LLM (content-gated)",
@@ -1643,6 +1716,70 @@
           ],
           "requirement_level": "recommended",
           "note": "SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.input_tokens.",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.agent.name",
+          "type": "string",
+          "brief": "Agent name for Datadog LLM Obs agent layer classification",
+          "examples": [
+            "cluster-whisperer"
+          ],
+          "requirement_level": "recommended",
+          "note": "Set by VercelSpanProcessor on outer ai.streamText spans. Value is \"cluster-whisperer\". Combined with gen_ai.operation.name: \"invoke_agent\", this causes Datadog to classify the span as an agent layer.\n",
+          "stability": "development"
+        },
+        {
+          "name": "gen_ai.operation.name",
+          "type": {
+            "members": [
+              {
+                "id": "chat",
+                "value": "chat",
+                "brief": "Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat)",
+                "stability": "development"
+              },
+              {
+                "id": "generate_content",
+                "value": "generate_content",
+                "brief": "Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content)",
+                "stability": "development"
+              },
+              {
+                "id": "text_completion",
+                "value": "text_completion",
+                "brief": "Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions)",
+                "stability": "development"
+              },
+              {
+                "id": "embeddings",
+                "value": "embeddings",
+                "brief": "Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create)",
+                "stability": "development"
+              },
+              {
+                "id": "create_agent",
+                "value": "create_agent",
+                "brief": "Create GenAI agent",
+                "stability": "development"
+              },
+              {
+                "id": "invoke_agent",
+                "value": "invoke_agent",
+                "brief": "Invoke GenAI agent",
+                "stability": "development"
+              },
+              {
+                "id": "execute_tool",
+                "value": "execute_tool",
+                "brief": "Execute a tool",
+                "stability": "development"
+              }
+            ]
+          },
+          "brief": "The name of the operation being performed.",
+          "requirement_level": "required",
+          "note": "If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n",
           "stability": "development"
         },
         {
@@ -1867,6 +2004,15 @@
           "path": "telemetry/registry/attributes.yaml"
         },
         "attributes": {
+          "gen_ai.operation.name": {
+            "source_group": "attributes.gen_ai.common.client",
+            "inherited_fields": [
+              "brief",
+              "note",
+              "requirement_level",
+              "stability"
+            ]
+          },
           "gen_ai.request.model": {
             "source_group": "attributes.gen_ai.common.client",
             "inherited_fields": [

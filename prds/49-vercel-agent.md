@@ -464,20 +464,13 @@ cluster-whisperer "Go ahead and deploy it"
 - [x] File names: `<timestamp>-vercel-act2.txt`, `<timestamp>-langgraph-act2.txt`, etc.
 
 ### M9: Documentation
-- [ ] Update README using `/write-docs` to document the Vercel agent and `--agent vercel` flag
-- [ ] Update `docs/choose-your-adventure-demo.md` if any demo flow adjustments are needed (unlikely — the demo flow is agent-agnostic by design)
-- [ ] Update `docs/tracing-conventions.md` with Vercel-specific notes (Updated per Decisions 16-19):
-  - Different LLM span names: `text.stream` (Vercel, `ai.operationId: ai.streamText.doStream`) vs `anthropic.chat` (LangGraph, OpenLLMetry)
-  - Different outer span: `vercel.agent` (Vercel, maps to agent layer) vs `CompiledStateGraph.workflow` (LangGraph, maps to workflow layer)
-  - Double tool spans: SDK `ai.toolCall` + `<toolName>.tool` (ours) — explain why both exist
-  - `VercelSpanProcessor`: enriches SDK spans with `gen_ai.operation.name` for correct Datadog LLM Obs layer classification
-  - `experimental_telemetry` configuration and the `tracer` parameter for context propagation
-  - `gen_ai.*` attributes are on inner `text.stream` spans only
-  - Datadog mapping reference: `docs/research/49-m7-datadog-llmobs-otel-mapping.md`
-- [ ] Document the known property name inconsistency in the Vercel SDK (vercel/ai#8756) if it caused any adapter adjustments during M5
-- [ ] Document that summarized thinking output means both agents show condensed reasoning (not full thinking tokens)
+- [x] Update README using `/write-docs` to document the Vercel agent and `--agent vercel` flag (Updated per Decision 22: also link to auto-generated attribute reference)
+- [x] Update `docs/choose-your-adventure-demo.md` if any demo flow adjustments are needed — fixed `src/agent/vercel.ts` → `src/agent/vercel-agent.ts`; demo flow is agent-agnostic by design, no other changes needed
+- [x] Update `docs/tracing-conventions.md` with Vercel-specific notes (Updated per Decisions 16-19, 21-22): Added Vercel Agent Tracing section with SDK telemetry config, LLM span name differences, VercelSpanProcessor mapping, Datadog layer table. Updated span hierarchy to show both agents. Updated Quick Reference files and span summary tables. Linked to auto-generated attribute reference.
+- [x] Document the known property name inconsistency in the Vercel SDK (vercel/ai#8756) — added "SDK Property Name Inconsistency" section in tracing-conventions.md
+- [x] Document that summarized thinking output means both agents show condensed reasoning — added "Summarized Thinking Output" section in tracing-conventions.md
 
-**Verification**: All documentation changes reviewed. `docs/choose-your-adventure-demo.md` is accurate for both agent options. A new reader could understand `--agent vercel` and any behavioral differences from reading the docs alone.
+**Verification**: All documentation changes reviewed. `docs/choose-your-adventure-demo.md` is accurate for both agent options. A new reader could understand `--agent vercel` and any behavioral differences from reading the docs alone. `npm run telemetry:docs` generates `docs/telemetry-generated/` successfully. Auto-generated attribute reference covers all 13 attribute groups.
 
 ## Pre-Research Findings (2026-03-16)
 
@@ -808,3 +801,6 @@ These existing files are directly relevant to implementation. Read before starti
 | 2026-03-16 | No OpenLLMetry instrumentation for Vercel AI SDK (Decision 17) | Confirmed: openllmetry-js has 13 instrumentation packages but none for the Vercel AI SDK. The `@traceloop/instrumentation-anthropic` instruments the underlying Anthropic calls for LangGraph but not the Vercel SDK layer. |
 | 2026-03-16 | Datadog LLM Obs requires `gen_ai.operation.name` for layer classification (Decision 18) | Without this attribute, spans default to "workflow" regardless of other gen_ai.* attributes. The Vercel SDK's LLM spans have all gen_ai.* attributes EXCEPT `gen_ai.operation.name`. Root span's `gen_ai.operation.name: "chat"` is wrong for both agents — makes Datadog classify it as LLM instead of workflow. Full mapping: `docs/research/49-m7-datadog-llmobs-otel-mapping.md`. |
 | 2026-03-16 | SpanProcessor to enrich Vercel SDK spans for Datadog (Decision 19) | Add a SpanProcessor that sets `gen_ai.operation.name` on Vercel SDK spans based on `ai.operationId`: `ai.streamText.doStream` → `"chat"` (llm layer), `ai.streamText` → `"invoke_agent"` (agent layer). Also fix root span from `"chat"` → remove (workflow layer). Non-invasive, follows existing `ToolDefinitionsProcessor` pattern. Produces all 4 Datadog layers: agent, workflow, llm, tool. |
+| 2026-03-16 | Weaver schema audit: 4 missing attributes + VercelSpanProcessor attributes (Decision 20) | Schema audit found `cluster_whisperer.agent.framework`, `cluster_whisperer.catalog.approved`, `cluster_whisperer.k8s.resource_kind`, `cluster_whisperer.k8s.api_group` set in code but not in schema. Also `gen_ai.agent.name`, `ai.operationId`, and `gen_ai.operation.name` on Vercel spans. All added. New `kubectl_apply` attribute group created. |
+| 2026-03-16 | Auto-generate attribute reference from Weaver schema (Decision 21) | Use `weaver registry generate` with official OTel semconv markdown templates to produce `docs/telemetry-generated/`. This is the single source of truth for attribute definitions. Hand-written `docs/tracing-conventions.md` keeps architecture and design rationale only — remove its hand-maintained attribute tables to prevent drift. Added `npm run telemetry:docs` script. |
+| 2026-03-16 | Generated docs complement, don't replace hand-written docs (Decision 22) | `docs/telemetry-generated/attributes/cluster-whisperer.md` is the auto-generated attribute reference (what attributes exist). `docs/tracing-conventions.md` is the hand-written architecture guide (why spans are structured this way, context propagation, design decisions). Both are linked from README. |

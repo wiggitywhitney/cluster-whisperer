@@ -232,7 +232,7 @@ src/tools/core/           <- Shared business logic (kubectl, vector search, appl
 src/tools/langchain/      <- LangGraph tool wrappers
 src/tools/vercel/         <- Vercel AI SDK tool wrappers
 src/agent/investigator.ts <- LangGraph agent
-src/agent/vercel.ts       <- Vercel AI SDK agent
+src/agent/vercel-agent.ts <- Vercel AI SDK agent
 ```
 
 ### Tool Groups

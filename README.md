@@ -77,7 +77,7 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 
 - **CLI Agent** - Ask questions directly from the terminal with visible reasoning
 - **Tool-Set Filtering** - Control which tools the agent has with `--tools kubectl,vector,apply` (progressive capability)
-- **Agent Selection** - Switch between agent frameworks with `--agent langgraph` (Vercel AI SDK coming soon)
+- **Agent Selection** - Switch between agent frameworks with `--agent langgraph` or `--agent vercel`
 - **Vector Backend Switching** - Choose between Chroma and Qdrant with `--vector-backend qdrant`
 - **Conversation Memory** - Multi-turn conversations with `--thread <id>` — the agent remembers prior context
 - **kubectl_apply** - Deploy resources from the platform's approved catalog (code-enforced, not prompt-level)
@@ -135,6 +135,9 @@ vals exec -i -f .vals.yaml -- node dist/index.js --vector-backend qdrant "What d
 vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "What database should I deploy?"
 vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "I'm on the You Choose team"
 vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "Go ahead and deploy it"
+
+# With the Vercel AI SDK agent (same tools, same output, different framework)
+cluster-whisperer --agent vercel --tools kubectl "Why is my app broken?"
 
 # With tracing to Datadog (via local agent)
 OTEL_TRACING_ENABLED=true \
@@ -367,7 +370,7 @@ npm run telemetry:check     # Validate registry structure and references
 npm run telemetry:resolve   # Resolve all references to flat JSON
 ```
 
-See `docs/tracing-conventions.md` for tracing architecture, context propagation, and design rationale.
+See [`docs/tracing-conventions.md`](docs/tracing-conventions.md) for tracing architecture and design rationale, and [`docs/telemetry-generated/attributes/cluster-whisperer.md`](docs/telemetry-generated/attributes/cluster-whisperer.md) for the auto-generated attribute reference.
 
 ## Project Structure
 
@@ -376,8 +379,13 @@ src/
 ├── index.ts               # CLI entry point (agent + sync + serve commands)
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
-│   ├── investigator.ts    # ReAct agent setup (LangGraph)
-│   └── file-checkpointer.ts # Persistent conversation memory for --thread
+│   ├── agent-events.ts       # AgentEvent union type (shared between agents)
+│   ├── agent-interface.ts    # InvestigationAgent interface
+│   ├── investigator.ts       # ReAct agent setup (LangGraph)
+│   ├── langgraph-adapter.ts  # Wraps LangGraph agent as InvestigationAgent
+│   ├── file-checkpointer.ts  # Persistent conversation memory for LangGraph --thread
+│   ├── vercel-agent.ts       # Vercel AI SDK agent implementation
+│   └── vercel-thread-store.ts # Conversation memory for Vercel agent --thread
 ├── api/                   # REST API for controller-pushed sync
 │   ├── server.ts          # Hono HTTP server with health probes
 │   ├── routes/
@@ -409,13 +417,15 @@ src/
 │   │   ├── vector-search.ts   # Unified semantic/keyword/metadata search
 │   │   └── format-results.ts  # Search result formatting
 │   ├── tool-groups.ts     # Tool group definitions (kubectl, vector, apply)
-│   ├── langchain/         # CLI agent wrappers
+│   ├── langchain/         # LangGraph tool wrappers
+│   ├── vercel/            # Vercel AI SDK tool wrappers
 │   └── mcp/               # MCP server wrappers
 ├── tracing/               # OpenTelemetry instrumentation
 │   ├── index.ts           # OTel initialization, exporter setup
 │   ├── context-bridge.ts  # AsyncLocalStorage workaround for LangGraph
 │   ├── tool-tracing.ts    # Tool span wrapper
 │   ├── tool-definitions-processor.ts  # Adds tool definitions to LLM spans
+│   ├── vercel-span-processor.ts  # Enriches Vercel SDK spans for Datadog LLM Obs
 │   └── optional-deps.ts   # Graceful loading of optional OTel packages
 └── utils/
     └── kubectl.ts         # Shared kubectl execution helper

@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "telemetry:check": "weaver registry check -r telemetry/registry",
-    "telemetry:resolve": "weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json"
+    "telemetry:resolve": "weaver registry resolve -r telemetry/registry -f json -o telemetry/registry/resolved.json",
+    "telemetry:docs": "weaver registry generate -r telemetry/registry -t 'https://github.com/open-telemetry/semantic-conventions.git[templates]' markdown docs/telemetry-generated"
   },
   "keywords": [
     "kubernetes",

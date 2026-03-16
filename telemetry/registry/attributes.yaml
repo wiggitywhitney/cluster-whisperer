@@ -54,6 +54,13 @@ groups:
           (serverless trigger type) but that's scoped to FaaS. This custom attribute follows
           OTel convention of namespacing vendor-specific attributes under the service name.
 
+      - id: cluster_whisperer.agent.framework
+        type: string
+        stability: development
+        brief: Which agent framework is handling the investigation
+        note: Set on CLI root spans. Values correspond to the --agent flag.
+        examples: ["langgraph", "vercel"]
+
       - id: cluster_whisperer.user.question
         type: string
         stability: development
@@ -178,6 +185,31 @@ groups:
       Span events ai.stream.firstChunk and ai.stream.finish mark streaming
       lifecycle milestones on the inner doStream spans.
     attributes:
+      # --- VercelSpanProcessor enrichment ---
+      # These are added by our VercelSpanProcessor based on ai.operationId:
+      # ai.streamText → gen_ai.operation.name: "invoke_agent", gen_ai.agent.name
+      # ai.streamText.doStream → gen_ai.operation.name: "chat"
+      - ref: gen_ai.operation.name
+      - id: gen_ai.agent.name
+        type: string
+        stability: development
+        brief: Agent name for Datadog LLM Obs agent layer classification
+        note: >
+          Set by VercelSpanProcessor on outer ai.streamText spans.
+          Value is "cluster-whisperer". Combined with gen_ai.operation.name: "invoke_agent",
+          this causes Datadog to classify the span as an agent layer.
+        examples: ["cluster-whisperer"]
+
+      - id: ai.operationId
+        type: string
+        stability: development
+        brief: Vercel AI SDK operation identifier (SDK-generated, read by VercelSpanProcessor)
+        note: >
+          Set by the Vercel AI SDK's experimental_telemetry. Our VercelSpanProcessor
+          reads this to determine which gen_ai.operation.name to add.
+          Values: ai.streamText (outer), ai.streamText.doStream (inner), ai.toolCall (tool).
+        examples: ["ai.streamText", "ai.streamText.doStream", "ai.toolCall"]
+
       # --- Outer span: ai.streamText ---
       # Wraps the full multi-step agent invocation (all LLM calls + tool executions)
       - id: ai.model.id
@@ -307,6 +339,40 @@ groups:
         stability: development
         brief: JSON-stringified tool execution result
         examples: ["NAME  READY  STATUS  RESTARTS  AGE\nnginx  1/1  Running  0  5m"]
+
+  # ==========================================================================
+  # KUBECTL APPLY ATTRIBUTES
+  # Used by kubectl-apply tool spans (src/tools/core/kubectl-apply.ts)
+  # ==========================================================================
+  - id: registry.cluster_whisperer.kubectl_apply
+    type: attribute_group
+    display_name: kubectl_apply Tool Attributes
+    brief: Attributes specific to the kubectl_apply tool's catalog validation
+    note: >
+      Set on kubectl_apply tool spans during platform catalog validation.
+      These attributes let you filter traces by resource kind and see whether
+      the apply was approved by the catalog.
+    attributes:
+      - id: cluster_whisperer.k8s.resource_kind
+        type: string
+        stability: development
+        brief: Kubernetes resource kind extracted from the YAML manifest
+        examples: ["ManagedService", "Deployment", "Pod"]
+
+      - id: cluster_whisperer.k8s.api_group
+        type: string
+        stability: development
+        brief: Kubernetes API group extracted from the YAML manifest
+        note: Empty string for core API resources (e.g., Pod, Service).
+        examples: ["platform.acme.io", "apps", ""]
+
+      - id: cluster_whisperer.catalog.approved
+        type: boolean
+        stability: development
+        brief: Whether the resource type passed platform catalog validation
+        note: >
+          True if the resource kind+apiGroup was found in the capabilities
+          collection. False means the apply was rejected.
 
   # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES
