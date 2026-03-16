@@ -113,37 +113,57 @@ the same behavior as the LangGraph agent (LangChain uses the same Anthropic API)
 ### fullStream Part Types
 
 The `streamText` result exposes a `fullStream` property — an `AsyncIterable<TextStreamPart>`
-that emits all events during a multi-step agent run:
+that emits all events during a multi-step agent run. SDK 6 uses a start/delta/end pattern:
+
+**Complete part type list (SDK 6):**
+
+| Category | Part Types |
+|----------|-----------|
+| Lifecycle | `start`, `start-step`, `finish-step`, `finish` |
+| Text | `text-start`, `text-delta`, `text-end` |
+| Reasoning | `reasoning-start`, `reasoning-delta`, `reasoning-end` |
+| Tool input | `tool-input-start`, `tool-input-delta`, `tool-input-end` |
+| Tool execution | `tool-call`, `tool-result`, `tool-error` |
+| Other | `source`, `file`, `error`, `raw` (opt-in) |
+
+Note: SDK 6 renamed `tool-call-streaming-start`/`tool-call-delta` to
+`tool-input-start`/`tool-input-delta`.
+
+**Key parts for AgentEvent mapping:**
 
 | Part Type | Fields | Maps To AgentEvent |
 |-----------|--------|--------------------|
-| `'reasoning'` | `textDelta: string` | `{ type: "thinking", content }` — accumulate deltas |
-| `'tool-call'` | `toolCallId, toolName, args` | `{ type: "tool_start", name, args }` |
-| `'tool-result'` | `toolCallId, toolName, result` | `{ type: "tool_result", content }` |
-| `'text-delta'` | `textDelta: string` | `{ type: "final_answer", content }` — accumulate deltas for last step |
-| `'tool-call-streaming-start'` | `toolCallId, toolName` | (can ignore — tool-call gives complete info) |
-| `'tool-call-delta'` | `argsTextDelta` | (can ignore — tool-call gives complete args) |
-| `'step-finish'` | `finishReason, usage, ...` | (use to detect final step for final_answer) |
+| `'reasoning-delta'` | `delta: string` | `{ type: "thinking", content }` — accumulate deltas |
+| `'tool-call'` | `toolCallId, toolName, input` | `{ type: "tool_start", name, args }` |
+| `'tool-result'` | `toolCallId, toolName, output` | `{ type: "tool_result", content }` |
+| `'text-delta'` | `delta: string` | `{ type: "final_answer", content }` — accumulate for last step |
+| `'finish-step'` | `finishReason, usage, stepType` | (detect final step for final_answer) |
+
+**Property name caution**: The `tool-call` part uses `input` (not `args`) and `tool-result`
+uses `output` (not `result`) in SDK 6. The `reasoning-delta` and `text-delta` parts use
+`delta` for the incremental text. There is a known inconsistency (vercel/ai#8756) between
+provider-level types and consumer-level runtime — verify property names against actual
+runtime values during M5 implementation.
 
 ### AgentEvent Translation Strategy
 
 ```typescript
 for await (const part of result.fullStream) {
   switch (part.type) {
-    case 'reasoning':
-      yield { type: 'thinking', content: part.textDelta };
+    case 'reasoning-delta':
+      yield { type: 'thinking', content: part.delta };
       break;
     case 'tool-call':
-      yield { type: 'tool_start', name: part.toolName, args: part.args };
+      yield { type: 'tool_start', name: part.toolName, args: part.input };
       break;
     case 'tool-result':
-      yield { type: 'tool_result', content: String(part.result) };
+      yield { type: 'tool_result', content: String(part.output) };
       break;
     case 'text-delta':
       // Accumulate text deltas; emit final_answer when step finishes without tool calls
-      textBuffer += part.textDelta;
+      textBuffer += part.delta;
       break;
-    case 'step-finish':
+    case 'finish-step':
       if (part.finishReason === 'stop' && textBuffer) {
         yield { type: 'final_answer', content: textBuffer };
         textBuffer = '';
@@ -166,10 +186,11 @@ These are supplementary to `fullStream` — the stream parts are sufficient for 
 
 ### Reasoning Delta Property
 
-**Watch out**: The `reasoning` part's text property is `textDelta` in the consumer API.
-There was a reported inconsistency (vercel/ai#8756) where the provider-level
-`LanguageModelV2StreamPart` used `delta` but runtime had `text`. The consumer-facing
-`TextStreamPart` uses `textDelta`. Code should reference `part.textDelta`.
+**Watch out**: There is a known inconsistency (vercel/ai#8756) between provider-level
+types and consumer-level runtime for the text property on `reasoning-delta` and `text-delta`
+parts. The provider-level `LanguageModelV2StreamPart` types say `delta`, but runtime may
+have `text` or `textDelta` depending on the API layer. Verify against actual runtime values
+during M5 implementation. The AgentEvent adapter code above uses `part.delta`.
 
 ## Q4: experimental_telemetry Span Compatibility with OTLP
 
@@ -221,8 +242,8 @@ experimental_telemetry: {
 **CONFIRMED**: The AI SDK Anthropic provider fully supports extended thinking with
 interleaved thinking between tool calls. See Q2 for configuration details.
 
-The `fullStream` emits `reasoning` parts between tool calls when interleaved thinking is
-enabled. These reasoning parts use `textDelta` to deliver incremental reasoning text.
+The `fullStream` emits `reasoning-delta` parts between tool calls when interleaved thinking
+is enabled. These parts deliver incremental reasoning text via the `delta` property.
 
 `result.reasoningText` gives the aggregated reasoning text across all steps (available
 after the stream completes). For real-time CLI output, use the stream parts.
@@ -244,25 +265,31 @@ type ModelMessage =
 ### Content Part Types for Serialization
 
 ```typescript
-// Assistant tool call
+// Assistant tool call (SDK 6: uses 'args' at ModelMessage level)
 { type: 'tool-call', toolCallId: string, toolName: string, args: object }
 
-// Tool result
-{ type: 'tool-result', toolCallId: string, toolName: string, result: unknown }
+// Tool result (SDK 6: uses 'output', renamed from 'result' in SDK 5)
+{ type: 'tool-result', toolCallId: string, toolName: string, output: unknown, isError?: boolean }
 ```
+
+Note: The field names differ between layers — `fullStream` tool-call parts use `input`,
+but `ModelMessage` ToolCallPart uses `args`. Similarly, `fullStream` tool-result uses
+`output`, and `ModelMessage` ToolResultPart also uses `output` (renamed from `result` in
+SDK 5→6). Verify actual field names against TypeScript types during implementation.
 
 ### Getting Full Message History After a Run
 
-After `streamText` completes, access the full message array for serialization:
+After `streamText` completes, `response.messages` returns `ModelMessage[]` — the exact
+format needed to pass back as `messages` input on the next turn:
 
 ```typescript
 const result = streamText({ model, messages, tools, ... });
 
-// Wait for completion
-await result.text;
+// Wait for completion (response is a promise for streamText)
+const response = await result.response;
 
-// Get all messages including the new ones
-const newMessages = result.response.messages;
+// response.messages contains ALL assistant + tool messages from ALL steps
+const newMessages = response.messages;
 
 // Append to existing conversation
 allMessages.push(...newMessages);
@@ -296,7 +323,7 @@ const result = streamText({
    not the older `parameters` field. The PRD pre-research already caught this.
 
 2. **Reasoning property renamed**: In AI SDK 5→6, `.reasoning` was renamed to `.reasoningText`
-   on results. Stream parts use `textDelta` for incremental text.
+   on results. Stream parts use `delta` for incremental text (but verify — see #8756).
 
 3. **anthropic-beta header merging**: Fixed bug in Anthropic provider — custom beta headers
    are now properly merged (comma-separated) rather than overwritten. Ensure recent version.
@@ -311,6 +338,20 @@ const result = streamText({
    Our `withToolTracing()` wrapper also creates tool spans. Need to verify these don't
    conflict (double-spanning). If they do, we may need to disable the SDK's `ai.toolCall`
    spans or remove our wrapper for Vercel tools.
+
+7. **SDK 6 renames**: `system` → `instructions` (but `system` may still work as alias),
+   `maxSteps` → `stopWhen: stepCountIs(N)`, `CoreMessage` → `ModelMessage`,
+   `ToolCallOptions` → `ToolExecutionOptions`. Default step count changed from 1 to 20.
+   An automated codemod is available: `npx @ai-sdk/codemod v6`.
+
+8. **`gen_ai.*` attributes only on call-level spans**: The `gen_ai.system`,
+   `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `doStream`/`doGenerate` spans,
+   NOT on the top-level `ai.streamText` or `ai.toolCall` spans. This matters for Datadog
+   LLM Observability — it reads `gen_ai.*` from the inner spans.
+
+9. **`functionId` sets span `resource.name`**: When `functionId` is provided,
+   `operation.name` becomes `ai.streamText cluster-whisperer-investigate`. This is useful
+   for filtering in Datadog.
 
 ## PRD Impact Assessment
 
