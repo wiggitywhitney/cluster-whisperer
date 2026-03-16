@@ -79,11 +79,13 @@ function getSystemPrompt(): string {
   if (!cachedPrompt) {
     try {
       cachedPrompt = fs.readFileSync(promptPath, "utf8");
-    } catch {
-      console.error(`Error: Could not load system prompt from ${promptPath}`); // eslint-disable-line no-console
-      console.error(""); // eslint-disable-line no-console
-      console.error("Make sure prompts/investigator.md exists in the project root."); // eslint-disable-line no-console
-      process.exit(1);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Could not load system prompt from ${promptPath}. ` +
+        `Make sure prompts/investigator.md exists in the project root. ` +
+        `(${detail})`
+      );
     }
   }
   return cachedPrompt;
