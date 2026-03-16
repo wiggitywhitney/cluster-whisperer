@@ -138,7 +138,7 @@ Build a Vercel AI SDK agent that:
 - [ ] Manual test: run with `--thread test-refactor` twice — second run sees prior conversation context (proves memory save/load still works through the adapter)
 
 ### M4: Vercel Tool Wrappers
-- [ ] Create `src/tools/vercel/index.ts` with AI SDK 6 `tool()` wrappers (import from `'ai'`, NOT `@langchain/core/tools`). The `tools` parameter in `streamText` is `Record<string, Tool>` — tool names are the object keys:
+- [x] Create `src/tools/vercel/index.ts` with AI SDK 6 `tool()` wrappers (import from `'ai'`, NOT `@langchain/core/tools`). The `tools` parameter in `streamText` is `Record<string, Tool>` — tool names are the object keys:
   ```typescript
   import { tool } from 'ai';
   import { kubectlGetSchema, kubectlGet, kubectlGetDescription } from '../core/kubectl-get';
@@ -157,24 +157,24 @@ Build a Vercel AI SDK agent that:
     ),
   });
   ```
-- [ ] Wrap all 5 core tools:
+- [x] Wrap all 5 core tools:
   1. `kubectl_get` — wraps `kubectlGet` from `src/tools/core/kubectl-get.ts`
   2. `kubectl_describe` — wraps `kubectlDescribe` from `src/tools/core/kubectl-describe.ts`
   3. `kubectl_logs` — wraps `kubectlLogs` from `src/tools/core/kubectl-logs.ts`
   4. `vector_search` — wraps `vectorSearch` from `src/tools/core/vector-search.ts`
   5. `kubectl_apply` — wraps `kubectlApply` from `src/tools/core/kubectl-apply.ts`
-- [ ] Kubeconfig factory: `createKubectlTools(options?: KubectlOptions)` returning `Record<string, Tool>` — mirrors `src/tools/langchain/index.ts` pattern, captures kubeconfig via closure
-- [ ] Vector tool factory: `createVectorTools(vectorStore: VectorStore)` returning `Record<string, Tool>` — mirrors LangChain pattern with lazy initialization and graceful degradation
-- [ ] Apply tool factory: `createApplyTools(vectorStore: VectorStore, kubectlOptions?: KubectlOptions)` returning `Record<string, Tool>`
-- [ ] Each tool's execute function MUST be wrapped with `withToolTracing()` — this ensures tool spans (`<toolName>.tool`) have identical names and attributes regardless of which agent framework calls them
-- [ ] **Double-spanning concern**: The Vercel SDK's `experimental_telemetry` also creates `ai.toolCall` spans. Both our `withToolTracing()` spans AND the SDK's `ai.toolCall` spans will appear in traces. This is acceptable — they serve different purposes (ours have `cluster_whisperer.*` attributes; the SDK's have `ai.toolCall.*` attributes). Document this in M2's Weaver schema. Do NOT remove `withToolTracing()` — it's the shared contract between agents.
-- [ ] Unit tests for each wrapper: verify tool has correct description, `inputSchema` matches core schema, and `execute()` delegates to the core function with correct arguments
+- [x] Kubeconfig factory: `createKubectlTools(options?: KubectlOptions)` returning `Record<string, Tool>` — mirrors `src/tools/langchain/index.ts` pattern, captures kubeconfig via closure
+- [x] Vector tool factory: `createVectorTools(vectorStore: VectorStore)` returning `Record<string, Tool>` — mirrors LangChain pattern with lazy initialization and graceful degradation
+- [x] Apply tool factory: `createApplyTools(vectorStore: VectorStore, kubectlOptions?: KubectlOptions)` returning `Record<string, Tool>`
+- [x] Each tool's execute function MUST be wrapped with `withToolTracing()` — this ensures tool spans (`<toolName>.tool`) have identical names and attributes regardless of which agent framework calls them
+- [x] **Double-spanning concern**: The Vercel SDK's `experimental_telemetry` also creates `ai.toolCall` spans. Both our `withToolTracing()` spans AND the SDK's `ai.toolCall` spans will appear in traces. This is acceptable — they serve different purposes (ours have `cluster_whisperer.*` attributes; the SDK's have `ai.toolCall.*` attributes). Document this in M2's Weaver schema. Do NOT remove `withToolTracing()` — it's the shared contract between agents.
+- [x] Unit tests for each wrapper: verify tool has correct description, `inputSchema` matches core schema, and `execute()` delegates to the core function with correct arguments
 
 **Verification**:
-- [ ] `npm test` passes — new unit tests for all 5 Vercel tool wrappers pass
-- [ ] `npm run build` succeeds
-- [ ] Each wrapper test verifies: tool has correct `description` string (matches core export), `inputSchema` is the core Zod schema, and `execute()` delegates to the core function with the input parameters
-- [ ] Verify the factory functions return `Record<string, Tool>` objects (not arrays) — `streamText` requires this format
+- [x] `npm test` passes — new unit tests for all 5 Vercel tool wrappers pass
+- [x] `npm run build` succeeds
+- [x] Each wrapper test verifies: tool has correct `description` string (matches core export), `inputSchema` is the core Zod schema, and `execute()` delegates to the core function with the input parameters
+- [x] Verify the factory functions return `Record<string, Tool>` objects (not arrays) — `streamText` requires this format
 
 ### M5: Vercel Agent Implementation
 - [ ] Create `src/agent/vercel-agent.ts` implementing the `InvestigationAgent` interface
