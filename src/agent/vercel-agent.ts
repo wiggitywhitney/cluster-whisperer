@@ -34,6 +34,7 @@
 
 import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { trace } from "@opentelemetry/api";
 import * as fs from "fs";
 import * as path from "path";
 import { ANTHROPIC_MODEL, RECURSION_LIMIT } from "./investigator";
@@ -171,6 +172,7 @@ export class VercelAgent implements InvestigationAgent {
         isEnabled: true,
         functionId: "cluster-whisperer-investigate",
         metadata: { agent: "vercel" },
+        tracer: trace.getTracer("ai"),
       },
     });
 

@@ -56,6 +56,17 @@ vi.mock("@ai-sdk/anthropic", () => ({
   anthropic: mockAnthropicProvider,
 }));
 
+/**
+ * Mock @opentelemetry/api — provides a fake tracer that we can verify
+ * was passed to experimental_telemetry.tracer in the streamText call.
+ */
+const mockTracer = { startSpan: vi.fn(), startActiveSpan: vi.fn() };
+const mockGetTracer = vi.fn().mockReturnValue(mockTracer);
+
+vi.mock("@opentelemetry/api", () => ({
+  trace: { getTracer: mockGetTracer },
+}));
+
 // Mock the Vercel tool factories
 vi.mock("../tools/vercel", () => ({
   createKubectlTools: vi.fn().mockReturnValue({
@@ -160,11 +171,13 @@ describe("VercelAgent", () => {
         "anthropic-beta": "interleaved-thinking-2025-05-14",
       });
 
-      // Telemetry enabled
+      // Telemetry enabled with our tracer for context propagation
       expect(callArgs.experimental_telemetry.isEnabled).toBe(true);
       expect(callArgs.experimental_telemetry.functionId).toBe(
         "cluster-whisperer-investigate"
       );
+      expect(mockGetTracer).toHaveBeenCalledWith("ai");
+      expect(callArgs.experimental_telemetry.tracer).toBe(mockTracer);
     });
 
     it("passes kubectl tools when toolGroups includes kubectl", async () => {

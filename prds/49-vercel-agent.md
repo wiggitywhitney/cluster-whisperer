@@ -294,8 +294,8 @@ Build a Vercel AI SDK agent that:
 - [ ] Verify: deleting the thread file and re-running starts a fresh conversation
 
 ### M7: OTel Instrumentation
-- [ ] The `experimental_telemetry` config in M5's `streamText` call already enables telemetry. M7 focuses on verifying span nesting and context propagation.
-- [ ] **Context propagation via `tracer` parameter**: The SDK's `experimental_telemetry` accepts a `tracer` field. Pass our existing TracerProvider's tracer to ensure Vercel SDK spans nest under our root span:
+- [x] The `experimental_telemetry` config in M5's `streamText` call already enables telemetry. M7 focuses on verifying span nesting and context propagation.
+- [x] **Context propagation via `tracer` parameter**: The SDK's `experimental_telemetry` accepts a `tracer` field. Pass our existing TracerProvider's tracer to ensure Vercel SDK spans nest under our root span:
   ```typescript
   import { trace } from '@opentelemetry/api';
 
@@ -306,11 +306,11 @@ Build a Vercel AI SDK agent that:
   }
   ```
   If this isn't sufficient for context propagation (same AsyncLocalStorage issue as LangGraph — see `src/tracing/context-bridge.ts`), wrap the `streamText` call with `withStoredContext()`.
-- [ ] The root investigation span is already provided by `withAgentTracing()` in `src/index.ts` (from M3 refactor) — framework-agnostic, no additional work needed
-- [ ] Tool execution spans are already provided by `withToolTracing()` in each Vercel tool's execute function (from M4) — no additional work needed
-- [ ] `setTraceOutput()` is already called when `final_answer` is received in the CLI loop (from M3 refactor) — no additional work needed
-- [ ] **Double tool spans are expected**: Both our `withToolTracing()` spans (`kubectl_get.tool`) and the SDK's `ai.toolCall` spans will appear. This is by design — our spans carry `cluster_whisperer.*` attributes for the shared contract; the SDK spans carry `ai.toolCall.*` attributes. Do NOT remove either.
-- [ ] **`gen_ai.*` attributes location**: The `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `ai.streamText.doStream` spans (inner, per-step), NOT on the outer `ai.streamText` span. Datadog LLM Observability reads these from the inner spans — verify they appear correctly.
+- [x] The root investigation span is already provided by `withAgentTracing()` in `src/index.ts` (from M3 refactor) — framework-agnostic, no additional work needed
+- [x] Tool execution spans are already provided by `withToolTracing()` in each Vercel tool's execute function (from M4) — no additional work needed
+- [x] `setTraceOutput()` is already called when `final_answer` is received in the CLI loop (from M3 refactor) — no additional work needed
+- [x] **Double tool spans are expected**: Both our `withToolTracing()` spans (`kubectl_get.tool`) and the SDK's `ai.toolCall` spans will appear. This is by design — our spans carry `cluster_whisperer.*` attributes for the shared contract; the SDK spans carry `ai.toolCall.*` attributes. Do NOT remove either.
+- [x] **`gen_ai.*` attributes location**: The `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `ai.streamText.doStream` spans (inner, per-step), NOT on the outer `ai.streamText` span. Datadog LLM Observability reads these from the inner spans — verify they appear correctly.
 
 **Verification procedure — console exporter** (run this first):
 ```bash
