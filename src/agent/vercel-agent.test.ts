@@ -210,25 +210,27 @@ describe("VercelAgent", () => {
       const origKey = process.env.VOYAGE_API_KEY;
       process.env.VOYAGE_API_KEY = "test-key";
 
-      mockStreamParts = [
-        { type: "text-delta", text: "Done" },
-        { type: "finish-step", finishReason: "stop" },
-      ];
+      try {
+        mockStreamParts = [
+          { type: "text-delta", text: "Done" },
+          { type: "finish-step", finishReason: "stop" },
+        ];
 
-      const agent = new VercelAgent({
-        toolGroups: ["kubectl", "vector", "apply"],
-      });
-      const events: AgentEvent[] = [];
-      for await (const event of agent.investigate("test")) {
-        events.push(event);
+        const agent = new VercelAgent({
+          toolGroups: ["kubectl", "vector", "apply"],
+        });
+        const events: AgentEvent[] = [];
+        for await (const event of agent.investigate("test")) {
+          events.push(event);
+        }
+
+        const callArgs = mockStreamText.mock.calls[0][0];
+        expect(callArgs.tools).toHaveProperty("kubectl_get");
+        expect(callArgs.tools).toHaveProperty("vector_search");
+        expect(callArgs.tools).toHaveProperty("kubectl_apply");
+      } finally {
+        process.env.VOYAGE_API_KEY = origKey;
       }
-
-      const callArgs = mockStreamText.mock.calls[0][0];
-      expect(callArgs.tools).toHaveProperty("kubectl_get");
-      expect(callArgs.tools).toHaveProperty("vector_search");
-      expect(callArgs.tools).toHaveProperty("kubectl_apply");
-
-      process.env.VOYAGE_API_KEY = origKey;
     });
 
     it("passes kubeconfig to kubectl tool factory", async () => {
