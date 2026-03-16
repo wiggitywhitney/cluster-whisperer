@@ -369,7 +369,7 @@ No changes needed to the PRD Technical Design section. All pre-research findings
 ### New Information for Implementation
 
 1. Use `streamText` directly (not `ToolLoopAgent`) for better streaming control
-2. `fullStream` part type `'reasoning'` maps to thinking blocks (use `part.textDelta`)
+2. `fullStream` part type `'reasoning-delta'` maps to thinking blocks (use `part.delta` — verify against runtime, see #8756)
 3. `experimental_telemetry.tracer` parameter enables custom TracerProvider — critical for
    span nesting under our root span
 4. Watch for double tool spans (our `withToolTracing` + SDK's `ai.toolCall`)
