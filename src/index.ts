@@ -270,7 +270,9 @@ async function main() {
        *
        * See src/tracing/context-bridge.ts for details on the workaround.
        */
-      await withAgentTracing(question, async () => {
+      await withAgentTracing(
+        question,
+        async () => {
         /**
          * Create the agent and stream framework-agnostic AgentEvent objects.
          *
@@ -337,7 +339,9 @@ async function main() {
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console
           console.log(); // eslint-disable-line no-console
         }
-      });
+      },
+        { agentFramework: agentType }
+      );
     });
 
   // -------------------------------------------------------------------------

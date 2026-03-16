@@ -164,7 +164,8 @@ export function withStoredContext<T>(fn: () => T): T {
  */
 export async function withAgentTracing<T>(
   question: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  options?: { agentFramework?: string }
 ): Promise<T> {
   const tracer = getTracer();
 
@@ -183,6 +184,11 @@ export async function withAgentTracing<T>(
     "gen_ai.system": "anthropic",
     "gen_ai.request.model": ANTHROPIC_MODEL,
   };
+
+  // Tag the trace with the agent framework for filtering in Datadog
+  if (options?.agentFramework) {
+    attributes["cluster_whisperer.agent.framework"] = options.agentFramework;
+  }
 
   // Only include user question and entity input if trace content capture is enabled
   // This prevents sensitive data from being exported to telemetry backends
