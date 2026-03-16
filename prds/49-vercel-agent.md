@@ -78,66 +78,62 @@ Build a Vercel AI SDK agent that:
 **Verification**: `npm run telemetry:check` and `npm run telemetry:resolve` both pass. `git diff telemetry/registry/attributes.yaml` shows new attribute groups for `vercel_llm` and `vercel_tool` covering all Vercel SDK span names and attributes.
 
 ### M3: Shared Agent Interface
-- [ ] Define `AgentEvent` union type in `src/agent/agent-events.ts`:
+- [x] Define `AgentEvent` union type in `src/agent/agent-events.ts`:
   ```typescript
   type AgentEvent =
     | { type: "thinking"; content: string }
-    | { type: "tool_start"; name: string; args: Record<string, unknown> }
-    | { type: "tool_result"; content: string }
+    | { type: "tool_start"; toolName: string; args: Record<string, unknown> }
+    | { type: "tool_result"; toolName: string; result: string }
     | { type: "final_answer"; content: string };
   ```
-- [ ] Define `InvestigationAgent` interface in `src/agent/agent-interface.ts`:
+- [x] Define `InvestigationAgent` interface in `src/agent/agent-interface.ts`:
   ```typescript
   interface InvestigationAgent {
     investigate(
       question: string,
-      options?: { threadId?: string; recursionLimit?: number }
-    ): AsyncIterable<AgentEvent>;
+      options?: { threadId?: string }
+    ): AsyncGenerator<AgentEvent>;
   }
   ```
-- [ ] Create `LangGraphAdapter` in `src/agent/langgraph-adapter.ts` — wraps the existing LangGraph agent's `streamEvents()` output and translates `on_chain_stream` chunks into `AgentEvent` objects. The translation logic (extracted from the current `src/index.ts` event processing loop):
+- [x] Create `LangGraphAdapter` in `src/agent/langgraph-adapter.ts` — wraps the existing LangGraph agent's `streamEvents()` output and translates `on_chain_stream` chunks into `AgentEvent` objects. The translation logic (extracted from the current `src/index.ts` event processing loop):
   - `chunk.agent.messages` with `block.type === "thinking"` → `{ type: "thinking", content: block.thinking }`
-  - `chunk.agent.messages` with `msg.tool_calls` → `{ type: "tool_start", name: tc.name, args: tc.args }` for each tool call
+  - `chunk.agent.messages` with `msg.tool_calls` → `{ type: "tool_start", toolName: tc.name, args: tc.args }` for each tool call
   - `chunk.agent.messages` without `tool_calls`, with `block.type === "text"` → `{ type: "final_answer", content: block.text }`
-  - `chunk.tools.messages` → `{ type: "tool_result", content: msg.content }`
-- [ ] The `LangGraphAdapter.investigate()` method handles conversation memory internally: calls `loadCheckpointer(threadId)` before the agent run, calls `saveCheckpointer()` after the agent run (same lifecycle currently in `src/index.ts`). This encapsulates the LangGraph-specific `MemorySaver` so the CLI doesn't touch it
-- [ ] Update `CreateAgentOptions` in `src/agent/agent-factory.ts` — remove the `checkpointer: MemorySaver` field (that's a LangGraph-specific type). Thread ID is passed to `investigate()` instead
-- [ ] Update `createAgent()` to return `InvestigationAgent` instead of the raw LangGraph agent
-- [ ] Refactor `src/index.ts` to consume `AgentEvent` objects from `agent.investigate()` instead of calling `.streamEvents()` directly. The rendering logic stays the same — only the event source changes:
+  - `chunk.tools.messages` → `{ type: "tool_result", toolName: msg.name, result: msg.content }`
+- [x] The `LangGraphAdapter.investigate()` method handles conversation memory internally: calls `loadCheckpointer(threadId)` before the agent run, calls `saveCheckpointer()` after the agent run (same lifecycle currently in `src/index.ts`). This encapsulates the LangGraph-specific `MemorySaver` so the CLI doesn't touch it
+- [x] Update `CreateAgentOptions` in `src/agent/agent-factory.ts` — remove the `checkpointer: MemorySaver` field (that's a LangGraph-specific type). Thread ID is passed to `investigate()` instead
+- [x] Update `createAgent()` to return `InvestigationAgent` instead of the raw LangGraph agent
+- [x] Refactor `src/index.ts` to consume `AgentEvent` objects from `agent.investigate()` instead of calling `.streamEvents()` directly. The rendering logic stays the same — only the event source changes:
   ```typescript
-  for await (const event of agent.investigate(question, { threadId })) {
+  for await (const event of agent.investigate(question, { threadId }) as AsyncGenerator<AgentEvent>) {
     switch (event.type) {
       case "thinking":
         console.log(`\x1b[3mThinking: ${event.content}\x1b[0m\n`);
         break;
       case "tool_start":
-        console.log(`🔧 Tool: ${event.name}`);
+        console.log(`🔧 Tool: ${event.toolName}`);
         console.log(`   Args: ${JSON.stringify(event.args)}`);
         break;
       case "tool_result":
-        console.log(`   Result:\n${truncate(event.content, 1100)}`);
+        console.log(`   Result:\n${truncate(event.result, 1100)}`);
         console.log();
         break;
       case "final_answer":
-        setTraceOutput(event.content);
-        console.log("─".repeat(60));
-        console.log("Answer:");
-        console.log(event.content);
-        console.log();
+        finalAnswer = event.content;
         break;
     }
   }
   ```
-- [ ] Remove the `saveCheckpointer()` call from `src/index.ts` — it's now inside `LangGraphAdapter.investigate()`
-- [ ] Update `src/agent/agent-factory.test.ts` — this test currently:
+- [x] Remove the `saveCheckpointer()` call from `src/index.ts` — it's now inside `LangGraphAdapter.investigate()`
+- [x] Update `src/agent/agent-factory.test.ts` — this test currently:
   - Mocks `createReactAgent` returning `{ invoke, stream, streamEvents }` — the return type changes to `InvestigationAgent` with `.investigate()`
   - Asserts "vercel throws not implemented" — keep this for now (M5 replaces it)
   - Checks tool groups are passed through — this still applies but the mock shape changes
-- [ ] Unit tests for `LangGraphAdapter`: mock the LangGraph agent's `streamEvents()`, verify it emits correct `AgentEvent` objects for each chunk type (thinking, tool_start, tool_result, final_answer)
+- [x] Unit tests for `LangGraphAdapter`: mock the LangGraph agent's `streamEvents()`, verify it emits correct `AgentEvent` objects for each chunk type (thinking, tool_start, tool_result, final_answer)
 
 **Verification**:
-- [ ] `npm test` passes — all existing tests pass (with updated mocks in `agent-factory.test.ts`), plus new `LangGraphAdapter` unit tests
-- [ ] `npm run build` succeeds with no TypeScript errors
+- [x] `npm test` passes — all existing tests pass (with updated mocks in `agent-factory.test.ts`), plus new `LangGraphAdapter` unit tests
+- [x] `npm run build` succeeds with no TypeScript errors
 - [ ] Manual test: run `cluster-whisperer --agent langgraph --tools kubectl "What pods are running?"` against a cluster and confirm CLI output is identical to before the refactor (thinking blocks in italic, 🔧 tool calls, truncated results, ─ separator, "Answer:" label)
 - [ ] Manual test: run with `--thread test-refactor` twice — second run sees prior conversation context (proves memory save/load still works through the adapter)
 
@@ -219,10 +215,10 @@ Build a Vercel AI SDK agent that:
           yield { type: 'thinking', content: part.delta };
           break;
         case 'tool-call':
-          yield { type: 'tool_start', name: part.toolName, args: part.input };
+          yield { type: 'tool_start', toolName: part.toolName, args: part.input };
           break;
         case 'tool-result':
-          yield { type: 'tool_result', content: String(part.output) };
+          yield { type: 'tool_result', toolName: part.toolName, result: String(part.output) };
           break;
         case 'text-delta':
           textBuffer += part.delta;
@@ -609,19 +605,15 @@ await withAgentTracing(question, async () => {
         console.log(`\x1b[3mThinking: ${event.content}\x1b[0m\n`);
         break;
       case "tool_start":
-        console.log(`🔧 Tool: ${event.name}`);
+        console.log(`🔧 Tool: ${event.toolName}`);
         console.log(`   Args: ${JSON.stringify(event.args)}`);
         break;
       case "tool_result":
-        console.log(`   Result:\n${truncate(event.content, 1100)}`);
+        console.log(`   Result:\n${truncate(event.result, 1100)}`);
         console.log();
         break;
       case "final_answer":
-        setTraceOutput(event.content);
-        console.log("─".repeat(60));
-        console.log("Answer:");
-        console.log(event.content);
-        console.log();
+        finalAnswer = event.content;
         break;
     }
   }

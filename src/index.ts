@@ -30,9 +30,8 @@ import { gracefulExit } from "./tracing";
 
 import * as path from "node:path";
 import { Command, Option } from "commander";
-import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
-import { truncate, RECURSION_LIMIT } from "./agent/investigator";
+import { truncate } from "./agent/investigator";
 import { createAgent } from "./agent/agent-factory";
 import { parseAgentType, DEFAULT_AGENT_TYPE } from "./agent/agent-types";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
@@ -53,7 +52,7 @@ import {
 } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
 import { executeKubectl } from "./utils/kubectl";
-import { loadCheckpointer, saveCheckpointer } from "./agent/file-checkpointer";
+import type { AgentEvent } from "./agent/agent-events";
 
 /**
  * Creates a kubectl executor bound to a specific kubeconfig path.
@@ -257,9 +256,8 @@ async function main() {
       // Read kubeconfig from env var (demo governance: agent has cluster access, shell does not)
       const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
 
-      // Load conversation memory if --thread is provided
+      // Thread ID for multi-turn conversation memory
       const threadId = options.thread;
-      const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -274,34 +272,16 @@ async function main() {
        */
       await withAgentTracing(question, async () => {
         /**
-         * Stream events from the agent as it works.
+         * Create the agent and stream framework-agnostic AgentEvent objects.
          *
-         * streamEvents() is a LangChain method that comes built into
-         * the agent (see src/agent/investigator.ts for details).
+         * The agent factory returns an InvestigationAgent that abstracts over
+         * the framework (LangGraph or Vercel AI SDK). The CLI only sees
+         * AgentEvent objects — thinking, tool_start, tool_result, final_answer.
          *
-         * Why streamEvents instead of invoke?
-         * invoke() waits until the agent is completely done, then returns the
-         * final result. streamEvents() gives us a live feed of what's happening:
-         * - When the agent decides to call a tool
-         * - What arguments it passes
-         * - What result it gets back
-         *
-         * This visibility is valuable for learning (see how the agent thinks)
-         * and debugging (understand why it made certain choices).
-         *
-         * The version: "v2" parameter specifies the event format. v2 is the
-         * current recommended format for LangGraph agents.
+         * Conversation memory is handled inside each agent's investigate()
+         * method. The CLI just passes the threadId through.
          */
-        const eventStream = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig, checkpointer }).streamEvents(
-          { messages: [new HumanMessage(question)] },
-          {
-            version: "v2",
-            recursionLimit: RECURSION_LIMIT,
-            // Thread ID enables conversation memory — the checkpointer uses it
-            // to store and retrieve conversation state between invocations.
-            ...(threadId ? { configurable: { thread_id: threadId } } : {}),
-          }
-        );
+        const agent = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig });
 
         /**
          * Track the final answer so we can display it at the end.
@@ -311,71 +291,35 @@ async function main() {
         let finalAnswer = "";
 
         /**
-         * Process events as they stream in.
+         * Process AgentEvent objects as they stream in.
          *
-         * LangGraph v2 streamEvents() emits on_chain_stream events, each
-         * containing a chunk with one key indicating its source:
-         * - "agent": AI message with content blocks and optional tool_calls
-         * - "tools": Tool result message with string content
-         *
-         * The agent messages contain an array of content blocks:
-         * - { type: "thinking", thinking: "..." } - Claude's reasoning process
-         * - { type: "text", text: "..." } - response text shown to the user
-         * - { type: "tool_use", ... } - tool call (also in msg.tool_calls)
-         *
-         * When the agent message has tool_calls, it's an intermediate step.
-         * When it has no tool_calls, it's the final answer.
+         * Each event type maps to a specific CLI display:
+         * - thinking: Claude's reasoning (italic text)
+         * - tool_start: Tool call with name and args (🔧 prefix)
+         * - tool_result: Tool output (indented, truncated)
+         * - final_answer: Agent's conclusion (after separator)
          */
-        for await (const event of eventStream) {
-          if (event.event !== "on_chain_stream") continue;
+        for await (const event of agent.investigate(question, { threadId }) as AsyncGenerator<AgentEvent>) {
+          switch (event.type) {
+            case "thinking":
+              // Display thinking so users can see the reasoning process
+              // \x1b[3m starts italic, \x1b[0m resets formatting
+              console.log(`\x1b[3mThinking: ${event.content}\x1b[0m\n`);
+              break;
 
-          const chunk = event.data?.chunk;
-          if (!chunk) continue;
+            case "tool_start":
+              console.log(`🔧 Tool: ${event.toolName}`);
+              console.log(`   Args: ${JSON.stringify(event.args)}`);
+              break;
 
-          // Agent message: AI decided something (tool call or final answer)
-          if (chunk.agent?.messages) {
-            for (const msg of chunk.agent.messages) {
-              const content = msg.content;
-
-              // Process content blocks (thinking, text, tool_use)
-              if (Array.isArray(content)) {
-                for (const block of content) {
-                  if (block.type === "thinking") {
-                    // Display thinking so users can see the reasoning process
-                    // \x1b[3m starts italic, \x1b[0m resets formatting
-                    console.log(`\x1b[3mThinking: ${block.thinking}\x1b[0m\n`);
-                  }
-                }
-              }
-
-              // Show tool calls if present (intermediate step)
-              if (msg.tool_calls?.length) {
-                for (const tc of msg.tool_calls) {
-                  console.log(`🔧 Tool: ${tc.name}`);
-                  console.log(`   Args: ${JSON.stringify(tc.args)}`);
-                }
-              } else {
-                // No tool calls = final answer. Extract text from content blocks.
-                finalAnswer = "";
-                if (typeof content === "string") {
-                  finalAnswer = content;
-                } else if (Array.isArray(content)) {
-                  for (const block of content) {
-                    if (block.type === "text") {
-                      finalAnswer += block.text;
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // Tool result: kubectl output from a tool execution
-          if (chunk.tools?.messages) {
-            for (const msg of chunk.tools.messages) {
-              console.log(`   Result:\n${truncate(String(msg.content), 1100)}`);
+            case "tool_result":
+              console.log(`   Result:\n${truncate(event.result, 1100)}`);
               console.log(); // blank line between tool calls
-            }
+              break;
+
+            case "final_answer":
+              finalAnswer = event.content;
+              break;
           }
         }
 
@@ -392,11 +336,6 @@ async function main() {
           console.log("─".repeat(60)); // eslint-disable-line no-console
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console
           console.log(); // eslint-disable-line no-console
-        }
-
-        // Persist conversation state for multi-turn memory
-        if (checkpointer && threadId) {
-          saveCheckpointer(checkpointer, threadId);
         }
       });
     });
