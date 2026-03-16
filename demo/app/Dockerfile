@@ -27,6 +27,9 @@ RUN npm ci --omit=dev
 # Copy compiled JavaScript from build stage
 COPY --from=build /app/dist/ ./dist/
 
+# Copy static assets (spider image for the fun page)
+COPY public/ ./public/
+
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]
