@@ -234,6 +234,32 @@ export class VercelAgent implements InvestigationAgent {
           textBuffer += part.text;
           break;
 
+        case "tool-error":
+          // Tool execution threw an error at the SDK level.
+          // Surface as a tool_result with the error message so the agent
+          // can reason about the failure (matching LangGraph behavior).
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
+          yield {
+            type: "tool_result",
+            toolName: part.toolName,
+            result: `Tool error: ${String(part.error)}`,
+          };
+          break;
+
+        case "error":
+          // Stream-level error — the SDK encountered an unrecoverable failure.
+          // Throw so withAgentTracing marks the span as failed.
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
+          throw part.error instanceof Error
+            ? part.error
+            : new Error(String(part.error));
+
         case "finish-step":
           // Flush any buffered thinking at step boundaries
           if (thinkingBuffer) {

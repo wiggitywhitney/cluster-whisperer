@@ -292,6 +292,34 @@ describe("LangGraphAdapter", () => {
     });
   });
 
+  it("does not emit final_answer for whitespace-only content", async () => {
+    mockStreamEvents.mockReturnValue(
+      mockEventStream([
+        {
+          event: "on_chain_stream",
+          data: {
+            chunk: {
+              agent: {
+                messages: [
+                  {
+                    content: [{ type: "text", text: "   \n  " }],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ])
+    );
+
+    const { LangGraphAdapter } = await import("./langgraph-adapter");
+    const adapter = new LangGraphAdapter({});
+    const events = await collectEvents(adapter.investigate("test"));
+
+    const finalEvents = events.filter((e) => e.type === "final_answer");
+    expect(finalEvents).toHaveLength(0);
+  });
+
   it("emits events in correct order for a full investigation", async () => {
     mockStreamEvents.mockReturnValue(
       mockEventStream([

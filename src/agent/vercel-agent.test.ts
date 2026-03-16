@@ -579,6 +579,98 @@ describe("VercelAgent", () => {
     });
   });
 
+  describe("error handling", () => {
+    it("surfaces tool-error as a tool_result with error message", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        {
+          type: "tool-call",
+          toolName: "kubectl_get",
+          toolCallId: "call-1",
+          input: { resource: "pods" },
+        },
+        {
+          type: "tool-error",
+          toolName: "kubectl_get",
+          toolCallId: "call-1",
+          error: new Error("Command timed out"),
+        },
+        { type: "text-delta", text: "The tool failed." },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("test")) {
+        events.push(event);
+      }
+
+      const toolResult = events.find((e) => e.type === "tool_result");
+      expect(toolResult).toEqual({
+        type: "tool_result",
+        toolName: "kubectl_get",
+        result: "Tool error: Error: Command timed out",
+      });
+    });
+
+    it("flushes thinking buffer before tool-error", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        { type: "reasoning-delta", text: "Checking pods..." },
+        {
+          type: "tool-error",
+          toolName: "kubectl_get",
+          toolCallId: "call-1",
+          error: new Error("timeout"),
+        },
+        { type: "text-delta", text: "Failed." },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("test")) {
+        events.push(event);
+      }
+
+      expect(events[0]).toEqual({
+        type: "thinking",
+        content: "Checking pods...",
+      });
+      expect(events[1]).toEqual({
+        type: "tool_result",
+        toolName: "kubectl_get",
+        result: "Tool error: Error: timeout",
+      });
+    });
+
+    it("throws on stream-level error part", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        { type: "reasoning-delta", text: "Starting..." },
+        { type: "error", error: new Error("Stream connection lost") },
+      ];
+
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+
+      await expect(async () => {
+        for await (const event of agent.investigate("test")) {
+          events.push(event);
+        }
+      }).rejects.toThrow("Stream connection lost");
+
+      // Thinking buffer should have been flushed before the throw
+      expect(events[0]).toEqual({
+        type: "thinking",
+        content: "Starting...",
+      });
+    });
+  });
+
   describe("investigate() method contract", () => {
     it("returns an AsyncGenerator", async () => {
       const { VercelAgent } = await import("./vercel-agent");

@@ -173,7 +173,7 @@ export function createVectorTools(vectorStore: VectorStore) {
           );
         }
 
-        return `Vector search failed: ${message}`;
+        throw error;
       }
     };
   }
@@ -256,7 +256,7 @@ export function createApplyTools(
           );
         }
 
-        return `kubectl apply failed: ${message}`;
+        throw error;
       }
     };
   }

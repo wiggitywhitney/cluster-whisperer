@@ -228,11 +228,14 @@ simultaneously via the OTel Collector. The presenter just opens the chosen UI.
 Two agent implementations sharing the same tool core:
 
 ```text
-src/tools/core/           <- Shared business logic (kubectl, vector search, apply)
-src/tools/langchain/      <- LangGraph tool wrappers
-src/tools/vercel/         <- Vercel AI SDK tool wrappers
-src/agent/investigator.ts <- LangGraph agent
-src/agent/vercel-agent.ts <- Vercel AI SDK agent
+src/tools/core/                  <- Shared business logic (kubectl, vector search, apply)
+src/tools/langchain/             <- LangGraph tool wrappers
+src/tools/vercel/                <- Vercel AI SDK tool wrappers
+src/agent/investigator.ts        <- LangGraph ReAct agent (also used by MCP server)
+src/agent/langgraph-adapter.ts   <- Adapts LangGraph to shared AgentEvent interface
+src/agent/vercel-agent.ts        <- Vercel AI SDK agent (implements AgentEvent natively)
+src/agent/agent-factory.ts       <- Selects agent based on --agent flag
+src/agent/agent-events.ts        <- Shared AgentEvent union type (thinking, tool_start, tool_result, final_answer)
 ```
 
 ### Tool Groups

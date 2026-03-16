@@ -133,17 +133,17 @@ Note: SDK 6 renamed `tool-call-streaming-start`/`tool-call-delta` to
 
 | Part Type | Fields | Maps To AgentEvent |
 |-----------|--------|--------------------|
-| `'reasoning-delta'` | `delta: string` | `{ type: "thinking", content }` — accumulate deltas |
+| `'reasoning-delta'` | `text: string` (runtime; types may say `delta` — see vercel/ai#8756) | `{ type: "thinking", content }` — accumulate deltas |
 | `'tool-call'` | `toolCallId, toolName, input` | `{ type: "tool_start", name, args }` |
 | `'tool-result'` | `toolCallId, toolName, output` | `{ type: "tool_result", content }` |
-| `'text-delta'` | `delta: string` | `{ type: "final_answer", content }` — accumulate for last step |
+| `'text-delta'` | `text: string` (runtime; types may say `delta` — see vercel/ai#8756) | `{ type: "final_answer", content }` — accumulate for last step |
 | `'finish-step'` | `finishReason, usage, stepType` | (detect final step for final_answer) |
 
 **Property name caution**: The `tool-call` part uses `input` (not `args`) and `tool-result`
 uses `output` (not `result`) in SDK 6. The `reasoning-delta` and `text-delta` parts use
-`delta` for the incremental text. There is a known inconsistency (vercel/ai#8756) between
-provider-level types and consumer-level runtime — verify property names against actual
-runtime values during M5 implementation.
+`text` at runtime for the incremental text (not `delta` as the provider-level types suggest).
+This is a known inconsistency (vercel/ai#8756) between provider-level types and consumer-level
+runtime. The implementation uses `part.text` — verified during M5 implementation.
 
 ### AgentEvent Translation Strategy
 
@@ -151,7 +151,7 @@ runtime values during M5 implementation.
 for await (const part of result.fullStream) {
   switch (part.type) {
     case 'reasoning-delta':
-      yield { type: 'thinking', content: part.delta };
+      yield { type: 'thinking', content: part.text };
       break;
     case 'tool-call':
       yield { type: 'tool_start', name: part.toolName, args: part.input };
@@ -161,7 +161,7 @@ for await (const part of result.fullStream) {
       break;
     case 'text-delta':
       // Accumulate text deltas; emit final_answer when step finishes without tool calls
-      textBuffer += part.delta;
+      textBuffer += part.text;
       break;
     case 'finish-step':
       if (part.finishReason === 'stop' && textBuffer) {
@@ -188,9 +188,8 @@ These are supplementary to `fullStream` — the stream parts are sufficient for 
 
 **Watch out**: There is a known inconsistency (vercel/ai#8756) between provider-level
 types and consumer-level runtime for the text property on `reasoning-delta` and `text-delta`
-parts. The provider-level `LanguageModelV2StreamPart` types say `delta`, but runtime may
-have `text` or `textDelta` depending on the API layer. Verify against actual runtime values
-during M5 implementation. The AgentEvent adapter code above uses `part.delta`.
+parts. The provider-level `LanguageModelV2StreamPart` types say `delta`, but runtime uses
+`text`. Verified during M5 implementation — the AgentEvent adapter uses `part.text`.
 
 ## Q4: experimental_telemetry Span Compatibility with OTLP
 
@@ -243,7 +242,8 @@ experimental_telemetry: {
 interleaved thinking between tool calls. See Q2 for configuration details.
 
 The `fullStream` emits `reasoning-delta` parts between tool calls when interleaved thinking
-is enabled. These parts deliver incremental reasoning text via the `delta` property.
+is enabled. These parts deliver incremental reasoning text via the `text` property at runtime
+(the provider-level types may say `delta` — see vercel/ai#8756).
 
 `result.reasoningText` gives the aggregated reasoning text across all steps (available
 after the stream completes). For real-time CLI output, use the stream parts.
@@ -323,7 +323,7 @@ const result = streamText({
    not the older `parameters` field. The PRD pre-research already caught this.
 
 2. **Reasoning property renamed**: In AI SDK 5→6, `.reasoning` was renamed to `.reasoningText`
-   on results. Stream parts use `delta` for incremental text (but verify — see #8756).
+   on results. Stream parts use `text` at runtime for incremental text (types may say `delta` — see #8756).
 
 3. **anthropic-beta header merging**: Fixed bug in Anthropic provider — custom beta headers
    are now properly merged (comma-separated) rather than overwritten. Ensure recent version.
@@ -369,7 +369,7 @@ No changes needed to the PRD Technical Design section. All pre-research findings
 ### New Information for Implementation
 
 1. Use `streamText` directly (not `ToolLoopAgent`) for better streaming control
-2. `fullStream` part type `'reasoning-delta'` maps to thinking blocks (use `part.delta` — verify against runtime, see #8756)
+2. `fullStream` part type `'reasoning-delta'` maps to thinking blocks (use `part.text` at runtime — verified, see #8756)
 3. `experimental_telemetry.tracer` parameter enables custom TracerProvider — critical for
    span nesting under our root span
 4. Watch for double tool spans (our `withToolTracing` + SDK's `ai.toolCall`)

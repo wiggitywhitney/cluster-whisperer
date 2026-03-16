@@ -133,7 +133,7 @@ export class LangGraphAdapter implements InvestigationAgent {
               }
             }
 
-            if (answer) {
+            if (answer.trim()) {
               yield { type: "final_answer", content: answer };
             }
           }

@@ -209,17 +209,19 @@ describe("createVectorTools", () => {
     expect(result).toContain("Vector database is not available");
   });
 
-  it("passes through non-connection errors", async () => {
+  it("re-throws non-connection errors from initialization", async () => {
+    // Non-connectivity errors (e.g., permission denied) should propagate,
+    // not be swallowed into a string result
     const brokenStore = createMockVectorStore({
-      search: vi.fn().mockRejectedValue(new Error("Invalid query syntax")),
+      initialize: vi.fn().mockRejectedValue(new Error("Permission denied: cannot access collection")),
     });
     const tools = createVectorTools(brokenStore);
-    const result = await tools.vector_search.execute(
-      { query: "database", collection: "capabilities" },
-      { toolCallId: "test-5", messages: [], abortSignal: undefined as unknown as AbortSignal }
-    );
-    // Non-connection errors come through the core function's error handling
-    expect(result).toContain("Invalid query syntax");
+    await expect(
+      tools.vector_search.execute(
+        { query: "database", collection: "capabilities" },
+        { toolCallId: "test-5", messages: [], abortSignal: undefined as unknown as AbortSignal }
+      )
+    ).rejects.toThrow("Permission denied: cannot access collection");
   });
 });
 

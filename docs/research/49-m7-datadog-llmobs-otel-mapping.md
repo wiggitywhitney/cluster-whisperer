@@ -52,9 +52,9 @@ Model provider resolution: `gen_ai.provider.name` → falls back to `gen_ai.syst
 | Span | `gen_ai.operation.name` | `ai.operationId` | → Datadog Layer |
 |---|---|---|---|
 | `cluster-whisperer.cli.investigate` (root) | `chat` | — | **llm** (WRONG — should be workflow/agent) |
-| `cluster-whisperer-investigate` (outer) | — | `ai.streamText` | **workflow** (default) |
-| `cluster-whisperer-investigate` (per-step) | — | `ai.streamText.doStream` | **workflow** (WRONG — should be llm) |
-| `cluster-whisperer-investigate` (toolCall) | `execute_tool` | `ai.toolCall` | **tool** |
+| `vercel.agent` (outer, runtime name for `ai.streamText`) | — | `ai.streamText` | **workflow** (default) |
+| `text.stream` (per-step, runtime name for `ai.streamText.doStream`) | — | `ai.streamText.doStream` | **workflow** (WRONG — should be llm) |
+| tool span (runtime name varies by `functionId`) | `execute_tool` | `ai.toolCall` | **tool** |
 | `kubectl_get.tool` | `execute_tool` | — | **tool** |
 
 ### Gap Analysis
