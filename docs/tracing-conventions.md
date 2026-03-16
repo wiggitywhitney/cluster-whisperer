@@ -227,10 +227,6 @@ The Vercel agent has an additional **agent** layer that LangGraph does not — a
 
 See `docs/research/49-m7-datadog-llmobs-otel-mapping.md` for the full mapping research.
 
-### SDK Property Name Inconsistency
-
-The Vercel AI SDK has a known inconsistency ([vercel/ai#8756](https://github.com/vercel/ai/issues/8756)) where `fullStream` part properties are named differently across API layers: `delta`, `textDelta`, or `text`. The `vercel-agent.ts` implementation uses the TypeScript-verified names (`part.text` for `reasoning-delta` and `text-delta`, `part.input` for `tool-call`, `part.output` for `tool-result`). If these break after an SDK upgrade, check the TypeScript types first — they are the source of truth.
-
 ### Summarized Thinking Output
 
 Both agents show condensed reasoning in "Thinking:" blocks, not full thinking tokens. The LangGraph agent receives summarized thinking from LangChain's event stream. The Vercel agent receives `reasoning-delta` parts which contain the model's summarized reasoning text. The CLI output looks identical for both — the audience cannot tell which agent framework is running.
