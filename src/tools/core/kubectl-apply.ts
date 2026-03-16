@@ -80,19 +80,36 @@ interface ManifestMetadata {
  * - "acid.zalan.do/v1" → apiGroup "acid.zalan.do"
  * - "v1" → apiGroup "" (core API, no group)
  *
- * For multi-document YAML (separated by ---), only the first document
- * is parsed. Multi-resource apply is not supported in this tool.
+ * Multi-document YAML (separated by ---) is rejected. This tool only
+ * supports single-resource manifests to prevent smuggling unapproved
+ * resources past catalog validation.
  *
- * @param manifest - Raw YAML string
+ * @param manifest - Raw YAML string (single document only)
  * @returns ManifestMetadata on success, or { error: string } on failure
  */
 export function parseManifestMetadata(
   manifest: string
 ): ManifestMetadata | { error: string } {
   try {
-    // Split on --- for multi-doc YAML, take the first document
-    const firstDoc = manifest.split(/^---$/m)[0];
-    const parsed = yamlLoad(firstDoc) as Record<string, unknown> | null;
+    // Split on --- document separators and filter out empty documents.
+    // A leading --- is valid YAML and produces an empty first segment,
+    // so we strip those to avoid false positives.
+    const documents = manifest
+      .split(/^---$/m)
+      .filter((doc) => doc.trim().length > 0);
+
+    if (documents.length === 0) {
+      return { error: "YAML parsed to null or non-object" };
+    }
+
+    if (documents.length > 1) {
+      return {
+        error:
+          "Multi-document YAML is not supported. Submit one resource per apply call.",
+      };
+    }
+
+    const parsed = yamlLoad(documents[0]) as Record<string, unknown> | null;
 
     if (!parsed || typeof parsed !== "object") {
       return { error: "YAML parsed to null or non-object" };

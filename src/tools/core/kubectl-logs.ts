@@ -33,6 +33,8 @@ import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/
 export const kubectlLogsSchema = z.object({
   pod: z
     .string()
+    .min(1, "Pod name cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The pod name to get logs from (use kubectl_get to find pod names first)"
     ),
@@ -87,12 +89,28 @@ export async function kubectlLogs(input: KubectlLogsInput, options?: KubectlOpti
   // Build kubectl arguments: kubectl logs <pod> -n <namespace> [...extraArgs]
   const args: string[] = ["logs", pod, "-n", namespace];
 
-  // Append extra args, but reject namespace flags (use the parameter instead)
+  // Append extra args, but reject namespace and connection-override flags.
+  // Namespace should use the parameter; connection flags could bypass the
+  // intended kubeconfig/context, allowing cluster escape.
   if (extraArgs && extraArgs.length > 0) {
     for (const arg of extraArgs) {
       if (arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=")) {
         return {
           output: "Error: Do not pass -n/--namespace in args; use the namespace parameter instead.",
+          isError: true,
+        };
+      }
+      if (
+        arg === "--kubeconfig" ||
+        arg.startsWith("--kubeconfig=") ||
+        arg === "--context" ||
+        arg.startsWith("--context=") ||
+        arg === "--server" ||
+        arg.startsWith("--server=") ||
+        arg === "-s"
+      ) {
+        return {
+          output: `Error: The flag '${arg}' is not allowed in extraArgs.`,
           isError: true,
         };
       }

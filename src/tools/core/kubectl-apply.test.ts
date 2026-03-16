@@ -143,7 +143,7 @@ describe("parseManifestMetadata", () => {
     expect(result).toHaveProperty("error");
   });
 
-  it("uses first document from multi-document YAML", () => {
+  it("rejects multi-document YAML to prevent resource smuggling", () => {
     const manifest = [
       "apiVersion: apps/v1",
       "kind: Deployment",
@@ -154,6 +154,20 @@ describe("parseManifestMetadata", () => {
       "kind: Service",
       "metadata:",
       "  name: second",
+    ].join("\n");
+
+    const result = parseManifestMetadata(manifest);
+    expect(result).toHaveProperty("error");
+    expect((result as { error: string }).error).toContain("Multi-document YAML");
+  });
+
+  it("handles a manifest starting with --- (single document)", () => {
+    const manifest = [
+      "---",
+      "apiVersion: apps/v1",
+      "kind: Deployment",
+      "metadata:",
+      "  name: nginx",
     ].join("\n");
 
     const result = parseManifestMetadata(manifest);

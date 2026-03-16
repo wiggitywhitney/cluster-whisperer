@@ -27,11 +27,15 @@ import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/
 export const kubectlDescribeSchema = z.object({
   resource: z
     .string()
+    .min(1, "Resource type cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The type of Kubernetes resource (e.g., 'pod', 'deployment', 'service', 'node')"
     ),
   name: z
     .string()
+    .min(1, "Resource name cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The name of the specific resource to describe (required - use kubectl_get first to find resource names)"
     ),

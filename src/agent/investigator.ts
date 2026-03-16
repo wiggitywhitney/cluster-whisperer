@@ -198,7 +198,14 @@ export interface InvestigatorOptions {
 }
 
 /**
- * Cached agent instance - created lazily on first use.
+ * Cached agents keyed by a deterministic string derived from options.
+ *
+ * Why a Map instead of a single cached instance?
+ * Different callers may request different tool groups, vector backends, or
+ * kubeconfig paths. A single cached agent would silently return an agent
+ * configured for the first caller's options, ignoring subsequent callers'
+ * requirements. The Map keys on the relevant options so each unique
+ * configuration gets its own cached agent.
  *
  * Why lazy creation?
  * The ChatAnthropic constructor validates the API key immediately. If we create
@@ -206,7 +213,20 @@ export interface InvestigatorOptions {
  * our startup validation can show a friendly error message. By creating the
  * agent lazily, we let index.ts validate the environment first.
  */
-let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
+const agentCache = new Map<string, ReturnType<typeof createReactAgent>>();
+
+/**
+ * Build a deterministic cache key from the options that affect agent construction.
+ *
+ * Sorting toolGroups ensures ["kubectl","vector"] and ["vector","kubectl"]
+ * produce the same key.
+ */
+function buildCacheKey(options?: InvestigatorOptions): string {
+  const toolGroups = [...(options?.toolGroups ?? DEFAULT_TOOL_GROUPS)].sort();
+  const vectorBackend = options?.vectorBackend ?? DEFAULT_VECTOR_BACKEND;
+  const kubeconfig = options?.kubeconfig ?? "";
+  return `${toolGroups.join(",")}|${vectorBackend}|${kubeconfig}`;
+}
 
 /**
  * Gets the investigator agent, creating it on first call.
@@ -247,7 +267,8 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
 export function getInvestigatorAgent(options?: InvestigatorOptions) {
   // When a checkpointer is provided, always create a fresh agent — the
   // checkpointer is per-thread and can't be shared with a cached agent.
-  if (!cachedAgent || options?.checkpointer) {
+  const cacheKey = buildCacheKey(options);
+  if (!agentCache.has(cacheKey) || options?.checkpointer) {
     const toolGroups = options?.toolGroups ?? DEFAULT_TOOL_GROUPS;
     const vectorBackend = options?.vectorBackend ?? DEFAULT_VECTOR_BACKEND;
 
@@ -290,7 +311,7 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
       }
     }
 
-    cachedAgent = createReactAgent({
+    const agent = createReactAgent({
       llm: model,
       tools,
       stateModifier: getSystemPrompt(),
@@ -299,8 +320,15 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
       // Without a checkpointer, each invocation starts fresh (one-shot mode).
       ...(options?.checkpointer ? { checkpointer: options.checkpointer } : {}),
     });
+
+    // Only cache when no checkpointer — checkpointers are per-thread
+    if (!options?.checkpointer) {
+      agentCache.set(cacheKey, agent);
+    }
+
+    return agent;
   }
-  return cachedAgent;
+  return agentCache.get(cacheKey)!;
 }
 
 /**
