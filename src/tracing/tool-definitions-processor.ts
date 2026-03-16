@@ -1,3 +1,6 @@
+// ABOUTME: SpanProcessor that injects gen_ai.tool.definitions into anthropic.chat spans.
+// ABOUTME: Lists all 5 tools (kubectl_get/describe/logs, vector_search, kubectl_apply) for Datadog LLM Obs.
+
 /**
  * tool-definitions-processor.ts - Injects tool definitions into LLM chat spans
  *
@@ -68,6 +71,16 @@ function getToolDefinitionsJson(): string {
         description: core.kubectlLogsDescription,
         schema: core.kubectlLogsSchema,
       },
+      {
+        name: "vector_search",
+        description: core.vectorSearchDescription,
+        schema: core.vectorSearchSchema,
+      },
+      {
+        name: "kubectl_apply",
+        description: core.kubectlApplyDescription,
+        schema: core.kubectlApplySchema,
+      },
     ];
 
     cachedToolDefinitionsJson = JSON.stringify(
@@ -90,7 +103,7 @@ function getToolDefinitionsJson(): string {
  *
  * Intercepts spans named "anthropic.chat" (created by OpenLLMetry's auto-instrumentation
  * of the Anthropic SDK) and sets the gen_ai.tool.definitions attribute with a JSON array
- * describing all available kubectl tools.
+ * describing all available tools (kubectl, vector search, and kubectl apply).
  *
  * Why "anthropic.chat"?
  * OpenLLMetry names its Anthropic SDK spans "anthropic.chat". These correspond to each
