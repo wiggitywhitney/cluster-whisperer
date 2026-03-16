@@ -277,6 +277,44 @@ describe("VercelAgent", () => {
       });
     });
 
+    it("buffers multiple reasoning-delta fragments into a single thinking event", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      // Simulate the Vercel SDK streaming behavior where thinking arrives
+      // as many small fragments (one per API chunk)
+      mockStreamParts = [
+        { type: "reasoning-delta", text: "The user is asking " },
+        { type: "reasoning-delta", text: "me to investigate " },
+        { type: "reasoning-delta", text: "their application." },
+        { type: "tool-call", toolName: "kubectl_get", toolCallId: "call-1", input: { resource: "pods" } },
+        { type: "finish-step", finishReason: "tool-calls" },
+        { type: "tool-result", toolName: "kubectl_get", toolCallId: "call-1", output: "pod-1 Running" },
+        { type: "reasoning-delta", text: "Now I see " },
+        { type: "reasoning-delta", text: "the pods are fine." },
+        { type: "text-delta", text: "All good." },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("What's wrong?")) {
+        events.push(event);
+      }
+
+      // Should produce exactly 2 thinking events (one per thought block),
+      // not 5 (one per fragment)
+      const thinkingEvents = events.filter((e) => e.type === "thinking");
+      expect(thinkingEvents).toHaveLength(2);
+      expect(thinkingEvents[0]).toEqual({
+        type: "thinking",
+        content: "The user is asking me to investigate their application.",
+      });
+      expect(thinkingEvents[1]).toEqual({
+        type: "thinking",
+        content: "Now I see the pods are fine.",
+      });
+    });
+
     it("translates tool-call to tool_start event", async () => {
       const { VercelAgent } = await import("./vercel-agent");
 

@@ -176,19 +176,29 @@ export class VercelAgent implements InvestigationAgent {
       },
     });
 
-    // Translate fullStream parts into AgentEvent objects
+    // Translate fullStream parts into AgentEvent objects.
+    // We buffer both thinking and text fragments, flushing when the stream
+    // transitions to a different event type. This produces one ThinkingEvent
+    // per thought block (matching LangGraph's behavior) instead of one per
+    // streaming chunk.
     let textBuffer = "";
+    let thinkingBuffer = "";
 
     for await (const part of result.fullStream) {
       switch (part.type) {
         case "reasoning-delta":
           // Extended thinking — Claude's reasoning between steps.
           // SDK 6 types: part.text (not part.delta — see vercel/ai#8756).
-          // M1 documented 'delta' but TypeScript types confirm 'text' in SDK 6.
-          yield { type: "thinking", content: part.text };
+          // Accumulate fragments; flush when a non-thinking part arrives.
+          thinkingBuffer += part.text;
           break;
 
         case "tool-call":
+          // Flush any buffered thinking before the tool call
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
           // Agent decided to call a tool.
           // SDK 6 types: part.toolName, part.input (not part.args).
           yield {
@@ -199,6 +209,11 @@ export class VercelAgent implements InvestigationAgent {
           break;
 
         case "tool-result":
+          // Flush any buffered thinking before the tool result
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
           // Tool returned a result.
           // SDK 6 types: part.toolName, part.output (not part.result).
           yield {
@@ -209,12 +224,22 @@ export class VercelAgent implements InvestigationAgent {
           break;
 
         case "text-delta":
+          // Flush any buffered thinking before text accumulation
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
           // Accumulate text deltas for the final answer.
           // SDK 6 types: part.text (not part.delta — see vercel/ai#8756).
           textBuffer += part.text;
           break;
 
         case "finish-step":
+          // Flush any buffered thinking at step boundaries
+          if (thinkingBuffer) {
+            yield { type: "thinking", content: thinkingBuffer };
+            thinkingBuffer = "";
+          }
           if (part.finishReason === "stop" && textBuffer) {
             // Final step — emit accumulated text as the agent's answer.
             yield { type: "final_answer", content: textBuffer };
@@ -228,8 +253,10 @@ export class VercelAgent implements InvestigationAgent {
       }
     }
 
-    // Edge case: stream ended without a finish-step with 'stop'.
-    // Emit whatever text was accumulated.
+    // Edge case: stream ended without flushing buffers
+    if (thinkingBuffer) {
+      yield { type: "thinking", content: thinkingBuffer };
+    }
     if (textBuffer) {
       yield { type: "final_answer", content: textBuffer };
     }

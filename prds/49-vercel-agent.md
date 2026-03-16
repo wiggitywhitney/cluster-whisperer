@@ -380,7 +380,7 @@ Root span has `gen_ai.operation.name` removed so it defaults to workflow.
 Note: Both `ai.toolCall` (SDK) and `<toolName>.tool` (ours) spans appear for each tool execution. They serve different observability purposes and coexist intentionally.
 
 ### M8: Equivalence Testing
-- [ ] Run both agents against the same demo scenario using the exact commands from `docs/choose-your-adventure-demo.md`
+- [x] Run both agents against the same demo scenario using the exact commands from `docs/choose-your-adventure-demo.md`
 
 **Test 1: Act 2 — single-turn investigation** (run with each agent, compare output):
 ```bash
@@ -395,7 +395,7 @@ export CLUSTER_WHISPERER_TOOLS=kubectl
 cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 ```
 
-- [ ] Both agents produce CLI output in this format (identical structure, content may vary):
+- [x] Both agents produce CLI output in this format (identical structure, content may vary):
   ```text
   Question: Something's wrong with my application — can you investigate?
 
@@ -417,14 +417,14 @@ cluster-whisperer "Something's wrong with my application — can you investigate
   Answer:
   [agent's conclusion about the broken app]
   ```
-- [ ] Both agents identify CrashLoopBackOff and investigate with describe/logs
-- [ ] Both agents reach a conclusion about the missing database
+- [x] Both agents identify CrashLoopBackOff and investigate with describe/logs
+- [x] Both agents reach a conclusion about the missing database
 
 **Test 2: Act 2 — CRD wall** (demonstrates the agent hitting limits without vector search):
 ```bash
 cluster-whisperer "Do you know what database I should use?"
 ```
-- [ ] Both agents attempt `kubectl get crd` and struggle with the volume of CRDs
+- [x] Both agents attempt `kubectl get crd` and struggle with the volume of CRDs
 
 **Test 3: Act 3a — multi-turn conversation with vector search**:
 ```bash
@@ -434,34 +434,34 @@ cluster-whisperer "What database should I deploy for my app?"
 cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
 cluster-whisperer "Yes please, will you deploy it for me?"
 ```
-- [ ] Agent finds multiple ManagedService results, asks follow-up questions
-- [ ] Agent narrows to `platform.acme.io` based on team name
-- [ ] Agent says it can't deploy (no apply tool)
-- [ ] Conversation memory works across all three invocations
+- [x] Agent finds multiple ManagedService results, asks follow-up questions
+- [x] Agent narrows to `platform.acme.io` based on team name
+- [x] Agent says it can't deploy (no apply tool)
+- [x] Conversation memory works across all three invocations
 
 **Test 4: Act 3b — deploy**:
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
 cluster-whisperer "Go ahead and deploy it"
 ```
-- [ ] Agent deploys the ManagedService using kubectl_apply
-- [ ] The catalog validation works (only approved resource types can be deployed)
+- [x] Agent deploys the ManagedService using kubectl_apply
+- [x] The catalog validation works (only approved resource types can be deployed)
 
 **Test 5: Trace comparison**:
-- [ ] Run Test 1 with both agents with `OTEL_TRACING_ENABLED=true OTEL_EXPORTER_TYPE=otlp`
-- [ ] Open both traces in Datadog
-- [ ] Root spans have identical names (`cluster-whisperer.cli.investigate`) and both map to **workflow** layer in Datadog (Updated per Decision 18: root span no longer has `gen_ai.operation.name: "chat"`)
-- [ ] Our tool spans have identical names (`kubectl_get.tool`, etc.) and identical `gen_ai.tool.*` attributes in both agents
-- [ ] LLM span names differ (expected: `anthropic.chat` for LangGraph via OpenLLMetry vs `text.stream` for Vercel via SDK `experimental_telemetry`) — both map to **llm** layer in Datadog (Updated per Decisions 16, 19: Vercel spans enriched by SpanProcessor with `gen_ai.operation.name: "chat"`)
-- [ ] Both agents' inner LLM spans carry `gen_ai.*` attributes (model, token usage) — verify Datadog LLM Observability shows token usage for both
-- [ ] Vercel traces have an **agent** layer (`vercel.agent` span with `gen_ai.operation.name: invoke_agent`) that LangGraph traces do not — this is acceptable asymmetry (Vercel SDK provides richer hierarchy)
-- [ ] Vercel traces have SDK `ai.toolCall` spans alongside our `<toolName>.tool` spans — both map to **tool** layer
-- [ ] Both traces tell a readable investigation story in the Datadog flame graph
-- [ ] Both traces show all expected layers in Datadog LLM Observability (at minimum: workflow, llm, tool for both; additionally agent for Vercel)
+- [x] Run Test 1 with both agents with `OTEL_TRACING_ENABLED=true OTEL_EXPORTER_TYPE=otlp`
+- [x] Open both traces in Datadog
+- [x] Root spans have identical names (`cluster-whisperer.cli.investigate`) and both map to **workflow** layer in Datadog (Updated per Decision 18: root span no longer has `gen_ai.operation.name: "chat"`)
+- [x] Our tool spans have identical names (`kubectl_get.tool`, etc.) and identical `gen_ai.tool.*` attributes in both agents
+- [x] LLM span names differ (expected: `anthropic.chat` for LangGraph via OpenLLMetry vs `text.stream` for Vercel via SDK `experimental_telemetry`) — both map to **llm** layer in Datadog (Updated per Decisions 16, 19: Vercel spans enriched by SpanProcessor with `gen_ai.operation.name: "chat"`)
+- [x] Both agents' inner LLM spans carry `gen_ai.*` attributes (model, token usage) — verify Datadog LLM Observability shows token usage for both
+- [x] Vercel traces have an **agent** layer (`vercel.agent` span with `gen_ai.operation.name: invoke_agent`) that LangGraph traces do not — this is acceptable asymmetry (Vercel SDK provides richer hierarchy)
+- [x] Vercel traces have SDK `ai.toolCall` spans alongside our `<toolName>.tool` spans — both map to **tool** layer
+- [x] Both traces tell a readable investigation story in the Datadog flame graph
+- [x] Both traces show all expected layers in Datadog LLM Observability (at minimum: workflow, llm, tool for both; additionally agent for Vercel)
 
 **Test 6: Save demo runs**:
-- [ ] Save full agent output from both agents to `demo/runs/` for comparison (same pattern as PRD #48 M11)
-- [ ] File names: `<timestamp>-vercel-act2.txt`, `<timestamp>-langgraph-act2.txt`, etc.
+- [x] Save full agent output from both agents to `demo/runs/` for comparison (same pattern as PRD #48 M11)
+- [x] File names: `<timestamp>-vercel-act2.txt`, `<timestamp>-langgraph-act2.txt`, etc.
 
 ### M9: Documentation
 - [ ] Update README using `/write-docs` to document the Vercel agent and `--agent vercel` flag
