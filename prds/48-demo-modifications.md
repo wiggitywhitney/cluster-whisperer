@@ -215,12 +215,12 @@ Replace the AWS RDS Composition with one that deploys an in-cluster PostgreSQL i
 Re-validate the full demo after all milestone changes (M12 decoys, M13 conversation memory, M14 working Composition) and issue fixes (#67–#73).
 
 - [x] Teardown cluster and run `demo/cluster/setup.sh gcp` from scratch — must exit 0, including new trace pipeline verification (#67) and ingress-based sync (#68)
-- [ ] Three consecutive full demo runs, Act 1 through Act 4, following `docs/choose-your-adventure-demo.md` exactly: Act 1 (kubectl fails), Act 2 (investigation Q1 + CRD wall Q2), Act 3a three-turn conversation (Q1 "What database?" → multiple results → Q2 "You Choose team" → narrows to platform.acme.io → Q3 "Deploy it?" → no apply tool), Act 3b (deploy ManagedService, app comes alive), Act 4 (traces in Jaeger + Datadog). Clean up deployed ManagedService between runs.
-- [ ] Save full agent output from every run to `demo/runs/<timestamp>-run<N>.txt` — three complete run files for comparison
-- [ ] Agent completes Act 3b without hitting recursion limit (#72) in all three runs
-- [ ] No non-demo console noise during agent runs (#73)
-- [ ] `setup.sh gcp --verify-only` passes against the running cluster (#69)
-- [ ] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
+- [x] Three consecutive full demo runs, Act 1 through Act 4, following `docs/choose-your-adventure-demo.md` exactly: Act 1 (kubectl fails), Act 2 (investigation Q1 + CRD wall Q2 "Do you know what database I should use?"), Act 3a three-turn conversation (Q1 "What database?" → multiple results → Q2 "You Choose team" → narrows to platform.acme.io → Q3 "Deploy it?" → no apply tool), Act 3b (same thread, "Go ahead and deploy it", app comes alive), Act 4 (traces in Jaeger + Datadog). Clean up deployed ManagedService between runs.
+- [x] Save full agent output from every run to `demo/runs/<timestamp>-run<N>.txt` — three complete run files for comparison
+- [x] Agent completes Act 3b without hitting recursion limit (#72) in all three runs
+- [x] No non-demo console noise during agent runs (#73)
+- [x] `setup.sh gcp --verify-only` passes against the running cluster (#69)
+- [x] Update README using `/write-docs` to document new CLI flags, env vars, and kubectl_apply tool
 - [x] Update `docs/choose-your-adventure-demo.md` to reflect full demo flow with decoy XRDs, conversation memory, working Composition, and env var interface
 
 ## Technical Design
@@ -385,3 +385,7 @@ All changes are additive:
 | 2026-03-15 | File-checkpointer binary serialization fix | MemorySaver's internal storage contains Uint8Array values. JSON.stringify converted them to `{"0":123,...}` objects that lost their type on reload. Fixed with base64 encoding (custom replacer/reviver). Threading now works across CLI invocations. |
 | 2026-03-15 | Act 3a is now a three-turn conversation | Original single question couldn't show the needle-in-haystack + follow-up + tool limitation narrative. New flow: (1) "What database?" → agent finds 20, asks questions; (2) "You Choose team" → agent narrows to platform.acme.io; (3) "Deploy it?" → agent says it can't (no apply tool). Each turn demonstrates a different capability. |
 | 2026-03-15 | Anthropic API key switched to anthropic_key_ddog | Original `anthropic-api-key` secret in GCP had insufficient credits for direct Anthropic API calls (needed when stripping Datadog gateway headers). Switched .vals.yaml to `anthropic_key_ddog` secret. |
+| 2026-03-15 | Act 2 Q2 reworded to "Do you know what database I should use?" | Original "Can you help me fix this?" biased the agent toward investigation mode instead of resource discovery. Pure discovery question reliably triggers `kubectl get crd` and the CRD wall moment. |
+| 2026-03-15 | Act 3b keeps same thread from Act 3a | Without thread context, Act 3b's keyword search is unreliable (case sensitivity, non-deterministic query choices). Keeping the thread means the agent already knows which database to deploy — "Go ahead and deploy it" works every time. |
+| 2026-03-15 | kubectl_apply ensureInitialized fix | Catalog validation failed when kubectl_apply was called before vector_search because the VectorStore collection wasn't initialized. Added the same ensureInitialized() pattern that createVectorTools uses. |
+| 2026-03-15 | Demo reset script (reset-demo.sh) | Deletes deployed ManagedService claims, waits for Composition cleanup, restarts demo app to CrashLoopBackOff, removes thread checkpoint files. Run between rehearsals. |

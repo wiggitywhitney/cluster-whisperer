@@ -240,9 +240,29 @@ export function createVectorTools(vectorStore: VectorStore) {
  * @returns Array containing the single kubectl_apply tool
  */
 export function createApplyTools(vectorStore: VectorStore, options?: KubectlOptions) {
+  let initialized = false;
+
   /**
-   * Wraps the apply tool handler with connection error handling.
+   * Initializes the capabilities collection on first use.
    *
+   * kubectl_apply needs the capabilities collection for catalog validation.
+   * If vector_search already initialized the collection (shared VectorStore
+   * instance), the initialize() call is a no-op (idempotent). But if
+   * kubectl_apply runs first or without vector_search, this ensures the
+   * collection is ready.
+   */
+  async function ensureInitialized(): Promise<void> {
+    if (initialized) return;
+    await vectorStore.initialize(CAPABILITIES_COLLECTION, {
+      distanceMetric: "cosine",
+    });
+    initialized = true;
+  }
+
+  /**
+   * Wraps the apply tool handler with initialization and connection error handling.
+   *
+   * Ensures the capabilities collection is initialized before catalog validation.
    * Connection errors (ECONNREFUSED, etc.) get a user-friendly message.
    * Other errors (parse failures, catalog rejections) pass through from
    * the core function since they're already well-formatted.
@@ -252,6 +272,7 @@ export function createApplyTools(vectorStore: VectorStore, options?: KubectlOpti
   ): (input: KubectlApplyInput) => Promise<string> {
     return async (input: KubectlApplyInput): Promise<string> => {
       try {
+        await ensureInitialized();
         return await handler(input);
       } catch (error) {
         const message =

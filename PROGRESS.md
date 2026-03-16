@@ -74,7 +74,16 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-03-14) Demo modifications (PRD #48 M12): Chroma $and filter fix — normalizeWhereFilter wraps multi-key where filters in $and for Chroma compatibility (Qdrant already handled this via buildFilter)
 - (2026-03-14) Demo modifications (PRD #48 M12): Updated investigator prompt and vector_search tool description to ask follow-up questions when multiple similar results appear (team name, app name, person)
 
+- (2026-03-15) Demo modifications (PRD #48 M11): Three consecutive full demo rehearsal runs on live GKE cluster — all acts verified (kubectl governance, CRD wall, three-turn threaded conversation, ManagedService deploy with app coming alive, traces in Jaeger). Outputs saved to demo/runs/ for comparison.
+- (2026-03-15) Demo modifications (PRD #48 M11): reset-demo.sh script — cleans up deployed ManagedService claims, waits for Composition cleanup, restarts demo app to CrashLoopBackOff, removes thread checkpoint files. Run between rehearsals.
+- (2026-03-15) Demo modifications (PRD #48 M11): README updated with new CLI flags (--tools, --agent, --vector-backend, --thread), env var table (CLUSTER_WHISPERER_*), kubectl_apply tool, Qdrant backend, multi-backend sync, updated project structure
+
+### Fixed
+- (2026-03-15) Demo modifications (PRD #48 M11): kubectl_apply ensureInitialized fix — catalog validation failed when called before vector_search because the VectorStore collection wasn't initialized. Added same ensureInitialized() pattern from createVectorTools to createApplyTools.
+
 ### Changed
+- (2026-03-15) Demo modifications (PRD #48 M11): Act 2 Q2 reworded from "Can you help me fix this?" to "Do you know what database I should use?" — pure discovery question reliably triggers kubectl get crd and the CRD wall moment
+- (2026-03-15) Demo modifications (PRD #48 M11): Act 3b keeps same thread from Act 3a — agent remembers which database to deploy, "Go ahead and deploy it" works reliably across runs
 - (2026-03-14) Demo modifications (PRD #48 M12): Updated main XRD description to mention Whitney/Viktor and You Choose demo app — organizational context only discoverable via vector search among 20 identical-looking ManagedService CRDs
 - (2026-03-14) Demo modifications (PRD #48 M12): Investigator prompt now instructs agent to fall back to `kubectl get crd` for discovery when vector_search is unavailable, and to ask clarifying questions when results are ambiguous
 - (2026-03-13) Demo modifications (PRD #48): Renamed platform XRD from `postgresqlinstances.platform.cluster-whisperer.io` to `managedservices.platform.acme.io` — opaque name forces agent to use vector search instead of CRD name scanning

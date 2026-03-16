@@ -68,13 +68,15 @@ the database is missing.
 The presenter follows up:
 
 ```bash
-cluster-whisperer "Can you help me fix this? Which database should I deploy?"
+cluster-whisperer "Do you know what database I should use?"
 ```
 
-The agent tries to figure out which database to deploy. It runs `kubectl get crd` and
-the audience sees hundreds of CRDs scroll by. The resource names are opaque — the right
-answer is `managedservices.platform.acme.io`, but nothing in that name says "database."
-The agent can't make sense of them without semantic understanding.
+The agent enters resource discovery mode. Without vector search, it falls back to
+`kubectl get crd` and the audience sees hundreds of CRDs scroll by. The resource names
+are opaque — the right answer is `managedservices.platform.acme.io`, but nothing in
+that name says "database." The agent lists cloud provider CRDs (RDS, Cloud SQL, etc.)
+but misses the 20 platform ManagedService CRDs entirely. It can't make sense of them
+without semantic understanding.
 
 > "The agent can see the cluster, but it can't make sense of the platform's capabilities.
 > We need to give it semantic understanding."
@@ -133,11 +135,11 @@ the YAML and suggests `kubectl apply` manually.
 
 ### Act 3b: Agent Deploys
 
-The presenter adds the apply tool (new thread — clean slate for the deploy):
+The presenter adds the apply tool (same thread — the agent remembers which database to deploy):
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Deploy the right database for my app"
+cluster-whisperer "Go ahead and deploy it"
 ```
 
 Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
@@ -182,7 +184,7 @@ kubectl get pods                                        # fails — no kubeconfi
 export CLUSTER_WHISPERER_AGENT=langgraph                # (or vercel)
 export CLUSTER_WHISPERER_TOOLS=kubectl
 cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
-cluster-whisperer "Can you help me fix this? Which database should I deploy?"
+cluster-whisperer "Do you know what database I should use?"
 
 # Vote 2 result → Act 3a (vector search, multi-turn conversation)
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
@@ -195,9 +197,9 @@ cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if
 cluster-whisperer "Yes please, will you deploy it for me?"
 # Agent says it can't — no apply tool
 
-# Act 3b: add the apply tool → agent can now deploy
+# Act 3b: add the apply tool → agent remembers which database, now it can deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Deploy the right database for my app"
+cluster-whisperer "Go ahead and deploy it"
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser

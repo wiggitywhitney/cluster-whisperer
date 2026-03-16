@@ -138,8 +138,8 @@ function getSystemPrompt(): string {
  * - Vector tools: for similarity and keyword search across collections
  * - Apply tools: for catalog validation (querying capabilities collection)
  *
- * Sharing the same instance means a single connection to Chroma, and both
- * tools benefit from the same lazy initialization.
+ * Sharing the same instance means a single connection to the vector DB.
+ * Both tools independently ensure their collections are initialized.
  *
  * Returns { vectorTools, applyTools } — either may be empty if VOYAGE_API_KEY
  * is not set (the agent still works with kubectl-only investigation).
