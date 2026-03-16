@@ -1,3 +1,6 @@
+// ABOUTME: Bridges OTel context across async boundaries (LangGraph, MCP) for proper span parenting.
+// ABOUTME: Provides withAgentTracing (root span), withStoredContext (context restore), withMcpRequestTracing.
+
 /**
  * context-bridge.ts - Bridge OpenTelemetry context across async boundaries
  *
@@ -172,10 +175,12 @@ export async function withAgentTracing<T>(
     "cluster_whisperer.invocation.mode": "cli",
     "traceloop.span.kind": "workflow",
     "traceloop.entity.name": "investigate",
-    // GenAI semantic conventions v1.37+ — required for Datadog LLM Observability
-    // to recognize this span and process gen_ai.input/output.messages
+    // GenAI semantic conventions v1.37+ — Datadog LLM Observability uses
+    // gen_ai.operation.name for layer classification. Omitting it here lets
+    // the root span default to "workflow" layer. The LLM and agent layers
+    // come from child spans (OpenLLMetry's anthropic.chat or Vercel SDK's
+    // text.stream enriched by VercelSpanProcessor). See Decision 18.
     "gen_ai.system": "anthropic",
-    "gen_ai.operation.name": "chat",
     "gen_ai.request.model": ANTHROPIC_MODEL,
   };
 
@@ -286,11 +291,12 @@ export async function withMcpRequestTracing(
   };
 
   // The "investigate" tool wraps a full LLM agent invocation.
-  // Mark it as a GenAI chat operation so Datadog LLM Observability
-  // recognizes the span and processes gen_ai.input/output.messages.
+  // Mark it as invoke_agent so Datadog LLM Observability shows it in the
+  // agent layer. Child LLM spans provide the llm layer. See Decision 18.
   if (toolName === "investigate") {
     attributes["gen_ai.system"] = "anthropic";
-    attributes["gen_ai.operation.name"] = "chat";
+    attributes["gen_ai.operation.name"] = "invoke_agent";
+    attributes["gen_ai.agent.name"] = "cluster-whisperer";
     attributes["gen_ai.request.model"] = ANTHROPIC_MODEL;
   } else {
     attributes["gen_ai.operation.name"] = "execute_tool";

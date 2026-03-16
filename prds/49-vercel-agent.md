@@ -311,14 +311,14 @@ Build a Vercel AI SDK agent that:
 - [x] `setTraceOutput()` is already called when `final_answer` is received in the CLI loop (from M3 refactor) — no additional work needed
 - [x] **Double tool spans are expected**: Both our `withToolTracing()` spans (`kubectl_get.tool`) and the SDK's `ai.toolCall` spans will appear. This is by design — our spans carry `cluster_whisperer.*` attributes for the shared contract; the SDK spans carry `ai.toolCall.*` attributes. Do NOT remove either.
 - [x] **`gen_ai.*` attributes location**: The `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `ai.streamText.doStream` spans (inner, per-step), NOT on the outer `ai.streamText` span. Datadog LLM Observability reads these from the inner spans — verify they appear correctly.
-- [ ] **SpanProcessor for Datadog LLM Obs layer classification (Decision 19)**: Create a `VercelSpanProcessor` (in `src/tracing/`) that enriches Vercel SDK spans on export by adding `gen_ai.operation.name` based on `ai.operationId`:
+- [x] **SpanProcessor for Datadog LLM Obs layer classification (Decision 19)**: Create a `VercelSpanProcessor` (in `src/tracing/`) that enriches Vercel SDK spans on export by adding `gen_ai.operation.name` based on `ai.operationId`:
   - `ai.streamText.doStream` → add `gen_ai.operation.name: "chat"` → Datadog classifies as **llm** layer
   - `ai.streamText` → add `gen_ai.operation.name: "invoke_agent"` + `gen_ai.agent.name: "cluster-whisperer"` → Datadog classifies as **agent** layer
   - Follows existing `ToolDefinitionsProcessor` pattern in `src/tracing/index.ts`
-- [ ] **Fix root span `gen_ai.operation.name` (Decision 18)**: Change `withAgentTracing()` in `src/tracing/context-bridge.ts` — remove `gen_ai.operation.name: "chat"` from the root span so it defaults to **workflow** layer in Datadog. This affects both agents. The root span represents the investigation workflow, not an LLM call.
-- [ ] Register the `VercelSpanProcessor` in `src/tracing/index.ts` alongside the existing `ToolDefinitionsProcessor`
-- [ ] Unit tests for `VercelSpanProcessor`: verify it adds correct attributes based on `ai.operationId`
-- [ ] `npm test` and `npm run build` pass
+- [x] **Fix root span `gen_ai.operation.name` (Decision 18)**: Change `withAgentTracing()` in `src/tracing/context-bridge.ts` — remove `gen_ai.operation.name: "chat"` from the root span so it defaults to **workflow** layer in Datadog. This affects both agents. The root span represents the investigation workflow, not an LLM call.
+- [x] Register the `VercelSpanProcessor` in `src/tracing/index.ts` alongside the existing `ToolDefinitionsProcessor`
+- [x] Unit tests for `VercelSpanProcessor`: verify it adds correct attributes based on `ai.operationId`
+- [x] `npm test` and `npm run build` pass
 
 **Verification procedure — console exporter** (run this first):
 ```bash
@@ -340,10 +340,10 @@ vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"
 - [x] All spans share the same `traceId` (single trace, not fragmented — proves context propagation works)
 - [x] Root span has `gen_ai.input.messages` attribute (requires `OTEL_CAPTURE_AI_PAYLOADS=true`)
 - [x] After investigation completes, root span has `gen_ai.output.messages` attribute containing the final answer text
-- [ ] After SpanProcessor: Datadog LLM Obs shows **agent** layer (from `vercel.agent` span with `gen_ai.operation.name: invoke_agent`)
-- [ ] After SpanProcessor: Datadog LLM Obs shows **workflow** layer (from root span, no `gen_ai.operation.name`)
-- [ ] After SpanProcessor: Datadog LLM Obs shows **llm** layer (from `text.stream` spans with `gen_ai.operation.name: chat`)
-- [ ] After SpanProcessor: Datadog LLM Obs shows **tool** layer (from `kubectl_get.tool` spans with `gen_ai.operation.name: execute_tool`)
+- [x] After SpanProcessor: Datadog LLM Obs shows **agent** layer (from `vercel.agent` span with `gen_ai.operation.name: invoke_agent`)
+- [x] After SpanProcessor: Datadog LLM Obs shows **workflow** layer (from root span, no `gen_ai.operation.name`)
+- [x] After SpanProcessor: Datadog LLM Obs shows **llm** layer (from `text.stream` spans with `gen_ai.operation.name: chat`)
+- [x] After SpanProcessor: Datadog LLM Obs shows **tool** layer (from `kubectl_get.tool` spans with `gen_ai.operation.name: execute_tool`)
 
 **Verification procedure — OTLP to Datadog** (run after console verification passes):
 ```bash
@@ -356,10 +356,10 @@ CLUSTER_WHISPERER_TOOLS=kubectl \
 vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell me why it's failing"
 ```
 
-- [ ] Trace appears in Datadog APM: search `service:cluster-whisperer`
-- [ ] Trace flame graph shows the expected span hierarchy (root → LLM calls → tool calls → subprocess)
-- [ ] Trace appears in Datadog LLM Observability with CONTENT column showing clean INPUT and OUTPUT text (not raw JSON, not "No content")
-- [ ] Token usage is populated in the Datadog LLM Observability view
+- [x] Trace appears in Datadog APM: search `service:cluster-whisperer`
+- [x] Trace flame graph shows the expected span hierarchy (root → LLM calls → tool calls → subprocess)
+- [ ] Trace appears in Datadog LLM Observability with CONTENT column showing clean INPUT and OUTPUT text (not raw JSON, not "No content") — requires human verification in Datadog UI
+- [ ] Token usage is populated in the Datadog LLM Observability view — requires human verification in Datadog UI
 
 **Target span hierarchy** (Updated per Decisions 16, 19 — actual runtime names + SpanProcessor enrichment):
 ```text

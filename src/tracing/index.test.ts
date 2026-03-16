@@ -236,16 +236,18 @@ describe("SDK packages present, tracing enabled", () => {
     expect(initCall.exporter).toBeDefined();
   });
 
-  it("passes ToolDefinitionsProcessor to traceloop.initialize", async () => {
+  it("passes composite SpanProcessor with onStart/onEnd to traceloop.initialize", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 
     await import("./index");
 
     const initCall = mockConfig.traceloopSpy.initialize.mock.calls[0][0];
     expect(initCall.processor).toBeDefined();
-    expect(initCall.processor.constructor.name).toBe(
-      "ToolDefinitionsProcessor"
-    );
+    // Composite processor composes ToolDefinitionsProcessor + VercelSpanProcessor
+    expect(typeof initCall.processor.onStart).toBe("function");
+    expect(typeof initCall.processor.onEnd).toBe("function");
+    expect(typeof initCall.processor.shutdown).toBe("function");
+    expect(typeof initCall.processor.forceFlush).toBe("function");
   });
 
   it("logs initialization messages", async () => {
