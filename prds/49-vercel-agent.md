@@ -61,19 +61,19 @@ Build a Vercel AI SDK agent that:
 **Verification**: Research summary document exists with clear answers to each question above. If any answer is "not supported," the PRD has been updated with an alternative approach before proceeding to M2.
 
 ### M2: Weaver Schema Update
-- [ ] Add new attribute group `registry.cluster_whisperer.vercel_llm` to `telemetry/registry/attributes.yaml` with the Vercel SDK's LLM span attributes (M1 confirmed these differ from OpenLLMetry):
+- [x] Add new attribute group `registry.cluster_whisperer.vercel_llm` to `telemetry/registry/attributes.yaml` with the Vercel SDK's LLM span attributes (M1 confirmed these differ from OpenLLMetry):
   - Outer span name: `ai.streamText` — attributes: `ai.model.id`, `ai.model.provider`, `ai.usage.promptTokens`, `ai.usage.completionTokens`, `ai.telemetry.functionId`, `ai.telemetry.metadata.*`
   - Inner span name: `ai.streamText.doStream` — attributes: `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `ai.prompt.messages`, `ai.prompt.tools`, `ai.response.msToFirstChunk`, `ai.response.msToFinish`
   - Note: `gen_ai.*` semconv attributes are ONLY on the inner `doStream` spans (not the outer `ai.streamText` span). This is what Datadog LLM Observability reads for token usage.
-- [ ] Add new attribute group `registry.cluster_whisperer.vercel_tool` for the SDK's own tool spans:
+- [x] Add new attribute group `registry.cluster_whisperer.vercel_tool` for the SDK's own tool spans:
   - Span name: `ai.toolCall` — attributes: `ai.toolCall.name`, `ai.toolCall.id`, `ai.toolCall.args`, `ai.toolCall.result`
   - Note: These are in ADDITION to our `withToolTracing()` spans (`<toolName>.tool`). Both will appear in traces. Document the relationship: `ai.toolCall` is the SDK-generated span; `<toolName>.tool` is our custom span with `cluster_whisperer.*` attributes.
-- [ ] Add span events to the schema: `ai.stream.firstChunk` and `ai.stream.finish` (events on `doStream` spans, not separate spans)
-- [ ] Document the mapping between OpenLLMetry (LangGraph) and Vercel SDK span names so both agents' traces are understandable in Datadog:
+- [x] Add span events to the schema: `ai.stream.firstChunk` and `ai.stream.finish` (events on `doStream` spans, not separate spans)
+- [x] Document the mapping between OpenLLMetry (LangGraph) and Vercel SDK span names so both agents' traces are understandable in Datadog:
   - LangGraph LLM calls: `anthropic.chat` (OpenLLMetry) → Vercel LLM calls: `ai.streamText.doStream` (SDK telemetry)
   - Both carry `gen_ai.*` attributes with the same semantic conventions
-- [ ] Run `npm run telemetry:check` — must pass
-- [ ] Run `npm run telemetry:resolve` — must pass, regenerate `resolved.json`
+- [x] Run `npm run telemetry:check` — must pass
+- [x] Run `npm run telemetry:resolve` — must pass, regenerate `resolved.json`
 
 **Verification**: `npm run telemetry:check` and `npm run telemetry:resolve` both pass. `git diff telemetry/registry/attributes.yaml` shows new attribute groups for `vercel_llm` and `vercel_tool` covering all Vercel SDK span names and attributes.
 

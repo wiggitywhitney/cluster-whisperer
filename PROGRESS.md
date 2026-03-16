@@ -17,6 +17,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 
 ### Added
 - (2026-03-16) Vercel AI SDK research (PRD #49 M1): Investigated AI SDK 6 agent API, provider configuration, streaming events, telemetry spans, extended thinking, and conversation memory. All pre-research findings confirmed. Decision: use streamText directly (not ToolLoopAgent) for better streaming control over reasoning parts. PRD Technical Design and Decision Log updated to reflect decision. Research summary at docs/research/m1-vercel-ai-sdk-research.md
+- (2026-03-16) Weaver schema update (PRD #49 M2): Added `vercel_llm` and `vercel_tool` attribute groups to telemetry/registry/attributes.yaml. Covers outer `ai.streamText` spans, inner `ai.streamText.doStream` spans with gen_ai.* semconv refs, `ai.toolCall` spans, span events, and OpenLLMetry↔Vercel span name mapping documentation. Both telemetry:check and telemetry:resolve pass.
 
 - Demo app (PRD #46 M1): Hono web server with PostgreSQL connection logic, agent-friendly error messages, health and status endpoints, 9 passing tests
 - Demo app (PRD #46 M2): Multi-stage Dockerfile with Node 22 Alpine, verified crash behavior without DATABASE_URL and connection errors with unreachable host
