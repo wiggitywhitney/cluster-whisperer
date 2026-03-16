@@ -250,8 +250,8 @@ Build a Vercel AI SDK agent that:
 - [x] Verify the `fullStream` property names at runtime match the code — if `part.delta` doesn't work, update to `part.textDelta` or `part.text` and document the finding
 
 ### M6: Conversation Memory
-- [ ] Implement message history persistence for the Vercel agent's `--thread` flag using the SDK's `ModelMessage[]` format (renamed from `CoreMessage` in SDK 5→6)
-- [ ] The conversation memory lifecycle inside `investigate()`:
+- [x] Implement message history persistence for the Vercel agent's `--thread` flag using the SDK's `ModelMessage[]` format (renamed from `CoreMessage` in SDK 5→6)
+- [x] The conversation memory lifecycle inside `investigate()`:
   1. **Load**: If `threadId` is provided, read `data/threads/vercel-<threadId>.json`. Parse as `ModelMessage[]`. If file missing or corrupt JSON → start fresh.
   2. **Build messages**: Combine prior messages + new user message:
      ```typescript
@@ -268,14 +268,14 @@ Build a Vercel AI SDK agent that:
      const fullHistory = [...messages, ...response.messages];
      fs.writeFileSync(threadFile, JSON.stringify(fullHistory, null, 2));
      ```
-- [ ] File location: `data/threads/` directory (same as LangGraph checkpointer files from `src/agent/file-checkpointer.ts`)
-- [ ] File naming: `vercel-<threadId>.json` (prefixed to avoid collision with LangGraph thread files named `<threadId>.json`)
-- [ ] Handle edge cases: missing file (start fresh), corrupt JSON (start fresh — same pattern as `file-checkpointer.ts`), different thread IDs are independent, sanitize thread IDs for filesystem safety
-- [ ] `ModelMessage` objects are plain JSON-serializable — `JSON.stringify`/`JSON.parse` round-trips cleanly. No special serialization needed (unlike LangGraph's `MemorySaver` which has `Uint8Array` values requiring base64 encoding).
+- [x] File location: `data/threads/` directory (same as LangGraph checkpointer files from `src/agent/file-checkpointer.ts`)
+- [x] File naming: `vercel-<threadId>.json` (prefixed to avoid collision with LangGraph thread files named `<threadId>.json`)
+- [x] Handle edge cases: missing file (start fresh), corrupt JSON (start fresh — same pattern as `file-checkpointer.ts`), different thread IDs are independent, sanitize thread IDs for filesystem safety
+- [x] `ModelMessage` objects are plain JSON-serializable — `JSON.stringify`/`JSON.parse` round-trips cleanly. No special serialization needed (unlike LangGraph's `MemorySaver` which has `Uint8Array` values requiring base64 encoding).
 
 **Verification**:
-- [ ] Unit tests: round-trip save/load of conversation history (mirror the test patterns in `src/agent/file-checkpointer.test.ts`: fresh start, round-trip, directory creation, ID sanitization, corrupt file recovery, independent threads)
-- [ ] `npm test` passes with new unit tests
+- [x] Unit tests: round-trip save/load of conversation history (mirror the test patterns in `src/agent/file-checkpointer.test.ts`: fresh start, round-trip, directory creation, ID sanitization, corrupt file recovery, independent threads)
+- [x] `npm test` passes with new unit tests
 - [ ] Manual test — run the Act 3a multi-turn conversation with the Vercel agent:
   ```bash
   export CLUSTER_WHISPERER_AGENT=vercel

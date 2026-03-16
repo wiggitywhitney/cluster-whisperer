@@ -11,8 +11,9 @@
  * How it works:
  * 1. Constructs tools from the Vercel tool factories (src/tools/vercel/)
  * 2. Loads the shared system prompt (prompts/investigator.md)
- * 3. Calls streamText() with Claude, tools, extended thinking, and telemetry
- * 4. Iterates over fullStream and translates each part to an AgentEvent:
+ * 3. If threadId provided, loads prior messages and uses multi-turn mode
+ * 4. Calls streamText() with Claude, tools, extended thinking, and telemetry
+ * 5. Iterates over fullStream and translates each part to an AgentEvent:
  *    - reasoning-delta → thinking event
  *    - tool-call → tool_start event
  *    - tool-result → tool_result event
@@ -31,7 +32,7 @@
  * from runtime values, check `part.textDelta` as a fallback.
  */
 
-import { streamText, stepCountIs, type ToolSet } from "ai";
+import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import * as fs from "fs";
 import * as path from "path";
@@ -51,6 +52,7 @@ import {
   createVectorTools,
   createApplyTools,
 } from "../tools/vercel";
+import { loadVercelThread, saveVercelThread } from "./vercel-thread-store";
 
 /**
  * Options for constructing the VercelAgent.
@@ -111,6 +113,12 @@ export class VercelAgent implements InvestigationAgent {
    * Builds the tool set from factories, calls streamText(), and translates
    * fullStream parts into AgentEvent objects.
    *
+   * Memory lifecycle (when threadId is provided):
+   * 1. Load prior ModelMessage[] from data/threads/vercel-<threadId>.json
+   * 2. Build messages array: [...prior, { role: 'user', content: question }]
+   * 3. Call streamText with messages (multi-turn) instead of prompt (single-turn)
+   * 4. After stream, save full history via result.response.messages
+   *
    * The fullStream → AgentEvent mapping:
    * - 'reasoning-delta' (delta) → { type: 'thinking', content }
    * - 'tool-call' (toolName, args) → { type: 'tool_start', toolName, args }
@@ -123,6 +131,7 @@ export class VercelAgent implements InvestigationAgent {
     options?: InvestigateOptions
   ): AsyncGenerator<AgentEvent> {
     const toolGroups = this.options.toolGroups ?? DEFAULT_TOOL_GROUPS;
+    const threadId = options?.threadId;
 
     // Build the tools Record<string, Tool> from Vercel tool factories
     const tools = this.buildTools(toolGroups);
@@ -130,11 +139,26 @@ export class VercelAgent implements InvestigationAgent {
     // Load the shared system prompt
     const systemPrompt = getSystemPrompt();
 
-    // Call streamText with Claude, tools, extended thinking, and telemetry
+    // Load prior conversation messages if a thread ID is provided
+    const priorMessages: ModelMessage[] = threadId
+      ? loadVercelThread(threadId)
+      : [];
+
+    // Build the input messages — prior history + new user question
+    const inputMessages: ModelMessage[] = [
+      ...priorMessages,
+      { role: "user", content: question },
+    ];
+
+    // Call streamText — use messages (multi-turn) when we have history,
+    // prompt (single-turn) otherwise. System prompt is always passed via
+    // the system parameter, NOT in the messages array.
     const result = streamText({
       model: anthropic(ANTHROPIC_MODEL),
       system: systemPrompt,
-      prompt: question,
+      ...(threadId
+        ? { messages: inputMessages }
+        : { prompt: question }),
       tools,
       stopWhen: stepCountIs(RECURSION_LIMIT),
       providerOptions: {
@@ -206,6 +230,17 @@ export class VercelAgent implements InvestigationAgent {
     // Emit whatever text was accumulated.
     if (textBuffer) {
       yield { type: "final_answer", content: textBuffer };
+    }
+
+    // Save conversation memory after investigation completes.
+    // result.response gives us the assistant + tool messages from all steps.
+    if (threadId) {
+      const response = await result.response;
+      const fullHistory: ModelMessage[] = [
+        ...inputMessages,
+        ...response.messages,
+      ];
+      saveVercelThread(fullHistory, threadId);
     }
   }
 
