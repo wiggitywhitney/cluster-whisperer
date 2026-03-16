@@ -1,106 +1,174 @@
-// ABOUTME: Tests for the investigator agent configuration.
-// ABOUTME: Verifies agent creation, recursion limit, and caching behavior.
+// ABOUTME: Unit tests for the investigator agent — verifies tool wiring and agent construction.
+// ABOUTME: Tests that kubectl, vector, and apply tools are properly included in the agent.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+/**
+ * Tests for the investigator agent construction
+ *
+ * These tests verify that the agent is wired correctly with the right tools.
+ * They don't test the full agent loop (that requires an LLM) — they test
+ * the construction and tool configuration.
+ */
 
-// ---------------------------------------------------------------------------
-// Hoisted mocks — intercept agent creation and invocation to inspect config
-// ---------------------------------------------------------------------------
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { createReactAgentSpy, invokeSpy } = vi.hoisted(() => {
-  const invokeSpy = vi.fn().mockResolvedValue({
-    messages: [{ content: "test answer" }],
-  });
-  const spy = vi.fn().mockReturnValue({
-    invoke: invokeSpy,
+// Use vi.hoisted so the mock is available during vi.mock hoisting
+const { mockCreateReactAgent } = vi.hoisted(() => ({
+  mockCreateReactAgent: vi.fn().mockReturnValue({
+    invoke: vi.fn(),
+    stream: vi.fn(),
     streamEvents: vi.fn(),
-  });
-  return { createReactAgentSpy: spy, invokeSpy };
-});
+  }),
+}));
 
 vi.mock("@langchain/langgraph/prebuilt", () => ({
-  createReactAgent: createReactAgentSpy,
+  createReactAgent: mockCreateReactAgent,
 }));
 
-vi.mock("@langchain/anthropic", () => ({
-  ChatAnthropic: vi.fn().mockImplementation(function () {
-    return { model: "mock" };
-  }),
-}));
-
-vi.mock("@langchain/core/messages", () => ({
-  HumanMessage: vi.fn().mockImplementation(function (content: string) {
-    return { content };
-  }),
-}));
-
-vi.mock("../tools/langchain", () => ({
-  kubectlTools: [{ name: "kubectl_get" }],
-  createVectorTools: vi.fn().mockReturnValue([]),
-}));
-
-vi.mock("../vectorstore", () => ({
-  VoyageEmbedding: vi.fn().mockImplementation(function () {}),
-  ChromaBackend: vi.fn().mockImplementation(function () {}),
-}));
-
-vi.mock("fs", async () => {
-  const actual = await vi.importActual("fs");
+vi.mock("@langchain/anthropic", () => {
   return {
-    ...actual,
-    readFileSync: vi.fn().mockReturnValue("You are a Kubernetes investigator."),
+    ChatAnthropic: class MockChatAnthropic {
+      constructor() {
+        // No-op mock constructor
+      }
+    },
   };
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+vi.mock("@langchain/core/messages", () => ({
+  HumanMessage: vi.fn().mockImplementation((content: string) => ({
+    content,
+  })),
+}));
 
-const ORIGINAL_ENV = { ...process.env };
+// Mock the vectorstore module to avoid needing VOYAGE_API_KEY.
+// Must use class syntax (not arrow functions) because the code uses `new`.
+vi.mock("../vectorstore", () => ({
+  ChromaBackend: class MockChromaBackend {
+    initialize = vi.fn();
+    similaritySearch = vi.fn();
+    keywordSearch = vi.fn();
+    addDocuments = vi.fn();
+    deleteCollection = vi.fn();
+  },
+  VoyageEmbedding: class MockVoyageEmbedding {},
+  CAPABILITIES_COLLECTION: "capabilities",
+  INSTANCES_COLLECTION: "instances",
+  DEFAULT_VECTOR_BACKEND: "chroma",
+  createVectorStore: vi.fn().mockReturnValue({
+    initialize: vi.fn(),
+    store: vi.fn(),
+    search: vi.fn(),
+    keywordSearch: vi.fn(),
+    delete: vi.fn(),
+  }),
+}));
 
-beforeEach(() => {
-  vi.resetModules();
-  createReactAgentSpy.mockClear();
-  invokeSpy.mockClear();
-  process.env.ANTHROPIC_API_KEY = "test-key";
-});
+// Mock tracing
+vi.mock("../tracing/tool-tracing", () => ({
+  withToolTracing: (_meta: unknown, fn: Function) => fn,
+}));
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  process.env = { ...ORIGINAL_ENV };
-});
+vi.mock("../tracing", () => ({
+  getTracer: () => ({
+    startActiveSpan: (_name: string, _opts: unknown, fn: Function) => {
+      const mockSpan = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        recordException: vi.fn(),
+        end: vi.fn(),
+      };
+      return fn(mockSpan);
+    },
+  }),
+}));
 
 describe("getInvestigatorAgent", () => {
-  it("caches the agent on subsequent calls", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset module registry so the cached agent is cleared between tests
+    vi.resetModules();
+    // Set VOYAGE_API_KEY so createVectorAndApplyToolsSafe doesn't short-circuit
+    process.env.VOYAGE_API_KEY = "test-key";
+  });
+
+  it("creates an agent with default tools (kubectl + vector)", async () => {
+    // Dynamic import after module reset to get a fresh module instance
     const { getInvestigatorAgent } = await import("./investigator");
 
-    const first = getInvestigatorAgent();
-    const second = getInvestigatorAgent();
+    getInvestigatorAgent();
 
-    expect(first).toBe(second);
-    expect(createReactAgentSpy).toHaveBeenCalledOnce();
-  });
-});
+    expect(mockCreateReactAgent).toHaveBeenCalledTimes(1);
 
-describe("RECURSION_LIMIT", () => {
-  it("exports a recursion limit constant", async () => {
-    const { RECURSION_LIMIT } = await import("./investigator");
-    expect(RECURSION_LIMIT).toBe(50);
-  });
-});
-
-describe("invokeInvestigator", () => {
-  it("passes recursionLimit to agent.invoke", async () => {
-    const { invokeInvestigator, RECURSION_LIMIT } = await import(
-      "./investigator"
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const tools = callArgs.tools;
+    const toolNames = tools.map(
+      (t: { name: string }) => t.name
     );
 
-    await invokeInvestigator("what pods are running?");
+    // Default tool groups: kubectl + vector (4 tools, no apply)
+    expect(tools).toHaveLength(4);
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).toContain("vector_search");
+    expect(toolNames).not.toContain("kubectl_apply");
+  });
 
-    expect(invokeSpy).toHaveBeenCalledOnce();
-    expect(invokeSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ recursionLimit: RECURSION_LIMIT })
-    );
+  it("includes a system prompt", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent();
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    expect(callArgs.stateModifier).toBeTruthy();
+    expect(callArgs.stateModifier).toContain("Kubernetes");
+  });
+
+  it("filters to kubectl-only when toolGroups is ['kubectl']", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent({ toolGroups: ["kubectl"] });
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    expect(callArgs.tools).toHaveLength(3);
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).not.toContain("vector_search");
+    expect(toolNames).not.toContain("kubectl_apply");
+  });
+
+  it("includes all tools when toolGroups is ['kubectl', 'vector', 'apply']", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent({ toolGroups: ["kubectl", "vector", "apply"] });
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    expect(callArgs.tools).toHaveLength(5);
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).toContain("vector_search");
+    expect(toolNames).toContain("kubectl_apply");
+  });
+
+  it("uses default groups (kubectl,vector) when no options provided", async () => {
+    const { getInvestigatorAgent } = await import("./investigator");
+
+    getInvestigatorAgent();
+
+    const callArgs = mockCreateReactAgent.mock.calls[0][0];
+    const toolNames = callArgs.tools.map((t: { name: string }) => t.name);
+
+    // Default: kubectl + vector (backwards compatible, no apply)
+    expect(toolNames).toContain("kubectl_get");
+    expect(toolNames).toContain("kubectl_describe");
+    expect(toolNames).toContain("kubectl_logs");
+    expect(toolNames).toContain("vector_search");
+    expect(toolNames).not.toContain("kubectl_apply");
   });
 });

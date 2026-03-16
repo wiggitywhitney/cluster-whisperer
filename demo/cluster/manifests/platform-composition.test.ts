@@ -1,4 +1,4 @@
-// ABOUTME: Tests for the platform PostgreSQL XRD and Composition manifests.
+// ABOUTME: Tests for the platform ManagedService XRD and Composition manifests.
 // ABOUTME: Validates YAML structure, required fields, and description richness for the inference pipeline.
 
 import { describe, it, expect } from "vitest";
@@ -16,7 +16,7 @@ function loadYamlDocs(filename: string): Record<string, unknown>[] {
   return parseAllDocuments(content).map((doc) => doc.toJSON());
 }
 
-describe("Platform PostgreSQL XRD (xrd.yaml)", () => {
+describe("Platform ManagedService XRD (xrd.yaml)", () => {
   const docs = loadYamlDocs("xrd.yaml");
   const xrd = docs[0] as Record<string, unknown>;
 
@@ -25,13 +25,13 @@ describe("Platform PostgreSQL XRD (xrd.yaml)", () => {
     expect(xrd.kind).toBe("CompositeResourceDefinition");
   });
 
-  it("defines PostgreSQLInstance kind in platform group", () => {
+  it("defines ManagedService kind in platform group", () => {
     const spec = xrd.spec as Record<string, unknown>;
-    expect(spec.group).toBe("platform.cluster-whisperer.io");
+    expect(spec.group).toBe("platform.acme.io");
 
     const names = spec.names as Record<string, string>;
-    expect(names.kind).toBe("PostgreSQLInstance");
-    expect(names.plural).toBe("postgresqlinstances");
+    expect(names.kind).toBe("ManagedService");
+    expect(names.plural).toBe("managedservices");
   });
 
   it("metadata name matches {plural}.{group} convention", () => {
@@ -107,7 +107,7 @@ describe("Platform PostgreSQL XRD (xrd.yaml)", () => {
   });
 });
 
-describe("Platform PostgreSQL Composition (composition.yaml)", () => {
+describe("Platform ManagedService Composition (composition.yaml)", () => {
   const docs = loadYamlDocs("composition.yaml");
   const composition = docs[0] as Record<string, unknown>;
 
@@ -116,11 +116,11 @@ describe("Platform PostgreSQL Composition (composition.yaml)", () => {
     expect(composition.kind).toBe("Composition");
   });
 
-  it("references the PostgreSQLInstance XRD", () => {
+  it("references the ManagedService XRD", () => {
     const spec = composition.spec as Record<string, unknown>;
     const typeRef = spec.compositeTypeRef as Record<string, string>;
-    expect(typeRef.apiVersion).toBe("platform.cluster-whisperer.io/v1alpha1");
-    expect(typeRef.kind).toBe("PostgreSQLInstance");
+    expect(typeRef.apiVersion).toBe("platform.acme.io/v1alpha1");
+    expect(typeRef.kind).toBe("ManagedService");
   });
 
   it("uses Pipeline mode (required in Crossplane v2)", () => {
@@ -143,26 +143,22 @@ describe("Platform PostgreSQL Composition (composition.yaml)", () => {
     );
   });
 
-  it("maps to AWS RDS resources", () => {
+  it("maps to in-cluster PostgreSQL resources", () => {
     const yaml = JSON.stringify(composition).toLowerCase();
-    expect(yaml).toContain("rds");
-    expect(yaml).toContain("instance");
+    expect(yaml).toContain("postgresql");
+    expect(yaml).toContain("db-service");
   });
 
-  it("includes patches from XRD spec fields to managed resources", () => {
+  it("creates a Deployment and Service for PostgreSQL", () => {
     const spec = composition.spec as Record<string, unknown>;
     const pipeline = spec.pipeline as Record<string, unknown>[];
     const step = pipeline[0];
     const input = step.input as Record<string, unknown>;
     const resources = input.resources as Record<string, unknown>[];
 
-    // At least one resource with patches
-    const resourceWithPatches = resources.find(
-      (r) => (r.patches as unknown[])?.length > 0
-    );
-    expect(
-      resourceWithPatches,
-      "Composition must have patches mapping XRD fields to managed resources"
-    ).toBeDefined();
+    // Should have at least a Deployment and a Service resource
+    const resourceNames = resources.map((r) => (r as Record<string, string>).name);
+    expect(resourceNames).toContain("postgresql-deployment");
+    expect(resourceNames).toContain("postgresql-service");
   });
 });

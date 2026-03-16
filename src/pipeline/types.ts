@@ -1,5 +1,5 @@
-// ABOUTME: Shared data types for the capability and instance pipelines (M1-M3).
-// ABOUTME: Defines DiscoveredResource, ResourceCapability, and pipeline option interfaces.
+// ABOUTME: Shared data types for capability inference, instance sync, and storage pipelines.
+// ABOUTME: Defines DiscoveredResource, ResourceCapability, ResourceInstance, and pipeline option types.
 
 /**
  * types.ts - Shared data types for the capability and instance pipelines
@@ -56,6 +56,9 @@ export interface DiscoveredResource {
   isCRD: boolean;
   /** kubectl explain --recursive output for LLM analysis */
   schema: string;
+  /** Raw spec description from kubectl explain — organizational details
+   *  (team names, app names, people) indexed alongside the LLM description. */
+  specDescription?: string;
 }
 
 /**
@@ -191,6 +194,9 @@ export interface ResourceCapability {
   exampleYaml: string;
   /** LLM's confidence in its analysis (0 = guessing, 1 = certain) */
   confidence: number;
+  /** Raw spec description from kubectl explain — organizational details
+   *  (team names, app names, people) indexed alongside the LLM description. */
+  specDescription?: string;
 }
 
 /**
@@ -228,6 +234,15 @@ export interface InferenceOptions {
    * Defaults to stdout.
    */
   onProgress?: (message: string) => void;
+  /**
+   * Directory for the inference cache. When set, inference results are cached
+   * to disk so re-runs skip resources that have already been processed.
+   * Cache keys are based on resource name + schema, so schema changes
+   * automatically invalidate stale entries.
+   *
+   * When undefined, caching is disabled and every resource is inferred fresh.
+   */
+  cacheDir?: string;
 }
 
 // ---------------------------------------------------------------------------

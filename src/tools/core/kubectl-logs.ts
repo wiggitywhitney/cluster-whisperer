@@ -1,3 +1,6 @@
+// ABOUTME: kubectl-logs core — shared logic for getting container logs
+// ABOUTME: Defines schema, description, and execution function used by both LangChain and MCP wrappers
+
 /**
  * kubectl-logs core - Shared logic for getting container logs
  *
@@ -13,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl, KubectlResult } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl logs.
@@ -30,6 +33,9 @@ import { executeKubectl, KubectlResult } from "../../utils/kubectl";
 export const kubectlLogsSchema = z.object({
   pod: z
     .string()
+    .trim()
+    .min(1, "Pod name cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The pod name to get logs from (use kubectl_get to find pod names first)"
     ),
@@ -78,13 +84,15 @@ Other useful flags:
  * @param input - Validated input matching kubectlLogsSchema
  * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlLogs(input: KubectlLogsInput): Promise<KubectlResult> {
+export async function kubectlLogs(input: KubectlLogsInput, options?: KubectlOptions): Promise<KubectlResult> {
   const { pod, namespace, args: extraArgs } = input;
 
   // Build kubectl arguments: kubectl logs <pod> -n <namespace> [...extraArgs]
   const args: string[] = ["logs", pod, "-n", namespace];
 
-  // Append extra args, but reject namespace flags (use the parameter instead)
+  // Append extra args, but reject namespace and connection-override flags.
+  // Namespace should use the parameter; connection flags could bypass the
+  // intended kubeconfig/context, allowing cluster escape.
   if (extraArgs && extraArgs.length > 0) {
     for (const arg of extraArgs) {
       if (arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=")) {
@@ -93,9 +101,42 @@ export async function kubectlLogs(input: KubectlLogsInput): Promise<KubectlResul
           isError: true,
         };
       }
+      if (
+        arg === "--kubeconfig" ||
+        arg.startsWith("--kubeconfig=") ||
+        arg === "--context" ||
+        arg.startsWith("--context=") ||
+        arg === "--server" ||
+        arg.startsWith("--server=") ||
+        arg === "-s" ||
+        arg === "--cluster" ||
+        arg.startsWith("--cluster=") ||
+        arg === "--user" ||
+        arg.startsWith("--user=") ||
+        arg === "--token" ||
+        arg.startsWith("--token=") ||
+        arg === "--client-certificate" ||
+        arg.startsWith("--client-certificate=") ||
+        arg === "--client-key" ||
+        arg.startsWith("--client-key=") ||
+        arg === "--certificate-authority" ||
+        arg.startsWith("--certificate-authority=") ||
+        arg === "--insecure-skip-tls-verify" ||
+        arg === "--as" ||
+        arg.startsWith("--as=") ||
+        arg === "--as-group" ||
+        arg.startsWith("--as-group=") ||
+        arg === "--as-uid" ||
+        arg.startsWith("--as-uid=")
+      ) {
+        return {
+          output: `Error: The flag '${arg}' is not allowed in extraArgs.`,
+          isError: true,
+        };
+      }
     }
     args.push(...extraArgs);
   }
 
-  return executeKubectl(args);
+  return executeKubectl(args, options);
 }

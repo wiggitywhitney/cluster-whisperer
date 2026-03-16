@@ -63,6 +63,29 @@ const DEFAULT_CHROMA_URL = "http://localhost:8000";
 const UPSERT_BATCH_SIZE = 100;
 
 /**
+ * Translate a flat key-value where filter into Chroma's $and syntax.
+ *
+ * Chroma requires exactly one operator per top-level where object. When
+ * callers pass multiple fields (e.g., { kind: "X", apiGroup: "Y" }),
+ * we wrap them in $and so Chroma treats each key as a separate condition.
+ * Single-key filters and filters already using operators ($and, $or, etc.)
+ * pass through unchanged.
+ */
+function normalizeWhereFilter(
+  where: Record<string, unknown>
+): Record<string, unknown> {
+  const keys = Object.keys(where);
+  // Already a Chroma operator or single field — no wrapping needed
+  if (keys.length <= 1 || keys.some((k) => k.startsWith("$"))) {
+    return where;
+  }
+  // Wrap each key-value pair in its own condition under $and
+  return {
+    $and: keys.map((key) => ({ [key]: where[key] })),
+  };
+}
+
+/**
  * Chroma implementation of the VectorStore interface.
  *
  * Usage:
@@ -102,14 +125,20 @@ export class ChromaBackend implements VectorStore {
     options?: { chromaUrl?: string }
   ) {
     this.embedder = embedder;
-    const url = options?.chromaUrl ?? process.env.CHROMA_URL ?? DEFAULT_CHROMA_URL;
+    const url = options?.chromaUrl ?? process.env.CLUSTER_WHISPERER_CHROMA_URL ?? process.env.CHROMA_URL ?? DEFAULT_CHROMA_URL;
 
     // Parse the URL into host and port for the Chroma v3 SDK.
     // The 'path' constructor argument is deprecated in favor of host/port/ssl.
+    // When no port is specified (e.g., http://chroma.nip.io via ingress),
+    // fall back to the protocol default (80/443) — not the Chroma default (8000).
     const parsed = new URL(url);
+    const port = parsed.port
+      ? parseInt(parsed.port, 10)
+      : parsed.protocol === "https:" ? 443 : 80;
+
     this.client = new ChromaClient({
       host: parsed.hostname,
-      port: parseInt(parsed.port || (parsed.protocol === "https:" ? "443" : "8000"), 10),
+      port,
       ssl: parsed.protocol === "https:",
     });
   }
@@ -272,9 +301,14 @@ export class ChromaBackend implements VectorStore {
             queryEmbeddings,
             nResults: options?.nResults ?? 10,
             include: ["documents", "metadatas", "distances"],
-            // Cast to Chroma's Where type — our SearchOptions.where accepts the
-            // same shape (key-value pairs for exact match, or $and/$or operators)
-            ...(options?.where ? { where: options.where as Where } : {}),
+            // Normalize flat multi-key filters to $and syntax before casting
+            ...(options?.where
+              ? {
+                  where: normalizeWhereFilter(
+                    options.where as Record<string, unknown>
+                  ) as Where,
+                }
+              : {}),
             // whereDocument filters on document text content (e.g., { "$contains": "backup" }).
             // When combined with queryEmbeddings, Chroma applies the substring filter first,
             // then ranks the filtered results by vector similarity.
@@ -377,7 +411,13 @@ export class ChromaBackend implements VectorStore {
             include: ["documents", "metadatas"],
             limit: options?.nResults ?? 10,
             ...(documentFilter ? { whereDocument: documentFilter } : {}),
-            ...(options?.where ? { where: options.where as Where } : {}),
+            ...(options?.where
+              ? {
+                  where: normalizeWhereFilter(
+                    options.where as Record<string, unknown>
+                  ) as Where,
+                }
+              : {}),
           });
 
           // Convert Chroma's get() response to SearchResult objects.

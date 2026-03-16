@@ -1,19 +1,22 @@
-# Platform-approved PostgreSQL database — the "needle in the haystack" that
-# the cluster-whisperer agent discovers among ~1,000 Crossplane CRDs.
+# Platform-approved managed service — the "needle in the haystack" that
+# the cluster-whisperer agent discovers among 20 similar ManagedService CRDs.
 #
-# This XRD defines a simplified PostgreSQL abstraction that platform teams
-# offer to application developers. The rich field descriptions ensure that
-# `kubectl explain postgresqlinstances` produces detailed output for the
-# capability inference pipeline to analyze.
+# This XRD is one of 20 managedservices.{team}.acme.io CRDs, each for a
+# different team. All 20 look identical from `kubectl get crd`. The agent
+# can only find the right one by searching the vector DB with the correct
+# organizational context (team name, app name, person).
+#
+# This one is for Whitney and Viktor's "You Choose" demo app.
+# The 19 decoys in decoy-xrds/ are for fake teams.
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: postgresqlinstances.platform.cluster-whisperer.io
+  name: managedservices.platform.acme.io
 spec:
-  group: platform.cluster-whisperer.io
+  group: platform.acme.io
   names:
-    kind: PostgreSQLInstance
-    plural: postgresqlinstances
+    kind: ManagedService
+    plural: managedservices
   versions:
   - name: v1alpha1
     served: true
@@ -21,13 +24,16 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        required: ["spec"]
         properties:
           spec:
             type: object
             description: >-
-              Configuration for a platform-approved PostgreSQL database instance.
-              Application teams use this resource to request a managed PostgreSQL
-              database without needing to understand provider-specific details.
+              Platform-approved PostgreSQL database for Whitney and Viktor's
+              You Choose demo application. Managed by the Platform team for the
+              You Choose project. Application developers request this resource
+              to get a fully managed PostgreSQL instance without needing to
+              understand provider-specific details.
             properties:
               engine:
                 type: string
@@ -99,7 +105,7 @@ spec:
           status:
             type: object
             description: >-
-              Observed state of the PostgreSQL database instance, populated by
+              Observed state of the managed service instance, populated by
               the platform controller after provisioning.
             properties:
               endpoint:

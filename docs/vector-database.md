@@ -8,7 +8,7 @@ This document explains how cluster-whisperer uses a vector database to help deve
 
 Kubernetes clusters often have dozens or hundreds of resource types — built-in kinds like Deployments and Services, plus custom resources (CRDs) like SQLClaims or Crossplane Providers. When a developer asks "how do I deploy a database?", the agent needs to search all these resource types and find the relevant ones.
 
-Traditional search (exact keyword matching) doesn't work well here. The developer said "database" but the relevant CRD might be called "SQLClaim" or "PostgreSQLInstance." We need search that understands meaning.
+Traditional search (exact keyword matching) doesn't work well here. The developer said "database" but the relevant CRD might be called "SQLClaim" or "ManagedService." We need search that understands meaning.
 
 ## What Is a Vector Database?
 

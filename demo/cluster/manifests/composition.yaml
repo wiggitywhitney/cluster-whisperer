@@ -1,80 +1,97 @@
-# Composition implementing the platform PostgreSQL XRD using AWS RDS.
+# Composition implementing the platform ManagedService XRD using in-cluster PostgreSQL.
 #
-# This maps the simplified platform abstraction (PostgreSQLInstance) to
-# concrete AWS RDS resources. In the demo, no cloud credentials are
-# configured — the Composition exists to show that the platform team has
-# defined the "right answer" for how to provision a database.
+# Deploys a PostgreSQL Deployment and Service via provider-kubernetes Object
+# resources. The Service exposes port 5151 (non-standard, hides PostgreSQL
+# from kubectl describe) mapping to the container's native 5432.
+#
+# When the agent deploys a ManagedService claim, this Composition creates a
+# real database — the demo app transitions from CrashLoopBackOff to Running.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: postgresqlinstance-aws-rds
+  name: managedservice-in-cluster-pg
   labels:
-    provider: aws
-    service: rds
+    provider: kubernetes
+    service: postgresql
 spec:
   compositeTypeRef:
-    apiVersion: platform.cluster-whisperer.io/v1alpha1
-    kind: PostgreSQLInstance
+    apiVersion: platform.acme.io/v1alpha1
+    kind: ManagedService
   mode: Pipeline
   pipeline:
-  - step: create-rds-instance
+  - step: create-postgresql
     functionRef:
       name: crossplane-contrib-function-patch-and-transform
     input:
       apiVersion: pt.fn.crossplane.io/v1beta1
       kind: Resources
       resources:
-      - name: rds-instance
+      - name: postgresql-deployment
         base:
-          apiVersion: rds.aws.upbound.io/v1beta2
-          kind: Instance
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
           spec:
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: kubernetes-in-cluster
             forProvider:
-              engine: postgres
-              publiclyAccessible: false
-              storageType: gp3
-              storageEncrypted: true
-              skipFinalSnapshot: true
-              autoMinorVersionUpgrade: true
-        patches:
-        # Map engine version from XRD to RDS
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.engineVersion
-          toFieldPath: spec.forProvider.engineVersion
-        # Map storage size from XRD to RDS
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.storageGB
-          toFieldPath: spec.forProvider.allocatedStorage
-        # Map instance size to RDS instance class via lookup
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.instanceSize
-          toFieldPath: spec.forProvider.instanceClass
-          transforms:
-          - type: map
-            map:
-              small: db.t3.micro
-              medium: db.r6g.large
-              large: db.r6g.2xlarge
-        # Map high availability to Multi-AZ
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.highAvailability
-          toFieldPath: spec.forProvider.multiAz
-        # Map backup retention
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.backupRetentionDays
-          toFieldPath: spec.forProvider.backupRetentionPeriod
-        # Write endpoint back to XRD status
-        - type: ToCompositeFieldPath
-          fromFieldPath: status.atProvider.endpoint
-          toFieldPath: status.endpoint
-      - name: subnet-group
+              manifest:
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: platform-postgresql
+                  namespace: default
+                  labels:
+                    app: platform-postgresql
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: platform-postgresql
+                  template:
+                    metadata:
+                      labels:
+                        app: platform-postgresql
+                    spec:
+                      containers:
+                      - name: postgresql
+                        image: postgres:16-alpine
+                        ports:
+                        - containerPort: 5432
+                        env:
+                        - name: POSTGRES_DB
+                          value: myapp
+                        - name: POSTGRES_USER
+                          value: postgres
+                        - name: POSTGRES_PASSWORD
+                          value: demo-password
+                        readinessProbe:
+                          exec:
+                            command:
+                            - pg_isready
+                            - -U
+                            - postgres
+                          initialDelaySeconds: 5
+                          periodSeconds: 5
+      - name: postgresql-service
         base:
-          apiVersion: rds.aws.upbound.io/v1beta2
-          kind: SubnetGroup
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
           spec:
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: kubernetes-in-cluster
             forProvider:
-              description: Platform-managed subnet group for PostgreSQL instances
-        patches:
-        - type: FromCompositeFieldPath
-          fromFieldPath: spec.networkRef
-          toFieldPath: metadata.annotations["platform.cluster-whisperer.io/network-ref"]
+              manifest:
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: db-service
+                  namespace: default
+                spec:
+                  selector:
+                    app: platform-postgresql
+                  ports:
+                  - port: 5151
+                    targetPort: 5432
+                    protocol: TCP

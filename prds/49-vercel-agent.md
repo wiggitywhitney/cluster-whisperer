@@ -34,6 +34,7 @@ Build a Vercel AI SDK agent using the `ToolLoopAgent` (AI SDK 6) that:
 - OTel traces appear in Jaeger/Datadog with spans for LLM calls and tool executions
 - The agent handles the full demo flow: investigate → discover missing DB → semantic search → deploy
 - Existing LangGraph tests and behavior are unaffected
+- Conversation memory (`--thread` flag) works with the Vercel agent — same multi-turn capability as LangGraph (PRD #48 M13 establishes the pattern)
 
 ## Non-Goals
 

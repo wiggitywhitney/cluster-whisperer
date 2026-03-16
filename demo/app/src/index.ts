@@ -30,11 +30,19 @@ async function main(): Promise<void> {
   }
 
   console.log( // eslint-disable-line no-console
-    `[demo-app] Connecting to database at ${DATABASE_URL}...`
+    `[demo-app] Connecting to backend service at ${DATABASE_URL}...`
   );
 
+  // Prepend postgres:// with default credentials if not already present — the
+  // Kubernetes manifest uses a generic URL (db-service:5151/myapp) so kubectl
+  // describe doesn't reveal the database type, but pg.Pool needs the full
+  // connection string to connect.
+  const connectionString = DATABASE_URL.startsWith("postgres")
+    ? DATABASE_URL
+    : `postgres://postgres:demo-password@${DATABASE_URL}`;
+
   const pool = new pg.Pool({
-    connectionString: DATABASE_URL,
+    connectionString,
     connectionTimeoutMillis: 5000,
   });
 

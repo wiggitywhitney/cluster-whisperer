@@ -1,0 +1,209 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: managedservices.payments.acme.io
+spec:
+  group: payments.acme.io
+  names:
+    kind: ManagedService
+    plural: managedservices
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            description: >-
+              Platform-provided PostgreSQL database provisioned by the Acme
+              platform team for the Payments division. Used by Sarah Chen's
+              Transaction Processing App for high-throughput payment processing
+              workflows. Application developers request this resource to get a
+              fully managed database instance without needing to understand
+              provider-specific details.
+            properties:
+              engine:
+                type: string
+                description: >-
+                  Database engine type. Currently only PostgreSQL is supported.
+                  The payments team manages engine compatibility and security patches.
+                enum:
+                  - postgresql
+                default: postgresql
+              engineVersion:
+                type: string
+                description: >-
+                  PostgreSQL engine version. The payments team validates and
+                  approves each version for production use. Defaults to the
+                  latest team-approved version.
+                enum:
+                  - "17"
+                  - "16"
+                  - "15"
+                  - "14"
+                default: "16"
+              storageGB:
+                type: integer
+                description: >-
+                  Allocated storage in gigabytes. The database will automatically
+                  use SSD-backed storage (gp3) for consistent I/O performance.
+                  Can be increased after creation but not decreased.
+                minimum: 20
+                maximum: 1000
+                default: 100
+              instanceSize:
+                type: string
+                description: >-
+                  Compute instance size for the database. Small is suitable for
+                  development and staging. Medium handles typical production
+                  workloads. Large is for high-throughput applications.
+                enum:
+                  - small
+                  - medium
+                  - large
+                default: medium
+              highAvailability:
+                type: boolean
+                description: >-
+                  Enable Multi-AZ deployment for automatic failover. When
+                  enabled, a standby replica is maintained in a different
+                  availability zone. Required for production workloads per
+                  team policy.
+                default: true
+              backupRetentionDays:
+                type: integer
+                description: >-
+                  Number of days to retain automated backups. Backups are taken
+                  daily during the configured maintenance window. Set to 0 to
+                  disable automated backups (not recommended for production).
+                minimum: 0
+                maximum: 35
+                default: 14
+              networkRef:
+                type: string
+                description: >-
+                  Reference to the platform VPC network where the database will
+                  be deployed. Must match a network managed by the platform team.
+                  Defaults to the shared application network.
+                default: shared-app-network
+            required:
+              - engine
+              - storageGB
+          status:
+            type: object
+            description: >-
+              Observed state of the managed service instance, populated by
+              the platform controller after provisioning.
+            properties:
+              endpoint:
+                type: string
+                description: >-
+                  Connection endpoint (hostname:port) for the PostgreSQL database.
+                  Available after the instance reaches the "ready" state.
+              status:
+                type: string
+                description: >-
+                  Current provisioning status of the database instance.
+                enum:
+                  - creating
+                  - available
+                  - modifying
+                  - deleting
+                  - failed
+              storageType:
+                type: string
+                description: >-
+                  The storage type provisioned for this instance (e.g., gp3, io1).
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: managedservice-payments-in-cluster-pg
+  labels:
+    provider: kubernetes
+    service: postgresql
+spec:
+  compositeTypeRef:
+    apiVersion: payments.acme.io/v1alpha1
+    kind: ManagedService
+  mode: Pipeline
+  pipeline:
+  - step: create-postgresql
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: postgresql-deployment
+        base:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          spec:
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: kubernetes-in-cluster
+            forProvider:
+              manifest:
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: payments-postgresql
+                  namespace: default
+                  labels:
+                    app: payments-postgresql
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: payments-postgresql
+                  template:
+                    metadata:
+                      labels:
+                        app: payments-postgresql
+                    spec:
+                      containers:
+                      - name: postgresql
+                        image: postgres:16-alpine
+                        ports:
+                        - containerPort: 5432
+                        env:
+                        - name: POSTGRES_DB
+                          value: myapp
+                        - name: POSTGRES_USER
+                          value: postgres
+                        - name: POSTGRES_PASSWORD
+                          value: demo-password
+                        readinessProbe:
+                          exec:
+                            command:
+                            - pg_isready
+                            - -U
+                            - postgres
+                          initialDelaySeconds: 5
+                          periodSeconds: 5
+      - name: postgresql-service
+        base:
+          apiVersion: kubernetes.m.crossplane.io/v1alpha1
+          kind: Object
+          spec:
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: kubernetes-in-cluster
+            forProvider:
+              manifest:
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: db-service
+                  namespace: default
+                spec:
+                  selector:
+                    app: payments-postgresql
+                  ports:
+                  - port: 5165
+                    targetPort: 5432
+                    protocol: TCP

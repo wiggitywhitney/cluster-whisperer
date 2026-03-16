@@ -1,3 +1,6 @@
+// ABOUTME: LangChain tool wrappers for kubectl, vector search, and apply operations
+// ABOUTME: Wraps core functions with LangChain's tool() helper for agent use
+
 /**
  * LangChain tool wrappers for kubectl and vector search operations
  *
@@ -40,10 +43,15 @@ import {
   vectorSearch,
   vectorSearchSchema,
   vectorSearchDescription,
+  kubectlApply,
+  kubectlApplySchema,
+  kubectlApplyDescription,
   type KubectlGetInput,
   type KubectlDescribeInput,
   type KubectlLogsInput,
   type VectorSearchInput,
+  type KubectlApplyInput,
+  type KubectlOptions,
 } from "../core";
 import { withToolTracing } from "../../tracing/tool-tracing";
 import type { VectorStore } from "../../vectorstore";
@@ -53,77 +61,73 @@ import {
 } from "../../vectorstore";
 
 /**
- * kubectl_get tool for LangChain agents.
- * Lists Kubernetes resources in table format.
+ * Creates kubectl read tools (get, describe, logs) for the LangChain agent.
  *
- * Note: Core functions return { output, isError }. LangChain tools expect
- * a string, so we extract just the output. The isError flag is only used
- * by MCP clients; LangChain agents interpret the error message content.
+ * Why a factory function instead of static exports?
+ * The kubeconfig option needs to be captured at tool creation time via closure.
+ * When CLUSTER_WHISPERER_KUBECONFIG is set, every kubectl call needs --kubeconfig
+ * prepended — the factory captures this path once and all tool invocations use it.
  *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
+ * For backwards compatibility, kubectlTools is also exported as a static array
+ * (with no kubeconfig) for existing code that doesn't need kubeconfig support.
+ *
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
+ * @returns Array of kubectl tools [get, describe, logs]
  */
-export const kubectlGetTool = tool(
-  withToolTracing(
-    { name: "kubectl_get", description: kubectlGetDescription },
-    async (input: KubectlGetInput) => {
-      const { output } = await kubectlGet(input);
-      return output;
+export function createKubectlTools(options?: KubectlOptions) {
+  const kubectlGetTool = tool(
+    withToolTracing(
+      { name: "kubectl_get", description: kubectlGetDescription },
+      async (input: KubectlGetInput) => {
+        const { output } = await kubectlGet(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_get",
+      description: kubectlGetDescription,
+      schema: kubectlGetSchema,
     }
-  ),
-  {
-    name: "kubectl_get",
-    description: kubectlGetDescription,
-    schema: kubectlGetSchema,
-  }
-);
+  );
+
+  const kubectlDescribeTool = tool(
+    withToolTracing(
+      { name: "kubectl_describe", description: kubectlDescribeDescription },
+      async (input: KubectlDescribeInput) => {
+        const { output } = await kubectlDescribe(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_describe",
+      description: kubectlDescribeDescription,
+      schema: kubectlDescribeSchema,
+    }
+  );
+
+  const kubectlLogsTool = tool(
+    withToolTracing(
+      { name: "kubectl_logs", description: kubectlLogsDescription },
+      async (input: KubectlLogsInput) => {
+        const { output } = await kubectlLogs(input, options);
+        return output;
+      }
+    ),
+    {
+      name: "kubectl_logs",
+      description: kubectlLogsDescription,
+      schema: kubectlLogsSchema,
+    }
+  );
+
+  return [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool];
+}
 
 /**
- * kubectl_describe tool for LangChain agents.
- * Gets detailed information about a specific resource.
- *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
+ * All kubectl tools for the LangChain agent (no kubeconfig).
+ * Backwards-compatible static export for existing code.
  */
-export const kubectlDescribeTool = tool(
-  withToolTracing(
-    { name: "kubectl_describe", description: kubectlDescribeDescription },
-    async (input: KubectlDescribeInput) => {
-      const { output } = await kubectlDescribe(input);
-      return output;
-    }
-  ),
-  {
-    name: "kubectl_describe",
-    description: kubectlDescribeDescription,
-    schema: kubectlDescribeSchema,
-  }
-);
-
-/**
- * kubectl_logs tool for LangChain agents.
- * Gets container logs from a pod.
- *
- * Wrapped with withToolTracing() to create parent spans for kubectl subprocess spans.
- */
-export const kubectlLogsTool = tool(
-  withToolTracing(
-    { name: "kubectl_logs", description: kubectlLogsDescription },
-    async (input: KubectlLogsInput) => {
-      const { output } = await kubectlLogs(input);
-      return output;
-    }
-  ),
-  {
-    name: "kubectl_logs",
-    description: kubectlLogsDescription,
-    schema: kubectlLogsSchema,
-  }
-);
-
-/**
- * All kubectl tools for the LangChain agent.
- * Import this array to give the agent access to all investigation tools.
- */
-export const kubectlTools = [kubectlGetTool, kubectlDescribeTool, kubectlLogsTool];
+export const kubectlTools = createKubectlTools();
 
 /**
  * Creates the unified vector search tool bound to a VectorStore instance.
@@ -134,10 +138,10 @@ export const kubectlTools = [kubectlGetTool, kubectlDescribeTool, kubectlLogsToo
  * and lazily initializes collections on first use.
  *
  * Lazy initialization means:
- * - Chroma doesn't need to be running at agent startup
+ * - The vector database doesn't need to be running at agent startup
  * - Collections are initialized once, then cached
- * - If Chroma is unreachable, the tool returns a helpful error message
- *   instead of crashing the agent
+ * - If the vector database is unreachable, the tool returns a helpful error
+ *   message instead of crashing the agent
  *
  * @param vectorStore - A VectorStore instance (e.g., new ChromaBackend(embedder))
  * @returns Array containing the single unified vector_search tool
@@ -149,8 +153,8 @@ export function createVectorTools(vectorStore: VectorStore) {
    * Initializes both collections on first use.
    *
    * Called before every vector tool invocation. After the first successful
-   * call, it's a no-op (the flag prevents re-initialization). If Chroma
-   * is unreachable, this throws and the tool wrapper catches it.
+   * call, it's a no-op (the flag prevents re-initialization). If the vector
+   * database is unreachable, this throws and the tool wrapper catches it.
    */
   async function ensureInitialized(): Promise<void> {
     if (initialized) return;
@@ -166,8 +170,8 @@ export function createVectorTools(vectorStore: VectorStore) {
   /**
    * Wraps a vector tool handler with initialization and error handling.
    *
-   * If Chroma is unreachable, returns a helpful message instead of crashing.
-   * The agent can then fall back to kubectl tools for investigation.
+   * If the vector database is unreachable, returns a helpful message instead
+   * of crashing. The agent can then fall back to kubectl tools for investigation.
    */
   function withGracefulDegradation<T>(
     handler: (input: T) => Promise<string>
@@ -180,7 +184,7 @@ export function createVectorTools(vectorStore: VectorStore) {
         const message =
           error instanceof Error ? error.message : String(error);
 
-        // Connection errors indicate Chroma isn't running
+        // Connection errors indicate the vector database isn't running
         if (
           message.includes("ECONNREFUSED") ||
           message.includes("fetch failed") ||
@@ -189,7 +193,7 @@ export function createVectorTools(vectorStore: VectorStore) {
           message.includes("ECONNRESET")
         ) {
           return (
-            "Vector database is not available. The Chroma server may not be running. " +
+            "Vector database is not available. The vector database server may not be running. " +
             "Use kubectl tools to investigate the cluster directly."
           );
         }
@@ -215,4 +219,97 @@ export function createVectorTools(vectorStore: VectorStore) {
   );
 
   return [vectorSearchTool];
+}
+
+/**
+ * Creates the kubectl_apply tool bound to a VectorStore instance.
+ *
+ * Why a factory function?
+ * Like the vector search tool, kubectl_apply needs a VectorStore for catalog
+ * validation. The core kubectlApply function checks whether the resource type
+ * exists in the capabilities collection before allowing the apply. This factory
+ * creates a tool that closes over the VectorStore instance.
+ *
+ * Graceful degradation:
+ * If the vector database is unreachable, the tool returns a helpful error
+ * message instead of crashing. Without catalog validation, apply is blocked
+ * (fail-closed, not fail-open).
+ *
+ * @param vectorStore - A VectorStore instance for catalog validation
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
+ * @returns Array containing the single kubectl_apply tool
+ */
+export function createApplyTools(vectorStore: VectorStore, options?: KubectlOptions) {
+  let initialized = false;
+
+  /**
+   * Initializes the capabilities collection on first use.
+   *
+   * kubectl_apply needs the capabilities collection for catalog validation.
+   * If vector_search already initialized the collection (shared VectorStore
+   * instance), the initialize() call is a no-op (idempotent). But if
+   * kubectl_apply runs first or without vector_search, this ensures the
+   * collection is ready.
+   */
+  async function ensureInitialized(): Promise<void> {
+    if (initialized) return;
+    await vectorStore.initialize(CAPABILITIES_COLLECTION, {
+      distanceMetric: "cosine",
+    });
+    initialized = true;
+  }
+
+  /**
+   * Wraps the apply tool handler with initialization and connection error handling.
+   *
+   * Ensures the capabilities collection is initialized before catalog validation.
+   * Connection errors (ECONNREFUSED, etc.) get a user-friendly message.
+   * Other errors (parse failures, catalog rejections) pass through from
+   * the core function since they're already well-formatted.
+   */
+  function withGracefulDegradation(
+    handler: (input: KubectlApplyInput) => Promise<string>
+  ): (input: KubectlApplyInput) => Promise<string> {
+    return async (input: KubectlApplyInput): Promise<string> => {
+      try {
+        await ensureInitialized();
+        return await handler(input);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+
+        if (
+          message.includes("ECONNREFUSED") ||
+          message.includes("fetch failed") ||
+          message.includes("ENOTFOUND") ||
+          message.includes("ETIMEDOUT") ||
+          message.includes("ECONNRESET")
+        ) {
+          return (
+            "Vector database is not available. Cannot validate resource against the platform catalog. " +
+            "The catalog database must be running for kubectl_apply to work."
+          );
+        }
+
+        return `kubectl apply failed: ${message}`;
+      }
+    };
+  }
+
+  const kubectlApplyTool = tool(
+    withToolTracing(
+      { name: "kubectl_apply", description: kubectlApplyDescription },
+      withGracefulDegradation(async (input: KubectlApplyInput) => {
+        const { output } = await kubectlApply(vectorStore, input, { kubeconfig: options?.kubeconfig });
+        return output;
+      })
+    ),
+    {
+      name: "kubectl_apply",
+      description: kubectlApplyDescription,
+      schema: kubectlApplySchema,
+    }
+  );
+
+  return [kubectlApplyTool];
 }

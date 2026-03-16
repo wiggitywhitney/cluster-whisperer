@@ -16,7 +16,7 @@ chromadb:
     storageClass: ""
     size: 1Gi
 
-# Resource limits appropriate for demo workload (~1,000 CRD descriptions)
+# Resource limits appropriate for demo workload (~360 CRD descriptions)
 resources:
   requests:
     cpu: 100m

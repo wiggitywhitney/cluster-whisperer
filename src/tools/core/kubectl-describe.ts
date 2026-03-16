@@ -1,3 +1,6 @@
+// ABOUTME: kubectl-describe core — shared logic for getting detailed resource information
+// ABOUTME: Defines schema, description, and execution function used by both LangChain and MCP wrappers
+
 /**
  * kubectl-describe core - Shared logic for getting detailed resource information
  *
@@ -11,7 +14,7 @@
  */
 
 import { z } from "zod";
-import { executeKubectl, KubectlResult } from "../../utils/kubectl";
+import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/kubectl";
 
 /**
  * Input schema for kubectl describe.
@@ -24,11 +27,15 @@ import { executeKubectl, KubectlResult } from "../../utils/kubectl";
 export const kubectlDescribeSchema = z.object({
   resource: z
     .string()
+    .min(1, "Resource type cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The type of Kubernetes resource (e.g., 'pod', 'deployment', 'service', 'node')"
     ),
   name: z
     .string()
+    .min(1, "Resource name cannot be empty")
+    .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
       "The name of the specific resource to describe (required - use kubectl_get first to find resource names)"
     ),
@@ -68,7 +75,7 @@ Use kubectl_get first to find resource names, then kubectl_describe for details.
  * @param input - Validated input matching kubectlDescribeSchema
  * @returns KubectlResult with output string and isError flag
  */
-export async function kubectlDescribe(input: KubectlDescribeInput): Promise<KubectlResult> {
+export async function kubectlDescribe(input: KubectlDescribeInput, options?: KubectlOptions): Promise<KubectlResult> {
   const { resource, name, namespace } = input;
 
   // Build kubectl arguments: kubectl describe <resource> <name> [-n namespace]
@@ -78,5 +85,5 @@ export async function kubectlDescribe(input: KubectlDescribeInput): Promise<Kube
     args.push("-n", namespace);
   }
 
-  return executeKubectl(args);
+  return executeKubectl(args, options);
 }
