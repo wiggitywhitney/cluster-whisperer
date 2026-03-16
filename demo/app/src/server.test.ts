@@ -34,35 +34,29 @@ describe("GET /healthz", () => {
 });
 
 describe("GET /", () => {
-  it("returns connected status when database is reachable", async () => {
+  it("returns HTML page with spider image", async () => {
     const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("connected");
-    expect(body.database).toBe(true);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const body = await res.text();
+    expect(body).toContain("Spider-v3.png");
   });
 
-  it("returns disconnected status when pool is null", async () => {
-    const app = createApp({ pool: null });
+  it("includes YouTube links for Whitney and Viktor", async () => {
+    const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.status).toBe("disconnected");
-    expect(body.database).toBe(false);
+    const body = await res.text();
+    expect(body).toContain("https://www.youtube.com/@wiggitywhitney");
+    expect(body).toContain("https://www.youtube.com/@DevOpsToolkit");
   });
 
-  it("returns disconnected status when database query fails", async () => {
-    const failPool = createMockPool({
-      query: vi.fn().mockRejectedValue(new Error("Connection refused")),
-    });
-    const app = createApp({ pool: failPool });
+  it("has clickable top/bottom zones on the image", async () => {
+    const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body.status).toBe("disconnected");
-    expect(body.database).toBe(false);
-    expect(body.error).toContain("Connection refused");
+    const body = await res.text();
+    // Two link zones covering top and bottom halves
+    expect(body).toContain('height: 50%');
   });
 });
 
