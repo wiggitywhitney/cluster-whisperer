@@ -1,8 +1,8 @@
 # Curated Crossplane sub-provider subset for the cluster-whisperer demo.
-# 35 providers chosen for diverse, recognizable services that generate ~1,000 CRDs.
+# 16 providers (8 database + 7 variety + provider-kubernetes) generating ~365 CRDs.
 # Used by both Kind and GKE modes — enough to feel overwhelming without being wasteful.
 
-# --- AWS sub-providers (20) ---
+# --- AWS sub-providers (8) ---
 
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
@@ -49,93 +49,9 @@ spec:
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:
-  name: provider-aws-ecs
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-ecs:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-eks
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-eks:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-sqs
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-sqs:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-sns
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-sns:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-cloudfront
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-cloudfront:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-route53
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-route53:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-kms
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-kms:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-secretsmanager
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-secretsmanager:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
   name: provider-aws-elasticache
 spec:
   package: xpkg.upbound.io/upbound/provider-aws-elasticache:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-cloudwatch
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-cloudwatch:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-apigateway
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-apigateway:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-autoscaling
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-autoscaling:v2.3.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-aws-elbv2
-spec:
-  package: xpkg.upbound.io/upbound/provider-aws-elbv2:v2.3.0
 ---
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
@@ -144,7 +60,7 @@ metadata:
 spec:
   package: xpkg.upbound.io/upbound/provider-aws-opensearch:v2.3.0
 ---
-# --- GCP sub-providers (15) ---
+# --- GCP sub-providers (7) ---
 
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
@@ -184,41 +100,6 @@ spec:
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:
-  name: provider-gcp-pubsub
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-pubsub:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-dns
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-dns:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-kms
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-kms:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-cloudrun
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-cloudrun:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-cloudfunctions
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-cloudfunctions:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
   name: provider-gcp-redis
 spec:
   package: xpkg.upbound.io/upbound/provider-gcp-redis:v2.1.0
@@ -230,23 +111,11 @@ metadata:
 spec:
   package: xpkg.upbound.io/upbound/provider-gcp-spanner:v2.1.0
 ---
+# --- Kubernetes provider (for composing native K8s resources in Compositions) ---
+
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:
-  name: provider-gcp-secretmanager
+  name: provider-kubernetes
 spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-secretmanager:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-monitoring
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-monitoring:v2.1.0
----
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-gcp-logging
-spec:
-  package: xpkg.upbound.io/upbound/provider-gcp-logging:v2.1.0
+  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v1.2.1

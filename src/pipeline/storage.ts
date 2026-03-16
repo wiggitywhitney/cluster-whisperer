@@ -141,6 +141,12 @@ function buildEmbeddingText(capability: ResourceCapability): string {
     lines.push(`Example YAML:\n${capability.exampleYaml}`);
   }
 
+  // Raw spec description — organizational details (team names, app names,
+  // people) that the LLM description may not have preserved.
+  if (capability.specDescription) {
+    lines.push(`Resource description: ${capability.specDescription}`);
+  }
+
   return lines.join("\n");
 }
 

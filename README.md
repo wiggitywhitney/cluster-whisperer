@@ -76,12 +76,18 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 ## Features
 
 - **CLI Agent** - Ask questions directly from the terminal with visible reasoning
+- **Tool-Set Filtering** - Control which tools the agent has with `--tools kubectl,vector,apply` (progressive capability)
+- **Agent Selection** - Switch between agent frameworks with `--agent langgraph` (Vercel AI SDK coming soon)
+- **Vector Backend Switching** - Choose between Chroma and Qdrant with `--vector-backend qdrant`
+- **Conversation Memory** - Multi-turn conversations with `--thread <id>` — the agent remembers prior context
+- **kubectl_apply** - Deploy resources from the platform's approved catalog (code-enforced, not prompt-level)
 - **MCP Server** - Use kubectl tools from Claude Code, Cursor, or any MCP-compatible client
 - **REST API** - Receive live instance updates from a Kubernetes controller, keeping the vector database in sync automatically
 - **Knowledge Pipeline** - Pre-index cluster capabilities and running instances into a vector database for semantic search
 - **Vector Search** - Unified search tool with semantic, keyword, and metadata filtering — the agent uses this to discover what your cluster can do
 - **OpenTelemetry Tracing** - Full observability with traces exportable to Datadog, Jaeger, etc.
 - **Extended Thinking** - See the agent's reasoning process as it investigates
+- **Env Var Support** - All CLI flags have `CLUSTER_WHISPERER_*` env var equivalents for demo ergonomics
 
 ## Prerequisites
 
@@ -89,7 +95,7 @@ Note: "ReAct" is an AI agent pattern from a 2022 research paper. It has nothing 
 - kubectl CLI installed and configured (for investigation and sync commands)
 - `ANTHROPIC_API_KEY` environment variable (for the investigation agent and capability sync)
 - `VOYAGE_API_KEY` environment variable (for vector database embedding)
-- [Chroma](https://www.trychroma.com/) vector database running locally (for knowledge pipeline and vector search)
+- [Chroma](https://www.trychroma.com/) or [Qdrant](https://qdrant.tech/) vector database running locally (for knowledge pipeline and vector search)
 
 Not every command needs everything:
 
@@ -117,15 +123,33 @@ npm run build
 # Run with vals to inject ANTHROPIC_API_KEY (-i inherits PATH so kubectl is found)
 vals exec -i -f .vals.yaml -- node dist/index.js "What's running in the default namespace?"
 
-# With tracing enabled (console output)
-OTEL_TRACING_ENABLED=true \
-vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod"
+# With specific tools (progressive capability)
+vals exec -i -f .vals.yaml -- node dist/index.js --tools kubectl "Why is my app broken?"
+vals exec -i -f .vals.yaml -- node dist/index.js --tools kubectl,vector "What database should I use?"
+vals exec -i -f .vals.yaml -- node dist/index.js --tools kubectl,vector,apply "Deploy the database"
+
+# With Qdrant instead of Chroma
+vals exec -i -f .vals.yaml -- node dist/index.js --vector-backend qdrant "What databases are available?"
+
+# Multi-turn conversation (same thread ID resumes prior context)
+vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "What database should I deploy?"
+vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "I'm on the You Choose team"
+vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "Go ahead and deploy it"
 
 # With tracing to Datadog (via local agent)
 OTEL_TRACING_ENABLED=true \
 OTEL_EXPORTER_TYPE=otlp \
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod"
+```
+
+All CLI flags have environment variable equivalents (set via `CLUSTER_WHISPERER_*` prefix). This is useful for demos where you set env vars once after an audience vote:
+
+```bash
+export CLUSTER_WHISPERER_TOOLS=kubectl,vector
+export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
+export CLUSTER_WHISPERER_THREAD=demo
+cluster-whisperer "What database should I deploy?"
 ```
 
 ### Knowledge Pipeline
@@ -276,7 +300,16 @@ The REST API receives pushed data from the [k8s-vectordb-sync](https://github.co
 
 ### Available Tools
 
-**CLI Agent**: Uses these tools internally during investigation:
+**CLI Agent**: Uses these tools internally during investigation. Which tools are available depends on the `--tools` flag:
+
+| Tool Group | Tools | Purpose |
+|------------|-------|---------|
+| `kubectl` | `kubectl_get`, `kubectl_describe`, `kubectl_logs` | Cluster investigation |
+| `vector` | `vector_search` | Semantic discovery of cluster capabilities |
+| `apply` | `kubectl_apply` | Deploy resources from the approved catalog |
+
+Default: `--tools kubectl,vector` (backwards compatible).
+
 - `kubectl_get` - List resources and their status
 - `kubectl_describe` - Get detailed resource information
 - `kubectl_logs` - Check container logs
@@ -284,8 +317,9 @@ The REST API receives pushed data from the [k8s-vectordb-sync](https://github.co
   - **Semantic search** (`query`) — natural language similarity via embeddings (e.g., "managed database" finds SQL CRDs)
   - **Keyword search** (`keyword`) — exact substring match, no embedding call (e.g., "backup" finds docs mentioning backup)
   - **Metadata filters** (`kind`, `apiGroup`, `namespace`, `complexity`) — exact match on structured fields
+- `kubectl_apply` - Deploy a Kubernetes resource by applying a YAML manifest. Validates the resource type against the platform's approved catalog before applying — enforcement is in code, not in the prompt. If the resource type isn't in the capabilities collection, the apply is rejected.
 
-  The agent uses kubectl tools for **investigation** ("why is this pod failing?") and vector search for **discovery** ("what databases can I provision?").
+  The agent uses kubectl tools for **investigation** ("why is this pod failing?"), vector search for **discovery** ("what databases can I provision?"), and kubectl_apply for **deployment** ("deploy the database for my team").
 
 **MCP Server**: Exposes a single high-level tool:
 - `investigate` - Ask a question, get a complete answer (wraps the ReAct agent with all tools above)
@@ -310,12 +344,19 @@ cluster-whisperer.investigate (root span)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `CLUSTER_WHISPERER_TOOLS` | `kubectl,vector` | Comma-separated tool groups: `kubectl`, `vector`, `apply` |
+| `CLUSTER_WHISPERER_AGENT` | `langgraph` | Agent framework: `langgraph` or `vercel` |
+| `CLUSTER_WHISPERER_VECTOR_BACKEND` | `chroma` | Vector database: `chroma` or `qdrant` |
+| `CLUSTER_WHISPERER_THREAD` | - | Conversation thread ID for multi-turn memory |
+| `CLUSTER_WHISPERER_KUBECONFIG` | - | Kubeconfig path passed to kubectl (agent-only cluster access) |
+| `CLUSTER_WHISPERER_CHROMA_URL` | `http://localhost:8000` | Chroma vector database URL |
+| `CLUSTER_WHISPERER_QDRANT_URL` | `http://localhost:6333` | Qdrant vector database URL |
+| `CLUSTER_WHISPERER_QUIET` | `false` | Suppress OTel init messages and Chroma warnings |
 | `OTEL_TRACING_ENABLED` | `false` | Enable tracing |
 | `OTEL_EXPORTER_TYPE` | `console` | `console` or `otlp` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | - | OTLP collector URL (e.g., `http://localhost:4318`) |
 | `OTEL_CAPTURE_AI_PAYLOADS` | `false` | Capture tool inputs/outputs in traces |
 | `VOYAGE_API_KEY` | - | Voyage AI API key (required by sync, sync-instances, and serve) |
-| `CHROMA_URL` | `http://localhost:8000` | Chroma vector database URL |
 
 **Schema Validation:**
 
@@ -335,7 +376,8 @@ src/
 ├── index.ts               # CLI entry point (agent + sync + serve commands)
 ├── mcp-server.ts          # MCP server entry point
 ├── agent/
-│   └── investigator.ts    # ReAct agent setup (LangGraph)
+│   ├── investigator.ts    # ReAct agent setup (LangGraph)
+│   └── file-checkpointer.ts # Persistent conversation memory for --thread
 ├── api/                   # REST API for controller-pushed sync
 │   ├── server.ts          # Hono HTTP server with health probes
 │   ├── routes/
@@ -355,14 +397,18 @@ src/
 ├── vectorstore/           # Vector database abstraction
 │   ├── types.ts           # VectorStore interface
 │   ├── chroma-backend.ts  # Chroma implementation
+│   ├── qdrant-backend.ts  # Qdrant implementation
+│   ├── multi-backend.ts   # Writes to multiple backends in parallel (for sync)
 │   └── embeddings.ts      # Voyage AI embedding provider
 ├── tools/
 │   ├── core/              # Shared tool logic (schemas, execution)
 │   │   ├── kubectl-get.ts
 │   │   ├── kubectl-describe.ts
 │   │   ├── kubectl-logs.ts
+│   │   ├── kubectl-apply.ts   # Deploy with catalog validation
 │   │   ├── vector-search.ts   # Unified semantic/keyword/metadata search
 │   │   └── format-results.ts  # Search result formatting
+│   ├── tool-groups.ts     # Tool group definitions (kubectl, vector, apply)
 │   ├── langchain/         # CLI agent wrappers
 │   └── mcp/               # MCP server wrappers
 ├── tracing/               # OpenTelemetry instrumentation
@@ -405,9 +451,10 @@ demo/
 └── cluster/               # Demo cluster provisioning (GKE)
     ├── setup.sh           # Create cluster with all demo components
     ├── teardown.sh        # Destroy clusters and clean up kubeconfig
+    ├── reset-demo.sh      # Reset between demo runs (cleanup ManagedService, restart app, clear threads)
     ├── kind-config.yaml   # Kind cluster configuration (experimental)
     ├── helm-values/       # Helm values for Crossplane, Chroma, Qdrant, Jaeger, OTel Collector
-    └── manifests/         # Crossplane providers, XRD, Composition
+    └── manifests/         # Crossplane providers, XRDs, Compositions, decoy resources
 ```
 
 ## Demo App
@@ -493,7 +540,7 @@ This is what the cluster-whisperer agent sees when it investigates. The error me
 
 ## Demo Cluster
 
-The `demo/cluster/` directory contains scripts to provision a complete demo environment on GKE. A single command creates a Kubernetes cluster with ~1,000 Crossplane CRDs, two vector databases, two observability backends, the demo app in CrashLoopBackOff, and a live cluster-whisperer instance — everything needed for the KubeCon "Choose Your Own Adventure" demo.
+The `demo/cluster/` directory contains scripts to provision a complete demo environment on GKE. A single command creates a Kubernetes cluster with ~360 Crossplane CRDs, two vector databases, two observability backends, the demo app in CrashLoopBackOff, and a live cluster-whisperer instance — everything needed for the KubeCon "Choose Your Own Adventure" demo.
 
 ### Prerequisites
 
@@ -550,10 +597,10 @@ Setup takes approximately 45-55 minutes on a cold start (GKE creation ~8 min, CR
 | Component | Namespace | Purpose |
 |-----------|-----------|---------|
 | GKE cluster (3x n2-standard-4) | — | Kubernetes environment |
-| Crossplane + 35 sub-providers | `crossplane-system` | ~1,000 CRDs for discovery |
-| Platform PostgreSQL XRD/Composition | `crossplane-system` | The "needle in the haystack" |
-| Chroma | `chroma` | Vector database (capabilities + instances) |
-| Qdrant | `qdrant` | Vector database |
+| Crossplane + 16 sub-providers | `crossplane-system` | ~360 CRDs for discovery |
+| 20 ManagedService XRDs + Compositions | `crossplane-system` | 1 real + 19 decoys — "needle in the haystack" |
+| Chroma | `chroma` | Vector database option A (capabilities + instances) |
+| Qdrant | `qdrant` | Vector database option B (capabilities + instances) |
 | Jaeger v2 | `jaeger` | Trace UI backend |
 | OTel Collector | `otel-collector` | OTLP to Jaeger + Datadog fan-out |
 | Demo app | `default` | Intentionally broken (CrashLoopBackOff) |
@@ -561,7 +608,7 @@ Setup takes approximately 45-55 minutes on a cold start (GKE creation ~8 min, CR
 | k8s-vectordb-sync | `k8s-vectordb-sync` | Controller pushing resource changes |
 | NGINX Ingress | `ingress-nginx` | External access via nip.io DNS |
 
-The setup script also runs the **capability inference pipeline**, which analyzes all ~1,000 CRDs via LLM and stores natural-language descriptions in Chroma. This is what enables semantic search — when the agent searches for "PostgreSQL database for my application", it finds the platform Composition among ~1,000 CRDs because the pipeline generated a description like "Platform-approved PostgreSQL database for application teams."
+The setup script also runs the **capability inference pipeline**, which analyzes all ~360 CRDs via LLM and stores natural-language descriptions in Chroma. This is what enables semantic search — when the agent searches for "PostgreSQL database for my application", it finds the platform Composition among ~360 CRDs because the pipeline generated a description like "Platform-approved PostgreSQL database for application teams."
 
 ### Teardown
 

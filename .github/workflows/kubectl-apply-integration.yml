@@ -1,0 +1,44 @@
+# ABOUTME: CI workflow for kubectl-apply integration tests using ephemeral Kind cluster.
+# ABOUTME: No API tokens needed — uses mock VectorStore with real kubectl.
+
+name: kubectl-apply Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kubectl-apply-integration.yml'
+      - 'src/tools/core/kubectl-apply*'
+      - 'src/tools/core/test/integration/**'
+      - 'src/utils/kubectl.ts'
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Create Kind cluster
+        run: src/tools/core/test/integration/setup.sh
+
+      - name: Run integration tests
+        run: |
+          KIND_CLUSTER_NAME=kubectl-apply-test \
+            npx vitest run src/tools/core/kubectl-apply.integration.test.ts
+
+      - name: Teardown Kind cluster
+        if: always()
+        run: src/tools/core/test/integration/teardown.sh

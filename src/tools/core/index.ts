@@ -1,3 +1,6 @@
+// ABOUTME: Re-exports all core tool functions, schemas, and descriptions
+// ABOUTME: Import from here for shared logic without framework wrappers
+
 /**
  * Core tools - Shared logic for all interfaces
  *
@@ -36,4 +39,14 @@ export {
   type VectorSearchInput,
 } from "./vector-search";
 
+export {
+  kubectlApply,
+  kubectlApplySchema,
+  kubectlApplyDescription,
+  parseManifestMetadata,
+  type KubectlApplyInput,
+} from "./kubectl-apply";
+
 export { formatSearchResults } from "./format-results";
+
+export { type KubectlOptions } from "../../utils/kubectl";

@@ -8,7 +8,7 @@
 # For MCP servers that need secrets (like CodeRabbit), export before starting Claude Code:
 #   eval $(vals eval -f .vals.yaml --output shell)
 
-ANTHROPIC_API_KEY: ref+gcpsecrets://demoo-ooclock/anthropic-api-key
+ANTHROPIC_API_KEY: ref+gcpsecrets://demoo-ooclock/anthropic_key_ddog
 GITHUB_TOKEN: ref+gcpsecrets://demoo-ooclock/github-token
 
 # Datadog credentials for OTLP export (M5)

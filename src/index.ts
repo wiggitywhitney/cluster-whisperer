@@ -28,11 +28,23 @@
 import "./tracing";
 import { gracefulExit } from "./tracing";
 
-import { Command } from "commander";
+import * as path from "node:path";
+import { Command, Option } from "commander";
 import { HumanMessage } from "@langchain/core/messages";
 import { execSync } from "child_process";
-import { getInvestigatorAgent, truncate, RECURSION_LIMIT } from "./agent/investigator";
+import { truncate, RECURSION_LIMIT } from "./agent/investigator";
+import { createAgent } from "./agent/agent-factory";
+import { parseAgentType, DEFAULT_AGENT_TYPE } from "./agent/agent-types";
 import { withAgentTracing, setTraceOutput } from "./tracing/context-bridge";
+import { parseToolGroups, DEFAULT_TOOL_GROUPS } from "./tools/tool-groups";
+import {
+  parseVectorBackend,
+  DEFAULT_VECTOR_BACKEND,
+  createVectorStore,
+  VoyageEmbedding,
+  MultiBackendVectorStore,
+} from "./vectorstore";
+import type { VectorStore } from "./vectorstore";
 import {
   syncCapabilities,
   discoverResources,
@@ -40,7 +52,18 @@ import {
   storeCapabilities,
 } from "./pipeline";
 import { syncInstances } from "./pipeline/instance-runner";
-import { ChromaBackend, VoyageEmbedding } from "./vectorstore";
+import { executeKubectl } from "./utils/kubectl";
+import { loadCheckpointer, saveCheckpointer } from "./agent/file-checkpointer";
+
+/**
+ * Creates a kubectl executor bound to a specific kubeconfig path.
+ * Used by sync commands to honor CLUSTER_WHISPERER_KUBECONFIG.
+ * The returned function matches the DiscoveryOptions.kubectl signature.
+ */
+function createBoundKubectl(kubeconfig?: string) {
+  if (!kubeconfig) return undefined;
+  return (args: string[]) => executeKubectl(args, { kubeconfig });
+}
 import { createApp, startServer } from "./api/server";
 
 // ---------------------------------------------------------------------------
@@ -133,6 +156,51 @@ async function validateServeEnvironment(): Promise<void> {
 }
 
 /**
+ * Creates a VectorStore for sync operations.
+ *
+ * When no explicit --vector-backend is set and both chroma-url and qdrant-url
+ * are available, creates a MultiBackendVectorStore that writes to both backends
+ * from a single pipeline run — avoiding duplicate LLM inference costs.
+ *
+ * When --vector-backend is explicitly set, or only one URL is available,
+ * creates a single-backend VectorStore (existing behavior).
+ */
+function createSyncVectorStore(options: {
+  vectorBackend?: string;
+  chromaUrl?: string;
+  qdrantUrl?: string;
+}): VectorStore {
+  const embedder = new VoyageEmbedding();
+
+  // Explicit backend selection — use single backend
+  if (options.vectorBackend) {
+    const backendType = parseVectorBackend(options.vectorBackend);
+    return createVectorStore(embedder, backendType, {
+      chromaUrl: options.chromaUrl,
+      qdrantUrl: options.qdrantUrl,
+    });
+  }
+
+  // Both URLs available — use multi-backend to populate both at once
+  if (options.chromaUrl && options.qdrantUrl) {
+    console.log("Both Chroma and Qdrant URLs detected — syncing to both backends"); // eslint-disable-line no-console
+    const chroma = createVectorStore(embedder, "chroma", {
+      chromaUrl: options.chromaUrl,
+    });
+    const qdrant = createVectorStore(embedder, "qdrant", {
+      qdrantUrl: options.qdrantUrl,
+    });
+    return new MultiBackendVectorStore([chroma, qdrant]);
+  }
+
+  // Default — single backend (backwards compatible)
+  return createVectorStore(embedder, DEFAULT_VECTOR_BACKEND, {
+    chromaUrl: options.chromaUrl,
+    qdrantUrl: options.qdrantUrl,
+  });
+}
+
+/**
  * Main function - sets up the CLI with investigate (default) and sync subcommands
  */
 async function main() {
@@ -151,9 +219,47 @@ async function main() {
 
   program
     .argument("<question>", "Natural language question about your cluster")
-    .action(async (question: string) => {
+    .addOption(
+      new Option("--tools <groups>", `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`)
+        .env("CLUSTER_WHISPERER_TOOLS")
+    )
+    .addOption(
+      new Option("--agent <type>", `Agent framework: langgraph, vercel (default: ${DEFAULT_AGENT_TYPE})`)
+        .env("CLUSTER_WHISPERER_AGENT")
+    )
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
+    )
+    .addOption(
+      new Option("--thread <id>", "Conversation thread ID for multi-turn memory. Same ID resumes prior conversation.")
+        .env("CLUSTER_WHISPERER_THREAD")
+    )
+    .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string; thread?: string }) => {
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
+
+      // Parse tool groups from --tools flag (or use defaults)
+      const toolGroups = options.tools
+        ? parseToolGroups(options.tools)
+        : DEFAULT_TOOL_GROUPS;
+
+      // Parse agent type from --agent flag (or use default)
+      const agentType = options.agent
+        ? parseAgentType(options.agent)
+        : DEFAULT_AGENT_TYPE;
+
+      // Parse vector backend from --vector-backend flag (or use default)
+      const vectorBackend = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
+
+      // Read kubeconfig from env var (demo governance: agent has cluster access, shell does not)
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+
+      // Load conversation memory if --thread is provided
+      const threadId = options.thread;
+      const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
 
       console.log(`\nQuestion: ${question}\n`);
 
@@ -186,9 +292,15 @@ async function main() {
          * The version: "v2" parameter specifies the event format. v2 is the
          * current recommended format for LangGraph agents.
          */
-        const eventStream = getInvestigatorAgent().streamEvents(
+        const eventStream = createAgent({ agentType, toolGroups, vectorBackend, kubeconfig, checkpointer }).streamEvents(
           { messages: [new HumanMessage(question)] },
-          { version: "v2", recursionLimit: RECURSION_LIMIT }
+          {
+            version: "v2",
+            recursionLimit: RECURSION_LIMIT,
+            // Thread ID enables conversation memory — the checkpointer uses it
+            // to store and retrieve conversation state between invocations.
+            ...(threadId ? { configurable: { thread_id: threadId } } : {}),
+          }
         );
 
         /**
@@ -281,6 +393,11 @@ async function main() {
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console
           console.log(); // eslint-disable-line no-console
         }
+
+        // Persist conversation state for multi-turn memory
+        if (checkpointer && threadId) {
+          saveCheckpointer(checkpointer, threadId);
+        }
       });
     });
 
@@ -294,25 +411,47 @@ async function main() {
       "Scan cluster CRDs and sync capability descriptions to the vector database"
     )
     .option("--dry-run", "Discover and infer capabilities without storing them")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .option("--no-cache", "Disable inference caching (re-infer all resources)")
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
+    )
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
+    )
+    .action(async (options: { dryRun?: boolean; cache?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateSyncEnvironment();
 
-      // Create the vector store with Voyage AI embeddings
-      const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
-        chromaUrl: options.chromaUrl,
-      });
+      const vectorStore = createSyncVectorStore(options);
+
+      // Cache is enabled by default (--no-cache disables it).
+      // Commander's --no-cache sets options.cache to false.
+      const cacheDir = options.cache !== false
+        ? path.join(process.cwd(), "data", "inference-cache")
+        : undefined;
+
+      if (cacheDir) {
+        console.log(`Inference cache: ${cacheDir}`); // eslint-disable-line no-console
+      } else {
+        console.log("Inference cache: disabled"); // eslint-disable-line no-console
+      }
 
       console.log("\nStarting capability sync...\n"); // eslint-disable-line no-console
+
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+      const kubectl = createBoundKubectl(kubeconfig);
 
       try {
         const result = await syncCapabilities({
           vectorStore,
           dryRun: options.dryRun,
+          cacheDir,
+          ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
@@ -345,18 +484,25 @@ async function main() {
       "Sync resource instance metadata from the cluster to the vector database"
     )
     .option("--dry-run", "Discover instances without storing them")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .action(async (options: { dryRun?: boolean; chromaUrl?: string }) => {
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
+    )
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
+    )
+    .action(async (options: { dryRun?: boolean; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateInstanceSyncEnvironment();
 
-      // Create the vector store with Voyage AI embeddings
-      const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
-        chromaUrl: options.chromaUrl,
-      });
+      const vectorStore = createSyncVectorStore(options);
+
+      const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
+      const kubectl = createBoundKubectl(kubeconfig);
 
       console.log("\nStarting instance sync...\n"); // eslint-disable-line no-console
 
@@ -364,6 +510,7 @@ async function main() {
         const result = await syncInstances({
           vectorStore,
           dryRun: options.dryRun,
+          ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 
         // Exit with non-zero code if nothing was discovered (likely a cluster issue)
@@ -396,11 +543,19 @@ async function main() {
       "Start HTTP server to receive instance sync from k8s-vectordb-sync controller"
     )
     .option("--port <number>", "HTTP server port", "3000")
-    .option(
-      "--chroma-url <url>",
-      "Chroma server URL (default: CHROMA_URL env or http://localhost:8000)"
+    .addOption(
+      new Option("--chroma-url <url>", "Chroma server URL (default: http://localhost:8000)")
+        .env("CLUSTER_WHISPERER_CHROMA_URL")
     )
-    .action(async (options: { port: string; chromaUrl?: string }) => {
+    .addOption(
+      new Option("--qdrant-url <url>", "Qdrant server URL (default: http://localhost:6333)")
+        .env("CLUSTER_WHISPERER_QDRANT_URL")
+    )
+    .addOption(
+      new Option("--vector-backend <backend>", `Vector database backend: chroma, qdrant (default: ${DEFAULT_VECTOR_BACKEND})`)
+        .env("CLUSTER_WHISPERER_VECTOR_BACKEND")
+    )
+    .action(async (options: { port: string; chromaUrl?: string; qdrantUrl?: string; vectorBackend?: string }) => {
       await validateServeEnvironment();
 
       const port = parseInt(options.port, 10);
@@ -409,10 +564,16 @@ async function main() {
         await gracefulExit(1);
       }
 
+      // Parse vector backend from --vector-backend flag (or use default)
+      const backendType = options.vectorBackend
+        ? parseVectorBackend(options.vectorBackend)
+        : DEFAULT_VECTOR_BACKEND;
+
       // Create the vector store with Voyage AI embeddings
       const embedder = new VoyageEmbedding();
-      const vectorStore = new ChromaBackend(embedder, {
+      const vectorStore = createVectorStore(embedder, backendType, {
         chromaUrl: options.chromaUrl,
+        qdrantUrl: options.qdrantUrl,
       });
 
       const app = createApp({

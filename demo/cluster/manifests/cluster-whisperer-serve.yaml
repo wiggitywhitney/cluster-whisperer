@@ -46,7 +46,7 @@ spec:
         - name: cluster-whisperer
           image: cluster-whisperer:latest
           imagePullPolicy: Never
-          args: ["serve", "--chroma-url", "http://chroma-chromadb.chroma:8000"]
+          args: ["serve", "--chroma-url", "http://chroma-chromadb.chroma:8000", "--qdrant-url", "http://qdrant.qdrant:6333"]
           ports:
             - containerPort: 3000
           env:

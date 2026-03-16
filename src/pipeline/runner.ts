@@ -47,6 +47,12 @@ export interface SyncOptions {
   /** Options forwarded to M2 inferCapabilities (e.g., injectable model) */
   inferenceOptions?: InferenceOptions;
 
+  /**
+   * Directory for the inference cache. Forwarded to inferCapabilities().
+   * When set, results are cached to disk so re-runs skip already-processed resources.
+   */
+  cacheDir?: string;
+
   /** Skip storage — discover and infer only, useful for testing */
   dryRun?: boolean;
 
@@ -134,6 +140,7 @@ export async function syncCapabilities(
               const result = await inferCapabilities(discovered, {
                 ...options.inferenceOptions,
                 onProgress,
+                cacheDir: options.cacheDir,
               });
               stageSpan.setStatus({ code: SpanStatusCode.OK });
               return result;

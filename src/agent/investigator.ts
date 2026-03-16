@@ -27,11 +27,18 @@
 
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { MemorySaver } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import * as fs from "fs";
 import * as path from "path";
-import { kubectlTools, createVectorTools } from "../tools/langchain";
-import { ChromaBackend, VoyageEmbedding } from "../vectorstore";
+import { kubectlTools, createKubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
+import {
+  VoyageEmbedding,
+  createVectorStore,
+  DEFAULT_VECTOR_BACKEND,
+  type VectorBackendType,
+} from "../vectorstore";
+import { DEFAULT_TOOL_GROUPS, type ToolGroup } from "../tools/tool-groups";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -124,21 +131,79 @@ function getSystemPrompt(): string {
  * is built in a single spread expression — avoiding TypeScript narrowing
  * issues with let/reassign.
  */
-function createVectorToolsSafe() {
-  try {
-    const embedder = new VoyageEmbedding();
-    const vectorStore = new ChromaBackend(embedder);
-    return createVectorTools(vectorStore);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // Expected when VOYAGE_API_KEY is not set. Log so it's visible but not alarming.
-    console.debug(`Vector tools disabled: ${message}`); // eslint-disable-line no-console
-    return [];
+/**
+ * Creates vector search and apply tools that share the same VectorStore instance.
+ *
+ * Both tool types need a VectorStore:
+ * - Vector tools: for similarity and keyword search across collections
+ * - Apply tools: for catalog validation (querying capabilities collection)
+ *
+ * Sharing the same instance means a single connection to the vector DB.
+ * Both tools independently ensure their collections are initialized.
+ *
+ * Returns { vectorTools, applyTools } — either may be empty if VOYAGE_API_KEY
+ * is not set (the agent still works with kubectl-only investigation).
+ */
+function createVectorAndApplyToolsSafe(
+  vectorBackend: VectorBackendType = DEFAULT_VECTOR_BACKEND,
+  kubectlOpts?: { kubeconfig?: string }
+) {
+  if (!process.env.VOYAGE_API_KEY) {
+    console.debug("Vector and apply tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
+    return { vectorTools: [], applyTools: [] };
   }
+
+  const embedder = new VoyageEmbedding();
+  const vectorStore = createVectorStore(embedder, vectorBackend);
+  return {
+    vectorTools: createVectorTools(vectorStore),
+    applyTools: createApplyTools(vectorStore, kubectlOpts),
+  };
 }
 
 /**
- * Cached agent instance - created lazily on first use.
+ * Options for configuring the investigator agent.
+ */
+export interface InvestigatorOptions {
+  /**
+   * Which tool groups to include in the agent.
+   * Defaults to DEFAULT_TOOL_GROUPS (kubectl, vector) for backwards compatibility.
+   *
+   * Groups:
+   * - kubectl: kubectl_get, kubectl_describe, kubectl_logs
+   * - vector: vector_search
+   * - apply: kubectl_apply
+   */
+  toolGroups?: ToolGroup[];
+  /**
+   * Which vector database backend to use for vector and apply tools.
+   * Defaults to "chroma" for backwards compatibility.
+   */
+  vectorBackend?: VectorBackendType;
+  /**
+   * Path to a kubeconfig file for kubectl operations.
+   * When set, all kubectl tools pass --kubeconfig to their subprocess calls.
+   * This enables the demo governance narrative: the presenter's shell has no
+   * KUBECONFIG, but the agent has cluster access via this path.
+   */
+  kubeconfig?: string;
+  /**
+   * Checkpointer for conversation memory persistence.
+   * When provided, the agent saves conversation state after each step
+   * so multi-turn conversations work across CLI invocations.
+   */
+  checkpointer?: MemorySaver;
+}
+
+/**
+ * Cached agents keyed by a deterministic string derived from options.
+ *
+ * Why a Map instead of a single cached instance?
+ * Different callers may request different tool groups, vector backends, or
+ * kubeconfig paths. A single cached agent would silently return an agent
+ * configured for the first caller's options, ignoring subsequent callers'
+ * requirements. The Map keys on the relevant options so each unique
+ * configuration gets its own cached agent.
  *
  * Why lazy creation?
  * The ChatAnthropic constructor validates the API key immediately. If we create
@@ -146,7 +211,20 @@ function createVectorToolsSafe() {
  * our startup validation can show a friendly error message. By creating the
  * agent lazily, we let index.ts validate the environment first.
  */
-let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
+const agentCache = new Map<string, ReturnType<typeof createReactAgent>>();
+
+/**
+ * Build a deterministic cache key from the options that affect agent construction.
+ *
+ * Sorting toolGroups ensures ["kubectl","vector"] and ["vector","kubectl"]
+ * produce the same key.
+ */
+function buildCacheKey(options?: InvestigatorOptions): string {
+  const toolGroups = [...(options?.toolGroups ?? DEFAULT_TOOL_GROUPS)].sort();
+  const vectorBackend = options?.vectorBackend ?? DEFAULT_VECTOR_BACKEND;
+  const kubeconfig = options?.kubeconfig ?? "";
+  return `${toolGroups.join(",")}|${vectorBackend}|${kubeconfig}`;
+}
 
 /**
  * Gets the investigator agent, creating it on first call.
@@ -181,9 +259,17 @@ let cachedAgent: ReturnType<typeof createReactAgent> | null = null;
  * - budget_tokens: How many tokens Claude can use for thinking (min 1024)
  * - maxTokens: Must be greater than budget_tokens
  * - temperature: Cannot be set when using extended thinking (API requirement)
+ *
+ * @param options - Optional configuration for tool selection
  */
-export function getInvestigatorAgent() {
-  if (!cachedAgent) {
+export function getInvestigatorAgent(options?: InvestigatorOptions) {
+  // When a checkpointer is provided, always create a fresh agent — the
+  // checkpointer is per-thread and can't be shared with a cached agent.
+  const cacheKey = buildCacheKey(options);
+  if (!agentCache.has(cacheKey) || options?.checkpointer) {
+    const toolGroups = options?.toolGroups ?? DEFAULT_TOOL_GROUPS;
+    const vectorBackend = options?.vectorBackend ?? DEFAULT_VECTOR_BACKEND;
+
     const model = new ChatAnthropic({
       model: ANTHROPIC_MODEL,
       maxTokens: 10000,
@@ -197,20 +283,50 @@ export function getInvestigatorAgent() {
       },
     });
 
-    // Create vector search tools with lazy-initialized Chroma backend.
-    // The VoyageEmbedding and ChromaBackend are instantiated here but don't
-    // connect to Chroma until the first vector tool call (lazy initialization).
-    // If VOYAGE_API_KEY is not set, VoyageEmbedding throws — so we catch that
-    // and skip vector tools, keeping the agent functional with kubectl only.
-    const vectorTools = createVectorToolsSafe();
+    // Build the tools array based on selected tool groups.
+    // Each group maps to one or more LangChain tools.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools: any[] = [];
 
-    cachedAgent = createReactAgent({
+    // Build kubectl options from kubeconfig if provided
+    const kubectlOpts = options?.kubeconfig ? { kubeconfig: options.kubeconfig } : undefined;
+
+    if (toolGroups.includes("kubectl")) {
+      // Use factory when kubeconfig is provided, static export otherwise
+      tools.push(...(kubectlOpts ? createKubectlTools(kubectlOpts) : kubectlTools));
+    }
+
+    // Vector and apply tools share a VectorStore instance (single connection).
+    // Only create the shared backend if either group is requested.
+    if (toolGroups.includes("vector") || toolGroups.includes("apply")) {
+      const { vectorTools, applyTools } = createVectorAndApplyToolsSafe(vectorBackend, kubectlOpts);
+
+      if (toolGroups.includes("vector")) {
+        tools.push(...vectorTools);
+      }
+      if (toolGroups.includes("apply")) {
+        tools.push(...applyTools);
+      }
+    }
+
+    const agent = createReactAgent({
       llm: model,
-      tools: [...kubectlTools, ...vectorTools],
+      tools,
       stateModifier: getSystemPrompt(),
+      // Checkpointer enables conversation memory — the agent saves state
+      // after each step so multi-turn conversations persist across CLI invocations.
+      // Without a checkpointer, each invocation starts fresh (one-shot mode).
+      ...(options?.checkpointer ? { checkpointer: options.checkpointer } : {}),
     });
+
+    // Only cache when no checkpointer — checkpointers are per-thread
+    if (!options?.checkpointer) {
+      agentCache.set(cacheKey, agent);
+    }
+
+    return agent;
   }
-  return cachedAgent;
+  return agentCache.get(cacheKey)!;
 }
 
 /**

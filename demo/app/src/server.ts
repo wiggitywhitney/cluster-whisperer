@@ -60,9 +60,11 @@ export async function checkDatabaseConnection(pool: Pool): Promise<void> {
 
 /**
  * Formats a startup error message for kubectl logs.
- * Designed to be agent-friendly: single-line, includes "database" keyword,
- * and shows the connection target so the agent knows what service is missing.
+ * Designed to be agent-friendly: single-line, shows the connection target so
+ * the agent knows what service is missing. Intentionally generic — does not
+ * reveal the service type (database, cache, etc.) so the agent must use
+ * semantic search to discover the right platform resource.
  */
 export function formatStartupError(databaseUrl: string, error: Error): string {
-  return `[demo-app] FATAL: Cannot connect to database at ${databaseUrl} - ${error.message}`;
+  return `[demo-app] FATAL: Cannot connect to required backend service at ${databaseUrl} - ${error.message}`;
 }
