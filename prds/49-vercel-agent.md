@@ -212,7 +212,7 @@ Build a Vercel AI SDK agent that:
     for await (const part of result.fullStream) {
       switch (part.type) {
         case 'reasoning-delta':
-          yield { type: 'thinking', content: part.delta };
+          yield { type: 'thinking', content: part.text };
           break;
         case 'tool-call':
           yield { type: 'tool_start', toolName: part.toolName, args: part.input };
@@ -221,7 +221,7 @@ Build a Vercel AI SDK agent that:
           yield { type: 'tool_result', toolName: part.toolName, result: String(part.output) };
           break;
         case 'text-delta':
-          textBuffer += part.delta;
+          textBuffer += part.text;
           break;
         case 'finish-step':
           if (part.finishReason === 'stop' && textBuffer) {
