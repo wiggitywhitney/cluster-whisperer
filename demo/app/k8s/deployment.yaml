@@ -26,6 +26,12 @@ spec:
           env:
             - name: DATABASE_URL
               value: "db-service:5151/myapp"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz

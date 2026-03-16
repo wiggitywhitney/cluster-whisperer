@@ -566,6 +566,32 @@ spec:
 EOF
 
     log_success "Ingress created: http://otel.${BASE_DOMAIN}"
+
+    # Demo app Ingress — accessible to the audience once the app is running.
+    # While the app is in CrashLoopBackOff, nginx returns 502 (no healthy backend).
+    # The readiness probe ensures traffic only routes when the app is actually serving.
+    kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-app
+  namespace: default
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: demo-app.${BASE_DOMAIN}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: demo-app
+            port:
+              number: 80
+EOF
+
+    log_success "Ingress created: http://demo-app.${BASE_DOMAIN}"
 }
 
 # Generate a demo/.env file with resolved ingress URLs and kubeconfig path.
@@ -607,6 +633,9 @@ OTEL_EXPORTER_OTLP_ENDPOINT=${otel_endpoint}
 # Enable AI payload capture for Datadog LLM Observability CONTENT column
 # This populates gen_ai.input.messages and gen_ai.output.messages on root spans
 OTEL_CAPTURE_AI_PAYLOADS=true
+
+# Demo app URL — 502 until the agent fixes the cluster, then shows the spider page
+DEMO_APP_URL=http://demo-app.${BASE_DOMAIN}
 EOF
 
     log_success "Demo environment file generated: ${demo_env}"
@@ -1864,6 +1893,7 @@ print_summary() {
         log_info "  Chroma:            http://chroma.${BASE_DOMAIN}"
         log_info "  Qdrant:            http://qdrant.${BASE_DOMAIN}"
         log_info "  OTel Collector:    http://otel.${BASE_DOMAIN}"
+        log_info "  Demo App:          http://demo-app.${BASE_DOMAIN}  (502 until DB connects)"
     fi
     echo ""
     log_info "To use this cluster:"
