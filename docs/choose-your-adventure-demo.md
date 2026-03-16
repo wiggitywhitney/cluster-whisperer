@@ -139,7 +139,7 @@ The presenter adds the apply tool (same thread — the agent remembers which dat
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it"
+cluster-whisperer "Go ahead and deploy it. Once it's running, give me the URL where I can access my app."
 ```
 
 Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
@@ -204,8 +204,8 @@ cluster-whisperer "Yes please, will you deploy it for me?"
 
 # Act 3b: add the apply tool → agent remembers which database, now it can deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it"
-# After deploy: open $DEMO_APP_URL in browser → spider page with YouTube links
+cluster-whisperer "Go ahead and deploy it. Once it's running, give me the URL where I can access my app."
+# Agent deploys, checks ingress, returns the demo-app URL → open in browser
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser
