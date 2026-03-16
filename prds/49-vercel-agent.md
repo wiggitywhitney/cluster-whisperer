@@ -245,8 +245,8 @@ Build a Vercel AI SDK agent that:
 - [x] `npm test` passes — unit tests for the Vercel agent mock `streamText` from `'ai'`, verify it's called with: correct model (`anthropic(ANTHROPIC_MODEL)`), system prompt, tools (Record shape), `stopWhen: stepCountIs(50)`, `providerOptions.anthropic.thinking`, and `experimental_telemetry.isEnabled: true`
 - [x] `npm run build` succeeds with no TypeScript errors
 - [x] `agent-factory.test.ts` updated: the "vercel" case now returns a valid `InvestigationAgent` instead of throwing
-- [ ] Manual test against a real cluster: `CLUSTER_WHISPERER_AGENT=vercel CLUSTER_WHISPERER_TOOLS=kubectl vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"` completes successfully, shows tool calls and a final answer
-- [ ] Verify "Thinking:" blocks appear in italic in CLI output (interleaved thinking is confirmed working)
+- [x] Manual test against a real cluster: `CLUSTER_WHISPERER_AGENT=vercel CLUSTER_WHISPERER_TOOLS=kubectl vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"` completes successfully, shows tool calls and a final answer
+- [x] Verify "Thinking:" blocks appear in italic in CLI output (interleaved thinking is confirmed working)
 - [x] Verify the `fullStream` property names at runtime match the code — if `part.delta` doesn't work, update to `part.textDelta` or `part.text` and document the finding
 
 ### M6: Conversation Memory
@@ -276,7 +276,7 @@ Build a Vercel AI SDK agent that:
 **Verification**:
 - [x] Unit tests: round-trip save/load of conversation history (mirror the test patterns in `src/agent/file-checkpointer.test.ts`: fresh start, round-trip, directory creation, ID sanitization, corrupt file recovery, independent threads)
 - [x] `npm test` passes with new unit tests
-- [ ] Manual test — run the Act 3a multi-turn conversation with the Vercel agent:
+- [x] Manual test — run the Act 3a multi-turn conversation with the Vercel agent:
   ```bash
   export CLUSTER_WHISPERER_AGENT=vercel
   export CLUSTER_WHISPERER_TOOLS=kubectl,vector
@@ -288,10 +288,10 @@ Build a Vercel AI SDK agent that:
   cluster-whisperer "Yes please, will you deploy it for me?"
   # Agent says it can't — no apply tool
   ```
-- [ ] Verify: the second and third invocations reference information from prior turns
-- [ ] Verify: `data/threads/vercel-demo-vercel.json` file exists and contains valid JSON with `role: 'assistant'`, `role: 'tool'`, `role: 'user'` messages
-- [ ] Verify: tool calls in the serialized history have `{ type: 'tool-call', toolCallId, toolName, args }` parts and tool results have `{ type: 'tool-result', toolCallId, toolName, output }` parts
-- [ ] Verify: deleting the thread file and re-running starts a fresh conversation
+- [x] Verify: the second and third invocations reference information from prior turns
+- [x] Verify: `data/threads/vercel-demo-vercel.json` file exists and contains valid JSON with `role: 'assistant'`, `role: 'tool'`, `role: 'user'` messages
+- [x] Verify: tool calls in the serialized history have `{ type: 'tool-call', toolCallId, toolName, input }` parts and tool results have `{ type: 'tool-result', toolCallId, toolName, output }` parts (note: SDK 6 uses `input` not `args`)
+- [x] Verify: deleting the thread file and re-running starts a fresh conversation
 
 ### M7: OTel Instrumentation
 - [x] The `experimental_telemetry` config in M5's `streamText` call already enables telemetry. M7 focuses on verifying span nesting and context propagation.
@@ -311,6 +311,14 @@ Build a Vercel AI SDK agent that:
 - [x] `setTraceOutput()` is already called when `final_answer` is received in the CLI loop (from M3 refactor) — no additional work needed
 - [x] **Double tool spans are expected**: Both our `withToolTracing()` spans (`kubectl_get.tool`) and the SDK's `ai.toolCall` spans will appear. This is by design — our spans carry `cluster_whisperer.*` attributes for the shared contract; the SDK spans carry `ai.toolCall.*` attributes. Do NOT remove either.
 - [x] **`gen_ai.*` attributes location**: The `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` attributes are on `ai.streamText.doStream` spans (inner, per-step), NOT on the outer `ai.streamText` span. Datadog LLM Observability reads these from the inner spans — verify they appear correctly.
+- [ ] **SpanProcessor for Datadog LLM Obs layer classification (Decision 19)**: Create a `VercelSpanProcessor` (in `src/tracing/`) that enriches Vercel SDK spans on export by adding `gen_ai.operation.name` based on `ai.operationId`:
+  - `ai.streamText.doStream` → add `gen_ai.operation.name: "chat"` → Datadog classifies as **llm** layer
+  - `ai.streamText` → add `gen_ai.operation.name: "invoke_agent"` + `gen_ai.agent.name: "cluster-whisperer"` → Datadog classifies as **agent** layer
+  - Follows existing `ToolDefinitionsProcessor` pattern in `src/tracing/index.ts`
+- [ ] **Fix root span `gen_ai.operation.name` (Decision 18)**: Change `withAgentTracing()` in `src/tracing/context-bridge.ts` — remove `gen_ai.operation.name: "chat"` from the root span so it defaults to **workflow** layer in Datadog. This affects both agents. The root span represents the investigation workflow, not an LLM call.
+- [ ] Register the `VercelSpanProcessor` in `src/tracing/index.ts` alongside the existing `ToolDefinitionsProcessor`
+- [ ] Unit tests for `VercelSpanProcessor`: verify it adds correct attributes based on `ai.operationId`
+- [ ] `npm test` and `npm run build` pass
 
 **Verification procedure — console exporter** (run this first):
 ```bash
@@ -324,14 +332,18 @@ CLUSTER_WHISPERER_TOOLS=kubectl \
 vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"
 ```
 
-- [ ] Console output shows root span: name `cluster-whisperer.cli.investigate`, attribute `cluster_whisperer.invocation.mode: cli`
-- [ ] Console output shows our tool spans (e.g., `kubectl_get.tool`) with `cluster_whisperer.*` attributes
-- [ ] Console output shows SDK tool spans (`ai.toolCall`) with `ai.toolCall.name` attribute — these are separate from our `withToolTracing` spans
-- [ ] Console output shows Vercel SDK LLM spans: outer `ai.streamText` and inner `ai.streamText.doStream` with `gen_ai.request.model` attribute
-- [ ] The `gen_ai.*` attributes (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) appear on `ai.streamText.doStream` spans, NOT on the outer `ai.streamText` span
-- [ ] All spans share the same `traceId` (single trace, not fragmented — proves context propagation works)
-- [ ] Root span has `gen_ai.input.messages` attribute (requires `OTEL_CAPTURE_AI_PAYLOADS=true`)
-- [ ] After investigation completes, root span has `gen_ai.output.messages` attribute containing the final answer text
+- [x] Console output shows root span: name `cluster-whisperer.cli.investigate`, attribute `cluster_whisperer.invocation.mode: cli`
+- [x] Console output shows our tool spans (e.g., `kubectl_get.tool`) with `gen_ai.tool.*` attributes (note: uses `gen_ai.*` convention, not `cluster_whisperer.*`)
+- [x] Console output shows SDK tool spans with `ai.operationId: ai.toolCall` and `gen_ai.operation.name: execute_tool` (Updated per Decision 16: span name is `cluster-whisperer-investigate`, identified by `ai.operationId`)
+- [x] Console output shows Vercel SDK LLM spans: outer `vercel.agent` (`ai.operationId: ai.streamText`) and inner `text.stream` (`ai.operationId: ai.streamText.doStream`) with `gen_ai.request.model` attribute (Updated per Decision 16: actual span names differ from predictions)
+- [x] The `gen_ai.*` attributes (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) appear on `text.stream` spans (inner, per-step), NOT on the outer `vercel.agent` span
+- [x] All spans share the same `traceId` (single trace, not fragmented — proves context propagation works)
+- [x] Root span has `gen_ai.input.messages` attribute (requires `OTEL_CAPTURE_AI_PAYLOADS=true`)
+- [x] After investigation completes, root span has `gen_ai.output.messages` attribute containing the final answer text
+- [ ] After SpanProcessor: Datadog LLM Obs shows **agent** layer (from `vercel.agent` span with `gen_ai.operation.name: invoke_agent`)
+- [ ] After SpanProcessor: Datadog LLM Obs shows **workflow** layer (from root span, no `gen_ai.operation.name`)
+- [ ] After SpanProcessor: Datadog LLM Obs shows **llm** layer (from `text.stream` spans with `gen_ai.operation.name: chat`)
+- [ ] After SpanProcessor: Datadog LLM Obs shows **tool** layer (from `kubectl_get.tool` spans with `gen_ai.operation.name: execute_tool`)
 
 **Verification procedure — OTLP to Datadog** (run after console verification passes):
 ```bash
@@ -349,20 +361,22 @@ vals exec -i -f .vals.yaml -- node dist/index.js "Find the broken pod and tell m
 - [ ] Trace appears in Datadog LLM Observability with CONTENT column showing clean INPUT and OUTPUT text (not raw JSON, not "No content")
 - [ ] Token usage is populated in the Datadog LLM Observability view
 
-**Target span hierarchy** (confirmed from M1 research — includes both our spans and SDK spans):
+**Target span hierarchy** (Updated per Decisions 16, 19 — actual runtime names + SpanProcessor enrichment):
 ```text
-cluster-whisperer.cli.investigate          (root, withAgentTracing)
-├── ai.streamText                          (Vercel SDK outer span, wraps all steps)
-│   ├── ai.streamText.doStream             (step 1: LLM call, has gen_ai.* attrs)
-│   │   └── ai.toolCall                    (SDK tool span: ai.toolCall.name=kubectl_get)
-│   ├── ai.streamText.doStream             (step 2: LLM with tool result)
-│   │   └── ai.toolCall                    (SDK tool span: ai.toolCall.name=kubectl_describe)
-│   └── ai.streamText.doStream             (step 3: final answer, no tool call)
-├── kubectl_get.tool                       (our withToolTracing span, cluster_whisperer.* attrs)
+cluster-whisperer.cli.investigate          (root, withAgentTracing, Datadog: workflow)
+├── vercel.agent                           (SDK outer, ai.operationId=ai.streamText, Datadog: agent)
+│   ├── text.stream                        (step 1, ai.operationId=ai.streamText.doStream, Datadog: llm)
+│   │   └── cluster-whisperer-investigate  (SDK tool, ai.operationId=ai.toolCall, Datadog: tool)
+│   ├── text.stream                        (step 2, Datadog: llm)
+│   │   └── cluster-whisperer-investigate  (SDK tool, Datadog: tool)
+│   └── text.stream                        (step 3: final answer, Datadog: llm)
+├── kubectl_get.tool                       (our withToolTracing span, gen_ai.tool.* attrs, Datadog: tool)
 │   └── kubectl get pods                   (subprocess span)
-└── kubectl_describe.tool                  (our withToolTracing span)
+└── kubectl_describe.tool                  (our withToolTracing span, Datadog: tool)
     └── kubectl describe pod demo-app-xxx  (subprocess span)
 ```
+SpanProcessor adds `gen_ai.operation.name` to SDK spans: `text.stream` → `"chat"`, `vercel.agent` → `"invoke_agent"`.
+Root span has `gen_ai.operation.name` removed so it defaults to workflow.
 Note: Both `ai.toolCall` (SDK) and `<toolName>.tool` (ours) spans appear for each tool execution. They serve different observability purposes and coexist intentionally.
 
 ### M8: Equivalence Testing
@@ -436,12 +450,14 @@ cluster-whisperer "Go ahead and deploy it"
 **Test 5: Trace comparison**:
 - [ ] Run Test 1 with both agents with `OTEL_TRACING_ENABLED=true OTEL_EXPORTER_TYPE=otlp`
 - [ ] Open both traces in Datadog
-- [ ] Root spans have identical names (`cluster-whisperer.cli.investigate`) and identical `cluster_whisperer.*` attributes
-- [ ] Our tool spans have identical names (`kubectl_get.tool`, etc.) and identical `cluster_whisperer.*` attributes in both agents
-- [ ] LLM span names differ (expected: `anthropic.chat` for LangGraph vs `ai.streamText.doStream` for Vercel) — this is documented in the Weaver schema (M2)
+- [ ] Root spans have identical names (`cluster-whisperer.cli.investigate`) and both map to **workflow** layer in Datadog (Updated per Decision 18: root span no longer has `gen_ai.operation.name: "chat"`)
+- [ ] Our tool spans have identical names (`kubectl_get.tool`, etc.) and identical `gen_ai.tool.*` attributes in both agents
+- [ ] LLM span names differ (expected: `anthropic.chat` for LangGraph via OpenLLMetry vs `text.stream` for Vercel via SDK `experimental_telemetry`) — both map to **llm** layer in Datadog (Updated per Decisions 16, 19: Vercel spans enriched by SpanProcessor with `gen_ai.operation.name: "chat"`)
 - [ ] Both agents' inner LLM spans carry `gen_ai.*` attributes (model, token usage) — verify Datadog LLM Observability shows token usage for both
-- [ ] Vercel traces have additional `ai.toolCall` spans alongside our `<toolName>.tool` spans — this is expected and documented
+- [ ] Vercel traces have an **agent** layer (`vercel.agent` span with `gen_ai.operation.name: invoke_agent`) that LangGraph traces do not — this is acceptable asymmetry (Vercel SDK provides richer hierarchy)
+- [ ] Vercel traces have SDK `ai.toolCall` spans alongside our `<toolName>.tool` spans — both map to **tool** layer
 - [ ] Both traces tell a readable investigation story in the Datadog flame graph
+- [ ] Both traces show all expected layers in Datadog LLM Observability (at minimum: workflow, llm, tool for both; additionally agent for Vercel)
 
 **Test 6: Save demo runs**:
 - [ ] Save full agent output from both agents to `demo/runs/` for comparison (same pattern as PRD #48 M11)
@@ -450,11 +466,14 @@ cluster-whisperer "Go ahead and deploy it"
 ### M9: Documentation
 - [ ] Update README using `/write-docs` to document the Vercel agent and `--agent vercel` flag
 - [ ] Update `docs/choose-your-adventure-demo.md` if any demo flow adjustments are needed (unlikely — the demo flow is agent-agnostic by design)
-- [ ] Update `docs/tracing-conventions.md` with Vercel-specific notes:
-  - Different LLM span names: `ai.streamText.doStream` vs `anthropic.chat`
-  - Double tool spans: `ai.toolCall` (SDK) + `<toolName>.tool` (ours) — explain why both exist
+- [ ] Update `docs/tracing-conventions.md` with Vercel-specific notes (Updated per Decisions 16-19):
+  - Different LLM span names: `text.stream` (Vercel, `ai.operationId: ai.streamText.doStream`) vs `anthropic.chat` (LangGraph, OpenLLMetry)
+  - Different outer span: `vercel.agent` (Vercel, maps to agent layer) vs `CompiledStateGraph.workflow` (LangGraph, maps to workflow layer)
+  - Double tool spans: SDK `ai.toolCall` + `<toolName>.tool` (ours) — explain why both exist
+  - `VercelSpanProcessor`: enriches SDK spans with `gen_ai.operation.name` for correct Datadog LLM Obs layer classification
   - `experimental_telemetry` configuration and the `tracer` parameter for context propagation
-  - `gen_ai.*` attributes are on inner `doStream` spans only
+  - `gen_ai.*` attributes are on inner `text.stream` spans only
+  - Datadog mapping reference: `docs/research/49-m7-datadog-llmobs-otel-mapping.md`
 - [ ] Document the known property name inconsistency in the Vercel SDK (vercel/ai#8756) if it caused any adapter adjustments during M5
 - [ ] Document that summarized thinking output means both agents show condensed reasoning (not full thinking tokens)
 
@@ -785,3 +804,7 @@ These existing files are directly relevant to implementation. Read before starti
 | 2026-03-16 | `gen_ai.*` attributes only on inner `doStream` spans | Datadog LLM Observability reads `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*` from `ai.streamText.doStream` spans, NOT from the outer `ai.streamText` span. This is how the SDK works — not configurable. |
 | 2026-03-16 | Property name inconsistency requires runtime verification | vercel/ai#8756 — `reasoning-delta` and `text-delta` parts may have `delta`, `textDelta`, or `text` as the property name depending on the API layer. M5 must verify against actual runtime values and document which works. |
 | 2026-03-16 | M1–M4 don't need a cluster | Spin up GCP cluster when starting M5. |
+| 2026-03-16 | Vercel SDK span names differ from M1 predictions (Decision 16) | Runtime verification revealed `vercel.agent` (not `ai.streamText`) and `text.stream` (not `ai.streamText.doStream`). The `ai.operationId` attribute preserves the original names. See `docs/research/49-m7-datadog-llmobs-otel-mapping.md`. |
+| 2026-03-16 | No OpenLLMetry instrumentation for Vercel AI SDK (Decision 17) | Confirmed: openllmetry-js has 13 instrumentation packages but none for the Vercel AI SDK. The `@traceloop/instrumentation-anthropic` instruments the underlying Anthropic calls for LangGraph but not the Vercel SDK layer. |
+| 2026-03-16 | Datadog LLM Obs requires `gen_ai.operation.name` for layer classification (Decision 18) | Without this attribute, spans default to "workflow" regardless of other gen_ai.* attributes. The Vercel SDK's LLM spans have all gen_ai.* attributes EXCEPT `gen_ai.operation.name`. Root span's `gen_ai.operation.name: "chat"` is wrong for both agents — makes Datadog classify it as LLM instead of workflow. Full mapping: `docs/research/49-m7-datadog-llmobs-otel-mapping.md`. |
+| 2026-03-16 | SpanProcessor to enrich Vercel SDK spans for Datadog (Decision 19) | Add a SpanProcessor that sets `gen_ai.operation.name` on Vercel SDK spans based on `ai.operationId`: `ai.streamText.doStream` → `"chat"` (llm layer), `ai.streamText` → `"invoke_agent"` (agent layer). Also fix root span from `"chat"` → remove (workflow layer). Non-invasive, follows existing `ToolDefinitionsProcessor` pattern. Produces all 4 Datadog layers: agent, workflow, llm, tool. |
