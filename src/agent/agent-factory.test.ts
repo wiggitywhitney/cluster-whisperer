@@ -1,12 +1,12 @@
 // ABOUTME: Unit tests for the agent factory — verifies routing to correct agent framework.
-// ABOUTME: Tests langgraph returns InvestigationAgent and vercel throws "not implemented".
+// ABOUTME: Tests both langgraph and vercel return InvestigationAgent instances.
 
 /**
  * Tests for the agent factory module.
  *
  * The factory routes agent creation based on the --agent CLI flag:
  * - "langgraph" creates a LangGraphAdapter implementing InvestigationAgent
- * - "vercel" throws a "not yet implemented" error (placeholder for PRD #49 M5)
+ * - "vercel" creates a VercelAgent implementing InvestigationAgent
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -78,6 +78,22 @@ vi.mock("../tracing", () => ({
       return fn(mockSpan);
     },
   }),
+  isCaptureAiPayloads: false,
+}));
+
+// Vercel AI SDK mocks (used by VercelAgent imported via agent-factory)
+vi.mock("ai", () => ({
+  streamText: vi.fn().mockReturnValue({
+    fullStream: (async function* () {
+      // Empty stream — factory tests only verify construction, not streaming
+    })(),
+  }),
+  stepCountIs: vi.fn().mockReturnValue("step-count-predicate"),
+  tool: vi.fn((def: Record<string, unknown>) => def),
+}));
+
+vi.mock("@ai-sdk/anthropic", () => ({
+  anthropic: vi.fn().mockReturnValue("mock-anthropic-model"),
 }));
 
 describe("createAgent", () => {
@@ -106,12 +122,25 @@ describe("createAgent", () => {
     expect(typeof agent.investigate).toBe("function");
   });
 
-  it("throws 'not yet implemented' for vercel agent type", async () => {
+  it("creates an InvestigationAgent when agentType is 'vercel'", async () => {
     const { createAgent } = await import("./agent-factory");
 
-    expect(() => createAgent({ agentType: "vercel" })).toThrow(
-      /not yet implemented/i
-    );
+    const agent = createAgent({ agentType: "vercel" });
+
+    expect(agent).toBeDefined();
+    expect(typeof agent.investigate).toBe("function");
+  });
+
+  it("returns an AsyncGenerator from vercel agent's investigate()", async () => {
+    const { createAgent } = await import("./agent-factory");
+
+    const agent = createAgent({ agentType: "vercel" });
+    const generator = agent.investigate("test question");
+
+    expect(generator[Symbol.asyncIterator]).toBeDefined();
+
+    // Clean up the generator
+    await generator.return(undefined as never);
   });
 
   it("defaults to langgraph when no agentType is specified", async () => {

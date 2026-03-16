@@ -177,10 +177,10 @@ Build a Vercel AI SDK agent that:
 - [x] Verify the factory functions return `Record<string, Tool>` objects (not arrays) — `streamText` requires this format
 
 ### M5: Vercel Agent Implementation
-- [ ] Create `src/agent/vercel-agent.ts` implementing the `InvestigationAgent` interface
-- [ ] Same system prompt as LangGraph agent — loaded from `prompts/investigator.md` using `path.join(__dirname, "../../prompts/investigator.md")` (same pattern as `src/agent/investigator.ts`)
-- [ ] Same Claude model: `claude-sonnet-4-20250514` (use the `ANTHROPIC_MODEL` constant exported from `src/agent/investigator.ts`)
-- [ ] The `investigate()` method calls `streamText` (from `'ai'`) with these exact parameters:
+- [x] Create `src/agent/vercel-agent.ts` implementing the `InvestigationAgent` interface
+- [x] Same system prompt as LangGraph agent — loaded from `prompts/investigator.md` using `path.join(__dirname, "../../prompts/investigator.md")` (same pattern as `src/agent/investigator.ts`)
+- [x] Same Claude model: `claude-sonnet-4-20250514` (use the `ANTHROPIC_MODEL` constant exported from `src/agent/investigator.ts`)
+- [x] The `investigate()` method calls `streamText` (from `'ai'`) with these exact parameters:
   ```typescript
   import { streamText, stepCountIs } from 'ai';
   import { anthropic } from '@ai-sdk/anthropic';
@@ -204,8 +204,8 @@ Build a Vercel AI SDK agent that:
     },
   });
   ```
-- [ ] M1 CONFIRMED: Extended thinking with interleaved thinking IS supported. Enable it with `budgetTokens: 4000` + `anthropic-beta: interleaved-thinking-2025-05-14` header. "Thinking:" blocks will appear in CLI output for both agents.
-- [ ] The `investigate()` method translates `fullStream` parts into `AgentEvent` objects. The exact mapping (from M1 Q3, verified property names):
+- [x] M1 CONFIRMED: Extended thinking with interleaved thinking IS supported. Enable it with `budgetTokens: 4000` + `anthropic-beta: interleaved-thinking-2025-05-14` header. "Thinking:" blocks will appear in CLI output for both agents.
+- [x] The `investigate()` method translates `fullStream` parts into `AgentEvent` objects. The exact mapping (from M1 Q3, verified property names):
   ```typescript
   async function* investigate(question, options): AsyncIterable<AgentEvent> {
     let textBuffer = '';
@@ -237,17 +237,17 @@ Build a Vercel AI SDK agent that:
     }
   }
   ```
-  **IMPORTANT property name caution**: M1 research found a known inconsistency (vercel/ai#8756) between TypeScript types and runtime values for `delta` vs `textDelta` vs `text`. The code above uses `part.delta` based on the SDK 6 research. If TypeScript complains or runtime values differ, try `part.textDelta` or `(part as any).text`. Document whichever works in a code comment.
-- [ ] Tool-set filtering: the agent factory passes the filtered `Record<string, Tool>` from M4's factories (merged via object spread: `{ ...kubectlTools, ...vectorTools, ...applyTools }`)
-- [ ] Agent factory integration: update the `case "vercel"` branch in `src/agent/agent-factory.ts` to construct and return the Vercel agent (replacing the "not yet implemented" error)
+  **RESOLVED property name inconsistency (vercel/ai#8756)**: M1 research documented `part.delta` but SDK 6 TypeScript types confirm `part.text` for both `reasoning-delta` and `text-delta` parts. Similarly, `tool-call` uses `part.input` (not `part.args`) and `tool-result` uses `part.output` (not `part.result`). The implementation uses the TypeScript-verified names with code comments documenting the finding.
+- [x] Tool-set filtering: the agent factory passes the filtered `Record<string, Tool>` from M4's factories (merged via object spread: `{ ...kubectlTools, ...vectorTools, ...applyTools }`)
+- [x] Agent factory integration: update the `case "vercel"` branch in `src/agent/agent-factory.ts` to construct and return the Vercel agent (replacing the "not yet implemented" error)
 
 **Verification**:
-- [ ] `npm test` passes — unit tests for the Vercel agent mock `streamText` from `'ai'`, verify it's called with: correct model (`anthropic(ANTHROPIC_MODEL)`), system prompt, tools (Record shape), `stopWhen: stepCountIs(50)`, `providerOptions.anthropic.thinking`, and `experimental_telemetry.isEnabled: true`
-- [ ] `npm run build` succeeds with no TypeScript errors
-- [ ] `agent-factory.test.ts` updated: the "vercel" case now returns a valid `InvestigationAgent` instead of throwing
+- [x] `npm test` passes — unit tests for the Vercel agent mock `streamText` from `'ai'`, verify it's called with: correct model (`anthropic(ANTHROPIC_MODEL)`), system prompt, tools (Record shape), `stopWhen: stepCountIs(50)`, `providerOptions.anthropic.thinking`, and `experimental_telemetry.isEnabled: true`
+- [x] `npm run build` succeeds with no TypeScript errors
+- [x] `agent-factory.test.ts` updated: the "vercel" case now returns a valid `InvestigationAgent` instead of throwing
 - [ ] Manual test against a real cluster: `CLUSTER_WHISPERER_AGENT=vercel CLUSTER_WHISPERER_TOOLS=kubectl vals exec -i -f .vals.yaml -- node dist/index.js "What pods are running?"` completes successfully, shows tool calls and a final answer
 - [ ] Verify "Thinking:" blocks appear in italic in CLI output (interleaved thinking is confirmed working)
-- [ ] Verify the `fullStream` property names at runtime match the code — if `part.delta` doesn't work, update to `part.textDelta` or `part.text` and document the finding
+- [x] Verify the `fullStream` property names at runtime match the code — if `part.delta` doesn't work, update to `part.textDelta` or `part.text` and document the finding
 
 ### M6: Conversation Memory
 - [ ] Implement message history persistence for the Vercel agent's `--thread` flag using the SDK's `ModelMessage[]` format (renamed from `CoreMessage` in SDK 5→6)

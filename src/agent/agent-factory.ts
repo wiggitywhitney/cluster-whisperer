@@ -11,10 +11,11 @@
  *
  * Currently supported:
  * - langgraph: Wraps the existing agent via LangGraphAdapter
- * - vercel: Throws "not yet implemented" (placeholder for PRD #49 M5)
+ * - vercel: Uses the Vercel AI SDK's streamText() with Claude
  */
 
 import { LangGraphAdapter } from "./langgraph-adapter";
+import { VercelAgent } from "./vercel-agent";
 import { DEFAULT_AGENT_TYPE, type AgentType } from "./agent-types";
 import type { InvestigationAgent } from "./agent-interface";
 import { type ToolGroup } from "../tools/tool-groups";
@@ -60,9 +61,11 @@ export function createAgent(options: CreateAgentOptions = {}): InvestigationAgen
       });
 
     case "vercel":
-      throw new Error(
-        "Vercel agent is not yet implemented. See PRD #49 M5 for the implementation plan."
-      );
+      return new VercelAgent({
+        toolGroups: options.toolGroups,
+        vectorBackend: options.vectorBackend,
+        kubeconfig: options.kubeconfig,
+      });
 
     default: {
       // Exhaustive check — TypeScript will error if a new AgentType is added
