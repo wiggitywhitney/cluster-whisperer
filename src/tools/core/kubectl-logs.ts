@@ -33,6 +33,7 @@ import { executeKubectl, KubectlResult, type KubectlOptions } from "../../utils/
 export const kubectlLogsSchema = z.object({
   pod: z
     .string()
+    .trim()
     .min(1, "Pod name cannot be empty")
     .refine((value) => !value.startsWith("-"), "must not start with '-'")
     .describe(
@@ -107,7 +108,26 @@ export async function kubectlLogs(input: KubectlLogsInput, options?: KubectlOpti
         arg.startsWith("--context=") ||
         arg === "--server" ||
         arg.startsWith("--server=") ||
-        arg === "-s"
+        arg === "-s" ||
+        arg === "--cluster" ||
+        arg.startsWith("--cluster=") ||
+        arg === "--user" ||
+        arg.startsWith("--user=") ||
+        arg === "--token" ||
+        arg.startsWith("--token=") ||
+        arg === "--client-certificate" ||
+        arg.startsWith("--client-certificate=") ||
+        arg === "--client-key" ||
+        arg.startsWith("--client-key=") ||
+        arg === "--certificate-authority" ||
+        arg.startsWith("--certificate-authority=") ||
+        arg === "--insecure-skip-tls-verify" ||
+        arg === "--as" ||
+        arg.startsWith("--as=") ||
+        arg === "--as-group" ||
+        arg.startsWith("--as-group=") ||
+        arg === "--as-uid" ||
+        arg.startsWith("--as-uid=")
       ) {
         return {
           output: `Error: The flag '${arg}' is not allowed in extraArgs.`,

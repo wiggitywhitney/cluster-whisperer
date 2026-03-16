@@ -148,19 +148,17 @@ function createVectorAndApplyToolsSafe(
   vectorBackend: VectorBackendType = DEFAULT_VECTOR_BACKEND,
   kubectlOpts?: { kubeconfig?: string }
 ) {
-  try {
-    const embedder = new VoyageEmbedding();
-    const vectorStore = createVectorStore(embedder, vectorBackend);
-    return {
-      vectorTools: createVectorTools(vectorStore),
-      applyTools: createApplyTools(vectorStore, kubectlOpts),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // Expected when VOYAGE_API_KEY is not set. Log so it's visible but not alarming.
-    console.debug(`Vector and apply tools disabled: ${message}`); // eslint-disable-line no-console
+  if (!process.env.VOYAGE_API_KEY) {
+    console.debug("Vector and apply tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
     return { vectorTools: [], applyTools: [] };
   }
+
+  const embedder = new VoyageEmbedding();
+  const vectorStore = createVectorStore(embedder, vectorBackend);
+  return {
+    vectorTools: createVectorTools(vectorStore),
+    applyTools: createApplyTools(vectorStore, kubectlOpts),
+  };
 }
 
 /**

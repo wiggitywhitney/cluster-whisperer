@@ -87,6 +87,8 @@ describe("getInvestigatorAgent", () => {
     vi.clearAllMocks();
     // Reset module registry so the cached agent is cleared between tests
     vi.resetModules();
+    // Set VOYAGE_API_KEY so createVectorAndApplyToolsSafe doesn't short-circuit
+    process.env.VOYAGE_API_KEY = "test-key";
   });
 
   it("creates an agent with default tools (kubectl + vector)", async () => {
