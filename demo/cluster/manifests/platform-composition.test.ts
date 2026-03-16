@@ -143,26 +143,22 @@ describe("Platform ManagedService Composition (composition.yaml)", () => {
     );
   });
 
-  it("maps to AWS RDS resources", () => {
+  it("maps to in-cluster PostgreSQL resources", () => {
     const yaml = JSON.stringify(composition).toLowerCase();
-    expect(yaml).toContain("rds");
-    expect(yaml).toContain("instance");
+    expect(yaml).toContain("postgresql");
+    expect(yaml).toContain("db-service");
   });
 
-  it("includes patches from XRD spec fields to managed resources", () => {
+  it("creates a Deployment and Service for PostgreSQL", () => {
     const spec = composition.spec as Record<string, unknown>;
     const pipeline = spec.pipeline as Record<string, unknown>[];
     const step = pipeline[0];
     const input = step.input as Record<string, unknown>;
     const resources = input.resources as Record<string, unknown>[];
 
-    // At least one resource with patches
-    const resourceWithPatches = resources.find(
-      (r) => (r.patches as unknown[])?.length > 0
-    );
-    expect(
-      resourceWithPatches,
-      "Composition must have patches mapping XRD fields to managed resources"
-    ).toBeDefined();
+    // Should have at least a Deployment and a Service resource
+    const resourceNames = resources.map((r) => (r as Record<string, string>).name);
+    expect(resourceNames).toContain("postgresql-deployment");
+    expect(resourceNames).toContain("postgresql-service");
   });
 });

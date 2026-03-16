@@ -1,3 +1,6 @@
+// ABOUTME: Unit tests for Kubernetes CRD discovery pipeline.
+// ABOUTME: Tests parsing, filtering, and schema extraction from kubectl api-resources and explain.
+
 /**
  * discovery.test.ts - Unit tests for CRD discovery (M1)
  *
@@ -612,9 +615,11 @@ describe("discoverResources", () => {
       onProgress: () => {},
     });
 
-    // Every resource should have the schema from our mock
+    // Every resource should have the spec description + recursive field structure
+    // The mock returns explainOutput for both explain calls, so schema combines them
+    const expectedSchema = `${explainOutput}\n\n--- Field structure (recursive) ---\n\n${explainOutput}`;
     for (const resource of result) {
-      expect(resource.schema).toBe(explainOutput);
+      expect(resource.schema).toBe(expectedSchema);
     }
   });
 
@@ -684,7 +689,7 @@ describe("discoverResources", () => {
   });
 
   it("skips resources where kubectl explain fails", async () => {
-    let explainCallCount = 0;
+    let recursiveCallCount = 0;
     const mockKubectl = vi.fn((args: string[]) => {
       if (args[0] === "api-resources") {
         return { output: apiResourcesOutput, isError: false };
@@ -693,10 +698,15 @@ describe("discoverResources", () => {
         return { output: crdListOutput, isError: false };
       }
       if (args[0] === "explain") {
-        explainCallCount++;
-        // Fail on the second explain call
-        if (explainCallCount === 2) {
-          return { output: "Error: resource not found", isError: true };
+        // The code makes two explain calls per resource:
+        // 1. explain <name> --recursive (if this fails, resource is skipped)
+        // 2. explain <name>.spec (if this fails, resource still included)
+        // Fail the recursive call for the second resource to trigger a skip
+        if (args.includes("--recursive")) {
+          recursiveCallCount++;
+          if (recursiveCallCount === 2) {
+            return { output: "Error: resource not found", isError: true };
+          }
         }
         return { output: explainOutput, isError: false };
       }
@@ -708,7 +718,7 @@ describe("discoverResources", () => {
       onProgress: () => {},
     });
 
-    // Should have 3 resources (4 after filtering, minus 1 failed explain)
+    // Should have 3 resources (4 after filtering, minus 1 failed recursive explain)
     expect(result).toHaveLength(3);
   });
 
@@ -788,12 +798,15 @@ describe("discoverResources", () => {
       resourceNames: ["sqls.devopstoolkit.live"],
     });
 
-    // kubectl explain should only be called once (for sqls.devopstoolkit.live)
+    // kubectl explain should be called twice for the one matching resource:
+    // 1. explain sqls.devopstoolkit.live --recursive (field structure)
+    // 2. explain sqls.devopstoolkit.live.spec (spec description)
     const explainCalls = mockKubectl.mock.calls.filter(
       (call) => call[0][0] === "explain"
     );
-    expect(explainCalls).toHaveLength(1);
+    expect(explainCalls).toHaveLength(2);
     expect(explainCalls[0][0][1]).toBe("sqls.devopstoolkit.live");
+    expect(explainCalls[1][0][1]).toBe("sqls.devopstoolkit.live.spec");
   });
 
   it("discovers all resources when resourceNames is omitted", async () => {
