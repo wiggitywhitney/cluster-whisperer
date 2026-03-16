@@ -1098,7 +1098,7 @@ verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
     local failures=0
-    local retries=6
+    local retries=12
     local retry_interval=10
 
     # Chroma health check with retries: GET /api/v1/heartbeat
@@ -1187,7 +1187,7 @@ install_jaeger() {
         --namespace jaeger \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/jaeger.yaml" \
-        --wait --timeout 180s
+        --wait --timeout 300s
 
     log_success "Jaeger installed"
 
