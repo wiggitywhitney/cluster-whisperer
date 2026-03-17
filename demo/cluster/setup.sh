@@ -659,9 +659,28 @@ unset CLUSTER_WHISPERER_VECTOR_BACKEND
 unset CLUSTER_WHISPERER_THREAD
 
 # Shorthand functions for live typing on stage
-agent()   { export CLUSTER_WHISPERER_AGENT=\$1; echo "Agent: \$1"; }
-tools()   { export CLUSTER_WHISPERER_TOOLS=\$1; echo "Tools: \$1"; }
-vectordb() { export CLUSTER_WHISPERER_VECTOR_BACKEND=\$1; echo "Vector DB: \$1"; }
+agent() {
+  case "\$1" in
+    langgraph|vercel) export CLUSTER_WHISPERER_AGENT=\$1; echo "Agent: \$1" ;;
+    *) echo "Error: unknown agent '\$1'. Use: langgraph or vercel" >&2; return 1 ;;
+  esac
+}
+tools() {
+  local valid=true
+  for t in \$(echo "\$1" | tr ',' ' '); do
+    case "\$t" in
+      kubectl|vector|apply) ;;
+      *) echo "Error: unknown tool '\$t'. Use: kubectl, vector, apply" >&2; valid=false ;;
+    esac
+  done
+  if \$valid; then export CLUSTER_WHISPERER_TOOLS=\$1; echo "Tools: \$1"; fi
+}
+vectordb() {
+  case "\$1" in
+    chroma|qdrant) export CLUSTER_WHISPERER_VECTOR_BACKEND=\$1; echo "Vector DB: \$1" ;;
+    *) echo "Error: unknown vector DB '\$1'. Use: chroma or qdrant" >&2; return 1 ;;
+  esac
+}
 
 # Audience-facing vars — set live on stage after each vote:
 #   agent langgraph        # (or vercel)
