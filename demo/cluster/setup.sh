@@ -645,11 +645,11 @@ export OTEL_CAPTURE_AI_PAYLOADS=true
 # Demo app URL — 502 until the agent fixes the cluster, then shows the spider page
 export DEMO_APP_URL=http://demo-app.${BASE_DOMAIN}
 
-# API keys (resolved from .vals.yaml at setup time)
-export ANTHROPIC_API_KEY=${anthropic_key}
-export VOYAGE_API_KEY=${voyage_key}
-export DD_API_KEY=${dd_api_key}
-export DD_APP_KEY=${dd_app_key}
+# API keys (resolved from .vals.yaml at setup time — only set if non-empty)
+${anthropic_key:+export ANTHROPIC_API_KEY=${anthropic_key}}
+${voyage_key:+export VOYAGE_API_KEY=${voyage_key}}
+${dd_api_key:+export DD_API_KEY=${dd_api_key}}
+${dd_app_key:+export DD_APP_KEY=${dd_app_key}}
 
 # Audience-facing vars — set live on stage after each vote:
 #   export CLUSTER_WHISPERER_AGENT=langgraph   # (or vercel)
