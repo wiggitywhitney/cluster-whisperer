@@ -272,6 +272,7 @@ describe("kubectlApply", () => {
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Catalog validation failed");
       expect(result.output).toContain("Connection refused");
+      expect(mockSpawnSync).not.toHaveBeenCalled();
     });
   });
 
@@ -329,15 +330,6 @@ describe("kubectlApply", () => {
     });
 
     it("allows platform CRD resources (non-built-in apiGroup) when in catalog", async () => {
-      const managedServiceManifest = [
-        "apiVersion: platform.acme.io/v1alpha1",
-        "kind: ManagedService",
-        "metadata:",
-        "  name: my-db",
-        "spec:",
-        "  type: postgresql",
-      ].join("\n");
-
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
           makeCatalogEntry("ManagedService", "platform.acme.io"),
@@ -345,7 +337,7 @@ describe("kubectlApply", () => {
       });
 
       mockSpawnSync.mockReturnValue({
-        stdout: "managedservice.platform.acme.io/my-db created",
+        stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
         status: 0,
         error: null,
@@ -354,7 +346,7 @@ describe("kubectlApply", () => {
       const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       expect(result.isError).toBe(false);
-      expect(result.output).toContain("my-db created");
+      expect(result.output).toContain("youchoose-db created");
     });
   });
 
