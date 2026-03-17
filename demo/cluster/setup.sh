@@ -652,6 +652,12 @@ ${voyage_key:+export VOYAGE_API_KEY=${voyage_key}}
 ${dd_api_key:+export DD_API_KEY=${dd_api_key}}
 ${dd_app_key:+export DD_APP_KEY=${dd_app_key}}
 
+# Clear audience-facing vars (clean slate when re-sourcing between runs)
+unset CLUSTER_WHISPERER_AGENT
+unset CLUSTER_WHISPERER_TOOLS
+unset CLUSTER_WHISPERER_VECTOR_BACKEND
+unset CLUSTER_WHISPERER_THREAD
+
 # Shorthand functions for live typing on stage
 agent()   { export CLUSTER_WHISPERER_AGENT=\$1; echo "Agent: \$1"; }
 tools()   { export CLUSTER_WHISPERER_TOOLS=\$1; echo "Tools: \$1"; }
