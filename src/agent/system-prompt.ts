@@ -33,6 +33,18 @@ import * as path from "path";
 import { VALID_TOOL_GROUPS, type ToolGroup } from "../tools/tool-groups";
 
 /**
+ * Escapes regex metacharacters in a string so it can be used as a literal
+ * pattern inside `new RegExp(...)`.
+ *
+ * Group names in VALID_TOOL_GROUPS are currently simple alphanumeric strings
+ * (kubectl, vector, apply) so no escaping is needed today. This helper guards
+ * against future group names that contain regex metacharacters (e.g. "c++").
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * Path to the system prompt file, resolved relative to this compiled file's
  * location (src/agent → project root → prompts/).
  */
@@ -83,8 +95,9 @@ export function stripInactiveSections(
   let result = rawPrompt;
 
   for (const group of VALID_TOOL_GROUPS) {
-    const openTag = `<!-- tools:${group} -->`;
-    const closeTag = `<!-- /tools:${group} -->`;
+    const escaped = escapeRegex(group);
+    const openTag = `<!-- tools:${escaped} -->`;
+    const closeTag = `<!-- /tools:${escaped} -->`;
 
     if (!toolGroups.includes(group)) {
       // Remove the entire section (tags + content).

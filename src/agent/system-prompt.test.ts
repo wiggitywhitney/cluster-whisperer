@@ -141,4 +141,23 @@ describe("stripInactiveSections", () => {
     expect(result).toBe("Untagged");
     expect(result).not.toContain("Vector");
   });
+
+  it("preserves content after an unclosed opening tag (no match, no removal)", () => {
+    // An unclosed tag doesn't match the section regex — content is left in place.
+    // This documents the safe-fallback behavior: bad tags don't silently drop content.
+    const raw = "Before\n<!-- tools:vector -->\nContent without closing tag";
+    const result = stripInactiveSections(raw, ["kubectl"]);
+    expect(result).toContain("Content without closing tag");
+  });
+
+  it("does not match a section with a mismatched closing tag", () => {
+    // Opening tag for vector but closing tag for apply — no match, content preserved.
+    const raw = [
+      "<!-- tools:vector -->",
+      "Vector content",
+      "<!-- /tools:apply -->",
+    ].join("\n");
+    const result = stripInactiveSections(raw, ["kubectl"]);
+    expect(result).toContain("Vector content");
+  });
 });
