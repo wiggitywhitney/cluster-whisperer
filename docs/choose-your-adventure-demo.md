@@ -51,14 +51,14 @@ The audience chooses which agent framework to use.
 The presenter sets the env vars based on the audience's vote:
 
 ```bash
-export CLUSTER_WHISPERER_AGENT=langgraph   # (or vercel)
-export CLUSTER_WHISPERER_TOOLS=kubectl
+agent langgraph   # (or vercel)
+tools kubectl
 ```
 
 Then runs the agent:
 
 ```bash
-cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
+plz "Something's wrong with my application — can you investigate what's happening and why?"
 ```
 
 The agent streams its thinking live in the terminal — the audience watches it reason
@@ -68,7 +68,7 @@ the database is missing.
 The presenter follows up:
 
 ```bash
-cluster-whisperer "Do you know what database I should use?"
+plz "Do you know what database I should use?"
 ```
 
 The agent enters resource discovery mode. Without vector search, it falls back to
@@ -90,18 +90,17 @@ The audience chooses which vector database backend to connect.
 The presenter sets the vector backend based on the vote and adds the vector tool:
 
 ```bash
-export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant   # (or chroma)
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-export CLUSTER_WHISPERER_THREAD=demo
+vectordb qdrant   # (or chroma)
+tools kubectl,vector
 ```
 
-The `CLUSTER_WHISPERER_THREAD` env var enables multi-turn conversation memory. Same thread ID across
-invocations means the agent remembers what was said before.
+Thread memory is automatically enabled when vector tools are active — the agent defaults
+to thread ID `demo` so it remembers what was said across invocations. No manual setup needed.
 
 **Turn 1** — the presenter asks a broad question:
 
 ```bash
-cluster-whisperer "What database should I deploy for my app?"
+plz "What database should I deploy for my app?"
 ```
 
 The agent searches the vector database and finds multiple ManagedService resources from
@@ -112,7 +111,7 @@ presenter follow-up questions: what team are you on? What type of app?
 **Turn 2** — the presenter gives a vague answer:
 
 ```bash
-cluster-whisperer "I'm not sure about most of that. My team is called the You Choose team. I don't know if it's Postgres or MySQL."
+plz "I'm not sure about most of that. My team is called the You Choose team. I don't know if it's Postgres or MySQL."
 ```
 
 The agent searches again using "You Choose" as context. This time it finds
@@ -123,7 +122,7 @@ YAML and asks: "Would you like me to deploy this?"
 **Turn 3** — the presenter says yes:
 
 ```bash
-cluster-whisperer "Yes please, will you deploy it for me?"
+plz "Yes please, will you deploy it for me?"
 ```
 
 The agent recognizes it **cannot deploy** — it doesn't have the apply tool. It provides
@@ -139,16 +138,27 @@ The presenter adds the apply tool (same thread — the agent remembers which dat
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it"
+plz "Go ahead and deploy it"
 ```
 
 Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
 platform catalog. The tool validates the resource type against the capabilities
 collection before applying — this is enforced in code, not in the prompt.
 
-The agent deploys the platform-approved ManagedService. The PostgreSQL database comes
-up, and the demo app transitions from CrashLoopBackOff to Running — the audience sees
-the app come alive.
+The agent deploys the platform-approved ManagedService. Crossplane provisions the
+PostgreSQL database and the `db-service` endpoint (~15 seconds). The presenter talks
+through what just happened while the database comes up, then asks:
+
+```bash
+plz "Is my app running now? What's the URL to access it?"
+```
+
+The agent checks pods and ingresses, finds the demo app is now Running, and returns
+`http://demo-app.<base-domain>`. The presenter opens the URL — the spider page appears
+with clickable zones linking to Whitney's and Viktor's YouTube channels.
+
+The demo app URL is also in `demo/.env` as `DEMO_APP_URL`. While the app was crashing,
+this URL returned 502. Now it serves the spider page — the payoff moment.
 
 > "The agent found the right resource, and it could only deploy from the approved
 > catalog — the platform team controls what's allowed."
@@ -181,25 +191,27 @@ Everything else is pre-deployed.
 kubectl get pods                                        # fails — no kubeconfig
 
 # Vote 1 result → Act 2
-export CLUSTER_WHISPERER_AGENT=langgraph                # (or vercel)
-export CLUSTER_WHISPERER_TOOLS=kubectl
-cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
-cluster-whisperer "Do you know what database I should use?"
+agent langgraph                                         # (or vercel)
+tools kubectl
+plz "Something's wrong with my application — can you investigate what's happening and why?"
+plz "Do you know what database I should use?"
 
 # Vote 2 result → Act 3a (vector search, multi-turn conversation)
-export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-export CLUSTER_WHISPERER_THREAD=demo
-cluster-whisperer "What database should I deploy for my app?"
+vectordb qdrant                                         # (or chroma)
+tools kubectl,vector
+plz "What database should I deploy for my app?"
 # Agent finds 20 similar ManagedService resources, asks follow-up questions
-cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
+plz "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
 # Agent narrows to platform.acme.io, recommends it, offers YAML
-cluster-whisperer "Yes please, will you deploy it for me?"
+plz "Yes please, will you deploy it for me?"
 # Agent says it can't — no apply tool
 
 # Act 3b: add the apply tool → agent remembers which database, now it can deploy
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it"
+tools kubectl,vector,apply
+plz "Go ahead and deploy it"
+# talk through what happened while Crossplane provisions (~15s)
+plz "Is my app running now? What's the URL to access it?"
+# Agent checks pods + ingress, returns the demo-app URL → open in browser
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser
