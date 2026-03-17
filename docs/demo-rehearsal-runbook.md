@@ -33,6 +33,16 @@ Add this to your shell profile if you want it to persist, or just run it at the 
 
 ---
 
+## Step 0b: Clean up the terminal prompt
+
+Hide the hostname/username for a cleaner stage look:
+
+```bash
+export PS1='$ '
+```
+
+---
+
 ## Step 1: Source environment
 
 ```bash
