@@ -654,10 +654,15 @@ ${voyage_key:+export VOYAGE_API_KEY=${voyage_key}}
 ${dd_api_key:+export DD_API_KEY=${dd_api_key}}
 ${dd_app_key:+export DD_APP_KEY=${dd_app_key}}
 
+# Shorthand functions for live typing on stage
+agent()   { export CLUSTER_WHISPERER_AGENT=\$1; echo "Agent: \$1"; }
+tools()   { export CLUSTER_WHISPERER_TOOLS=\$1; echo "Tools: \$1"; }
+vectordb() { export CLUSTER_WHISPERER_VECTOR_BACKEND=\$1; echo "Vector DB: \$1"; }
+
 # Audience-facing vars — set live on stage after each vote:
-#   export CLUSTER_WHISPERER_AGENT=langgraph   # (or vercel)
-#   export CLUSTER_WHISPERER_TOOLS=kubectl     # progressively add: kubectl,vector → kubectl,vector,apply
-#   export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant  # (or chroma)
+#   agent langgraph        # (or vercel)
+#   tools kubectl          # progressively add: kubectl,vector → kubectl,vector,apply
+#   vectordb qdrant        # (or chroma)
 EOF
 
     log_success "Demo environment file generated: ${demo_env}"

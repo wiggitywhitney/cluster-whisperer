@@ -51,8 +51,8 @@ The audience chooses which agent framework to use.
 The presenter sets the env vars based on the audience's vote:
 
 ```bash
-export CLUSTER_WHISPERER_AGENT=langgraph   # (or vercel)
-export CLUSTER_WHISPERER_TOOLS=kubectl
+agent langgraph   # (or vercel)
+tools kubectl
 ```
 
 Then runs the agent:
@@ -90,8 +90,8 @@ The audience chooses which vector database backend to connect.
 The presenter sets the vector backend based on the vote and adds the vector tool:
 
 ```bash
-export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant   # (or chroma)
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector
+vectordb qdrant   # (or chroma)
+tools kubectl,vector
 ```
 
 `CLUSTER_WHISPERER_THREAD=demo` is already set from `demo/.env`, enabling multi-turn
@@ -192,14 +192,14 @@ Everything else is pre-deployed.
 kubectl get pods                                        # fails — no kubeconfig
 
 # Vote 1 result → Act 2
-export CLUSTER_WHISPERER_AGENT=langgraph                # (or vercel)
-export CLUSTER_WHISPERER_TOOLS=kubectl
+agent langgraph                                         # (or vercel)
+tools kubectl
 cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
 cluster-whisperer "Do you know what database I should use?"
 
 # Vote 2 result → Act 3a (vector search, multi-turn conversation)
-export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector
+vectordb qdrant                                         # (or chroma)
+tools kubectl,vector
 cluster-whisperer "What database should I deploy for my app?"
 # Agent finds 20 similar ManagedService resources, asks follow-up questions
 cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
@@ -208,7 +208,7 @@ cluster-whisperer "Yes please, will you deploy it for me?"
 # Agent says it can't — no apply tool
 
 # Act 3b: add the apply tool → agent remembers which database, now it can deploy
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+tools kubectl,vector,apply
 cluster-whisperer "Go ahead and deploy it"
 # talk through what happened while Crossplane provisions (~15s)
 cluster-whisperer "Is my app running now? What's the URL to access it?"

@@ -72,8 +72,8 @@ Expected: `The connection to the server localhost:8080 was refused` — the pres
 Pick an agent framework (langgraph or vercel):
 
 ```bash
-export CLUSTER_WHISPERER_AGENT=langgraph
-export CLUSTER_WHISPERER_TOOLS=kubectl
+agent langgraph
+tools kubectl
 ```
 
 ```bash
@@ -95,8 +95,8 @@ Watch for: agent tries kubectl get crd, sees hundreds of CRDs, can't make sense 
 Pick a vector backend (chroma or qdrant):
 
 ```bash
-export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector
+vectordb qdrant
+tools kubectl,vector
 ```
 
 **Turn 1:**
@@ -130,7 +130,7 @@ Watch for: agent says it **cannot deploy** — no apply tool. Provides YAML for 
 Add the apply tool:
 
 ```bash
-export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
+tools kubectl,vector,apply
 ```
 
 ```bash
