@@ -21,19 +21,7 @@ Run the reset between rehearsal runs too.
 
 ---
 
-## Step 0: Set up the CLI alias
-
-The CLI isn't installed globally. Create a shell alias so you can type `cluster-whisperer` naturally:
-
-```bash
-alias cluster-whisperer='npx tsx src/index.ts'
-```
-
-Add this to your shell profile if you want it to persist, or just run it at the start of each rehearsal session.
-
----
-
-## Step 0b: Clean up the terminal prompt
+## Step 0: Clean up the terminal prompt
 
 Hide the hostname/username for a cleaner stage look:
 
@@ -77,13 +65,13 @@ tools kubectl
 ```
 
 ```bash
-cluster-whisperer "Something's wrong with my application — can you investigate what's happening and why?"
+plz "Something's wrong with my application — can you investigate what's happening and why?"
 ```
 
 Watch for: agent uses kubectl_get, kubectl_describe, kubectl_logs. Finds CrashLoopBackOff, missing database.
 
 ```bash
-cluster-whisperer "Do you know what database I should use?"
+plz "Do you know what database I should use?"
 ```
 
 Watch for: agent tries kubectl get crd, sees hundreds of CRDs, can't make sense of them without semantic search.
@@ -102,7 +90,7 @@ tools kubectl,vector
 **Turn 1:**
 
 ```bash
-cluster-whisperer "What database should I deploy for my app?"
+plz "What database should I deploy for my app?"
 ```
 
 Watch for: agent uses vector_search on capabilities collection. Finds 20 ManagedService resources from different teams. Asks follow-up questions.
@@ -110,7 +98,7 @@ Watch for: agent uses vector_search on capabilities collection. Finds 20 Managed
 **Turn 2:**
 
 ```bash
-cluster-whisperer "I'm not sure about most of that. My team is called the You Choose team. I don't know if it's Postgres or MySQL."
+plz "I'm not sure about most of that. My team is called the You Choose team. I don't know if it's Postgres or MySQL."
 ```
 
 Watch for: agent searches again with "You Choose" context. Narrows to `managedservices.platform.acme.io`. Recommends it with example YAML.
@@ -118,7 +106,7 @@ Watch for: agent searches again with "You Choose" context. Narrows to `managedse
 **Turn 3:**
 
 ```bash
-cluster-whisperer "Yes please, will you deploy it for me?"
+plz "Yes please, will you deploy it for me?"
 ```
 
 Watch for: agent says it **cannot deploy** — no apply tool. Provides YAML for manual use.
@@ -134,7 +122,7 @@ tools kubectl,vector,apply
 ```
 
 ```bash
-cluster-whisperer "Go ahead and deploy it"
+plz "Go ahead and deploy it"
 ```
 
 Watch for: agent uses kubectl_apply with the ManagedService YAML. Reports SYNCED and READY.
@@ -142,7 +130,7 @@ Watch for: agent uses kubectl_apply with the ManagedService YAML. Reports SYNCED
 **Wait ~15 seconds** while talking through what Crossplane is doing (provisioning PostgreSQL, creating db-service).
 
 ```bash
-cluster-whisperer "Is my app running now? What's the URL to access it?"
+plz "Is my app running now? What's the URL to access it?"
 ```
 
 Watch for: agent checks pods, finds demo-app Running (or about to be). Checks ingresses, returns `http://demo-app.<base-domain>`.
