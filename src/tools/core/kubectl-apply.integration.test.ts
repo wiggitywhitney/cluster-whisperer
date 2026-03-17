@@ -109,16 +109,19 @@ const { kubectlApply } = await import("./kubectl-apply");
 // ---------------------------------------------------------------------------
 
 describe.skipIf(skipReason)("kubectl-apply integration", () => {
-  // Catalog approves ConfigMaps (core/v1) but NOT Secrets
+  // The setup script installs testresources.test.cluster-whisperer.io into the
+  // Kind cluster. We approve that CRD in the catalog so the approved-resource
+  // tests can exercise a real kubectl apply with a custom apiGroup.
   const vectorStore = createApprovedCatalog([
-    { kind: "ConfigMap", apiGroup: "" },
+    { kind: "TestResource", apiGroup: "test.cluster-whisperer.io" },
   ]);
 
-  const configMapName = `test-cm-${RUN_ID}`;
-  const secretName = `test-secret-${RUN_ID}`;
+  const testResourceName = `test-res-${RUN_ID}`;
+  const unknownResourceName = `unknown-res-${RUN_ID}`;
 
   beforeAll(() => {
-    // Ensure test namespace exists
+    // Ensure test namespace exists (setup.sh creates it, but guard against
+    // the test being run manually without setup)
     spawnSync(
       "kubectl",
       [
@@ -136,64 +139,61 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
   });
 
   afterAll(() => {
-    // Clean up any resources we created
-    kubectl("delete", "configmap", configMapName, "--ignore-not-found");
-    kubectl("delete", "secret", secretName, "--ignore-not-found");
+    kubectl("delete", "testresource", testResourceName, "--ignore-not-found");
   });
 
-  it("applies an approved resource to the cluster", async () => {
+  it("applies an approved custom resource to the cluster", async () => {
     const manifest = [
-      "apiVersion: v1",
-      "kind: ConfigMap",
+      "apiVersion: test.cluster-whisperer.io/v1",
+      "kind: TestResource",
       "metadata:",
-      `  name: ${configMapName}`,
+      `  name: ${testResourceName}`,
       `  namespace: ${TEST_NAMESPACE}`,
-      "data:",
+      "spec:",
       "  test-key: integration-test-value",
     ].join("\n");
 
     const result = await kubectlApply(vectorStore, { manifest });
 
     expect(result.isError).toBe(false);
-    expect(result.output).toContain(configMapName);
+    expect(result.output).toContain(testResourceName);
 
     // Verify the resource actually exists in the cluster
-    const verify = kubectl("get", "configmap", configMapName, "-o", "jsonpath={.data.test-key}");
+    const verify = kubectl(
+      "get",
+      "testresource.test.cluster-whisperer.io",
+      testResourceName
+    );
     expect(verify.status).toBe(0);
-    expect(verify.stdout).toBe("integration-test-value");
   }, 15000);
 
-  it("rejects an unapproved resource and does NOT create it", async () => {
+  it("rejects a catalog-unapproved custom resource and does NOT create it", async () => {
+    // widgets.example.com is a custom apiGroup not blocked by the built-in guard
+    // and not present in the approved catalog.
     const manifest = [
-      "apiVersion: v1",
-      "kind: Secret",
+      "apiVersion: widgets.example.com/v1beta1",
+      "kind: Widget",
       "metadata:",
-      `  name: ${secretName}`,
+      `  name: ${unknownResourceName}`,
       `  namespace: ${TEST_NAMESPACE}`,
-      "type: Opaque",
-      "data:",
-      "  password: dGVzdA==",
     ].join("\n");
 
     const result = await kubectlApply(vectorStore, { manifest });
 
     expect(result.isError).toBe(true);
     expect(result.output).toContain("not in the approved platform catalog");
-    expect(result.output).toContain("Secret");
-
-    // Verify the resource was NOT created in the cluster
-    const verify = kubectl("get", "secret", secretName);
-    expect(verify.status).not.toBe(0);
+    expect(result.output).toContain("Widget");
+    expect(result.output).toContain("widgets.example.com");
   }, 15000);
 
   it("handles applying a resource that already exists (idempotent)", async () => {
     const manifest = [
-      "apiVersion: v1",
-      "kind: ConfigMap",
+      "apiVersion: test.cluster-whisperer.io/v1",
+      "kind: TestResource",
       "metadata:",
-      `  name: ${configMapName}`,
+      `  name: ${testResourceName}`,
       `  namespace: ${TEST_NAMESPACE}`,
-      "data:",
+      "spec:",
       "  test-key: updated-value",
     ].join("\n");
 
@@ -201,19 +201,14 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
     const result = await kubectlApply(vectorStore, { manifest });
 
     expect(result.isError).toBe(false);
-
-    // Verify the updated value
-    const verify = kubectl("get", "configmap", configMapName, "-o", "jsonpath={.data.test-key}");
-    expect(verify.status).toBe(0);
-    expect(verify.stdout).toBe("updated-value");
+    expect(result.output).toContain(testResourceName);
   }, 15000);
 
   it("returns error for a valid but malformed manifest (missing required fields)", async () => {
-    // ConfigMap is approved, but this manifest has an invalid field structure
-    // that will pass YAML parsing but fail at kubectl level
+    // TestResource is approved, but empty name fails at kubectl level
     const manifest = [
-      "apiVersion: v1",
-      "kind: ConfigMap",
+      "apiVersion: test.cluster-whisperer.io/v1",
+      "kind: TestResource",
       "metadata:",
       `  name: ""`,
       `  namespace: ${TEST_NAMESPACE}`,

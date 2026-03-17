@@ -236,8 +236,8 @@ describe("createApplyTools", () => {
       keywordSearch: vi.fn().mockResolvedValue([
         {
           id: "1",
-          text: "Deployment resource",
-          metadata: { kind: "Deployment", apiGroup: "apps" },
+          text: "ManagedService resource",
+          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
           score: -1,
         },
       ]),
@@ -263,16 +263,16 @@ describe("createApplyTools", () => {
   it("kubectl_apply execute delegates to core function", async () => {
     const { spawnSync } = await import("child_process");
     (spawnSync as ReturnType<typeof vi.fn>).mockReturnValueOnce({
-      stdout: "deployment.apps/test-nginx created\n",
+      stdout: "managedservice.platform.acme.io/youchoose-db created\n",
       stderr: "",
       status: 0,
       error: null,
     });
 
-    const manifest = `apiVersion: apps/v1
-kind: Deployment
+    const manifest = `apiVersion: platform.acme.io/v1alpha1
+kind: ManagedService
 metadata:
-  name: test-nginx`;
+  name: youchoose-db`;
 
     const tools = createApplyTools(mockVectorStore);
     const result = await tools.kubectl_apply.execute(
@@ -285,7 +285,7 @@ metadata:
       "capabilities",
       undefined,
       expect.objectContaining({
-        where: { kind: "Deployment", apiGroup: "apps" },
+        where: { kind: "ManagedService", apiGroup: "platform.acme.io" },
       })
     );
     expect(result).toContain("created");
@@ -298,8 +298,8 @@ metadata:
     const tools = createApplyTools(unreachableStore);
     const result = await tools.kubectl_apply.execute(
       {
-        manifest: `apiVersion: apps/v1
-kind: Deployment
+        manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
   name: test`,
       },
@@ -316,10 +316,10 @@ metadata:
     const tools = createApplyTools(emptyStore);
     const result = await tools.kubectl_apply.execute(
       {
-        manifest: `apiVersion: v1
-kind: Secret
+        manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
-  name: test-secret`,
+  name: test-widget`,
       },
       { toolCallId: "test-8", messages: [], abortSignal: undefined as unknown as AbortSignal }
     );

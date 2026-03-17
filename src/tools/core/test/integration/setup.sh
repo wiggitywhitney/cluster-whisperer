@@ -29,6 +29,35 @@ echo "==> Creating test namespace: kubectl-apply-test"
 kubectl --context "${CONTEXT}" create namespace kubectl-apply-test --dry-run=client -o yaml \
   | kubectl --context "${CONTEXT}" apply -f -
 
+# Install a minimal CRD so integration tests can apply a custom-apiGroup resource.
+# kubectl_apply blocks standard k8s types (Deployment, ConfigMap, etc.) —
+# tests need a real CRD with a custom apiGroup to exercise the approved path.
+echo "==> Installing test CRD: testresources.test.cluster-whisperer.io"
+kubectl --context "${CONTEXT}" apply -f - <<'CRD'
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: testresources.test.cluster-whisperer.io
+spec:
+  group: test.cluster-whisperer.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+  scope: Namespaced
+  names:
+    plural: testresources
+    singular: testresource
+    kind: TestResource
+CRD
+
 echo ""
 echo "==> Setup complete. Cluster: ${CLUSTER_NAME}"
 echo "    kubectl context: ${CONTEXT}"
