@@ -29,8 +29,6 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MemorySaver } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
-import * as fs from "fs";
-import * as path from "path";
 import { kubectlTools, createKubectlTools, createVectorTools, createApplyTools } from "../tools/langchain";
 import {
   VoyageEmbedding,
@@ -39,6 +37,7 @@ import {
   type VectorBackendType,
 } from "../vectorstore";
 import { DEFAULT_TOOL_GROUPS, type ToolGroup } from "../tools/tool-groups";
+import { buildSystemPrompt } from "./system-prompt";
 
 /**
  * The Anthropic model used by the investigator agent.
@@ -79,48 +78,6 @@ export interface InvestigationResult {
   isError: boolean;
 }
 
-/**
- * Path to the system prompt file.
- *
- * Why a separate file?
- * The system prompt tells the agent how to behave - its role, investigation
- * approach, and response format. Keeping it in a markdown file makes it easy
- * to iterate on the prompt without touching code. You can tweak the wording,
- * add examples, or adjust the tone without recompiling.
- *
- * Why path.join with __dirname?
- * When the code runs, __dirname is the directory containing this file.
- * We go up two levels (src/agent → src → project root) then into prompts/.
- * This works regardless of where you run the command from.
- */
-const promptPath = path.join(__dirname, "../../prompts/investigator.md");
-
-/**
- * Cached system prompt - loaded lazily on first use.
- *
- * Why lazy loading?
- * If we read the file at module import time and it's missing, Node.js throws
- * a cryptic ENOENT error before our code can show a friendly message. By
- * loading lazily, we can catch the error and provide helpful guidance.
- */
-let cachedPrompt: string | null = null;
-
-function getSystemPrompt(): string {
-  if (!cachedPrompt) {
-    try {
-      cachedPrompt = fs.readFileSync(promptPath, "utf8");
-    } catch {
-      console.error(`Error: Could not load system prompt from ${promptPath}`);
-      console.error("");
-      console.error("Make sure prompts/investigator.md exists in the project root.");
-      // process.exit(1) is intentional here: getSystemPrompt is synchronous and
-      // this is a fatal startup error — no traces are in flight yet, so losing
-      // the flush is acceptable. Using async gracefulExit would race with callers.
-      process.exit(1);
-    }
-  }
-  return cachedPrompt;
-}
 
 /**
  * Creates vector tools if the Voyage API key is available.
@@ -312,7 +269,7 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
     const agent = createReactAgent({
       llm: model,
       tools,
-      prompt: getSystemPrompt(),
+      prompt: buildSystemPrompt(toolGroups),
       // Checkpointer enables conversation memory — the agent saves state
       // after each step so multi-turn conversations persist across CLI invocations.
       // Without a checkpointer, each invocation starts fresh (one-shot mode).

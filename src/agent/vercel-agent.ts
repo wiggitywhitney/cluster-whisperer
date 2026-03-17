@@ -35,13 +35,12 @@
 import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { trace } from "@opentelemetry/api";
-import * as fs from "fs";
-import * as path from "path";
 import { ANTHROPIC_MODEL, RECURSION_LIMIT } from "./investigator";
 import type { AgentEvent } from "./agent-events";
 import type { InvestigationAgent, InvestigateOptions } from "./agent-interface";
 import type { ToolGroup } from "../tools/tool-groups";
 import { DEFAULT_TOOL_GROUPS } from "../tools/tool-groups";
+import { buildSystemPrompt } from "./system-prompt";
 import {
   VoyageEmbedding,
   createVectorStore,
@@ -65,34 +64,6 @@ export interface VercelAgentOptions {
   kubeconfig?: string;
 }
 
-/**
- * Path to the system prompt file.
- * Same path calculation as investigator.ts — goes up two levels from
- * src/agent/ to the project root, then into prompts/.
- */
-const promptPath = path.join(__dirname, "../../prompts/investigator.md");
-
-/**
- * Cached system prompt — loaded lazily on first use.
- * Matches the lazy-loading pattern in investigator.ts.
- */
-let cachedPrompt: string | null = null;
-
-function getSystemPrompt(): string {
-  if (!cachedPrompt) {
-    try {
-      cachedPrompt = fs.readFileSync(promptPath, "utf8");
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Could not load system prompt from ${promptPath}. ` +
-        `Make sure prompts/investigator.md exists in the project root. ` +
-        `(${detail})`
-      );
-    }
-  }
-  return cachedPrompt;
-}
 
 /**
  * Vercel AI SDK agent implementing the shared InvestigationAgent interface.
@@ -137,8 +108,8 @@ export class VercelAgent implements InvestigationAgent {
     // Build the tools Record<string, Tool> from Vercel tool factories
     const tools = this.buildTools(toolGroups);
 
-    // Load the shared system prompt
-    const systemPrompt = getSystemPrompt();
+    // Load the shared system prompt, filtered to active tool groups
+    const systemPrompt = buildSystemPrompt(toolGroups);
 
     // Load prior conversation messages if a thread ID is provided
     const priorMessages: ModelMessage[] = threadId
