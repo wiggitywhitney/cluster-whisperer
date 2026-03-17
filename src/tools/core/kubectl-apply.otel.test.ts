@@ -74,11 +74,22 @@ function makeCatalogEntry(kind: string, apiGroup: string): SearchResult {
   };
 }
 
-const deploymentManifest = [
-  "apiVersion: apps/v1",
-  "kind: Deployment",
+// Platform CRD — used for successful apply and execution failure tests.
+const managedServiceManifest = [
+  "apiVersion: platform.acme.io/v1alpha1",
+  "kind: ManagedService",
   "metadata:",
-  "  name: nginx",
+  "  name: youchoose-db",
+].join("\n");
+
+// Unknown CRD — not built-in, not in catalog.
+// Used for catalog rejection and vectorStore failure tests so they reach the
+// catalog query path (built-in resources are blocked before that).
+const unknownCrdManifest = [
+  "apiVersion: widgets.example.com/v1beta1",
+  "kind: Widget",
+  "metadata:",
+  "  name: my-widget",
 ].join("\n");
 
 // Import after mocks
@@ -93,14 +104,14 @@ describe("kubectl-apply OTel spans", () => {
     it("creates a span named 'kubectl apply'", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "created", stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply");
       expect(span).toBeDefined();
@@ -109,14 +120,14 @@ describe("kubectl-apply OTel spans", () => {
     it("sets span kind to CLIENT", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "created", stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.kind).toBe(SpanKind.CLIENT);
@@ -125,31 +136,31 @@ describe("kubectl-apply OTel spans", () => {
     it("sets resource kind and api group attributes", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "created", stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
-      expect(span.attributes["cluster_whisperer.k8s.resource_kind"]).toBe("Deployment");
-      expect(span.attributes["cluster_whisperer.k8s.api_group"]).toBe("apps");
+      expect(span.attributes["cluster_whisperer.k8s.resource_kind"]).toBe("ManagedService");
+      expect(span.attributes["cluster_whisperer.k8s.api_group"]).toBe("platform.acme.io");
     });
 
     it("sets catalog approved attribute to true", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "created", stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.attributes["cluster_whisperer.catalog.approved"]).toBe(true);
@@ -158,14 +169,14 @@ describe("kubectl-apply OTel spans", () => {
     it("sets process attributes on success", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
-        stdout: "deployment.apps/nginx created", stderr: "", status: 0, error: null,
+        stdout: "managedservice.platform.acme.io/youchoose-db created", stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.attributes["process.executable.name"]).toBe("kubectl");
@@ -174,17 +185,17 @@ describe("kubectl-apply OTel spans", () => {
     });
 
     it("sets output size attribute", async () => {
-      const output = "deployment.apps/nginx created\n";
+      const output = "managedservice.platform.acme.io/youchoose-db created\n";
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: output, stderr: "", status: 0, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.attributes["cluster_whisperer.k8s.output_size_bytes"]).toBe(
@@ -199,7 +210,7 @@ describe("kubectl-apply OTel spans", () => {
         keywordSearch: vi.fn().mockResolvedValue([]),
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: unknownCrdManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.attributes["cluster_whisperer.catalog.approved"]).toBe(false);
@@ -210,7 +221,7 @@ describe("kubectl-apply OTel spans", () => {
         keywordSearch: vi.fn().mockResolvedValue([]),
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: unknownCrdManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
@@ -234,14 +245,14 @@ describe("kubectl-apply OTel spans", () => {
     it("sets error status when kubectl returns non-zero exit", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "", stderr: "error: connection refused", status: 1, error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
@@ -251,14 +262,14 @@ describe("kubectl-apply OTel spans", () => {
     it("records exception when kubectl spawn fails", async () => {
       const vectorStore = createMockVectorStore({
         keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
+          makeCatalogEntry("ManagedService", "platform.acme.io"),
         ]),
       });
       mockSpawnSync.mockReturnValue({
         stdout: "", stderr: "", status: null, error: new Error("ENOENT"),
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
@@ -272,7 +283,7 @@ describe("kubectl-apply OTel spans", () => {
         keywordSearch: vi.fn().mockRejectedValue(new Error("Connection refused")),
       });
 
-      await kubectlApply(vectorStore, { manifest: deploymentManifest });
+      await kubectlApply(vectorStore, { manifest: unknownCrdManifest });
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);

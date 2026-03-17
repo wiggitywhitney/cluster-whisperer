@@ -73,6 +73,37 @@ interface ManifestMetadata {
 }
 
 /**
+ * Standard Kubernetes built-in API groups that are always rejected.
+ *
+ * The demo's message is "the platform team controls what's allowed." Standard
+ * k8s resources (Deployment, Service, ConfigMap, etc.) can appear in the
+ * capabilities catalog because the sync pipeline indexes all cluster CRDs —
+ * but they must never be deployable through this tool.
+ *
+ * Only resources from custom API groups (e.g., *.acme.io, *.crossplane.io)
+ * that the platform team has explicitly published to the catalog are allowed.
+ */
+const BUILT_IN_API_GROUPS = new Set([
+  "",                                  // core: Pod, Service, ConfigMap, Secret
+  "apps",                              // Deployment, StatefulSet, DaemonSet, ReplicaSet
+  "batch",                             // Job, CronJob
+  "autoscaling",                       // HorizontalPodAutoscaler
+  "extensions",                        // (deprecated, but still seen)
+  "policy",                            // PodDisruptionBudget
+  "networking.k8s.io",                 // Ingress, NetworkPolicy
+  "rbac.authorization.k8s.io",         // ClusterRole, RoleBinding
+  "storage.k8s.io",                    // StorageClass, PersistentVolume
+  "admissionregistration.k8s.io",      // MutatingWebhookConfiguration
+  "apiextensions.k8s.io",              // CustomResourceDefinition
+  "coordination.k8s.io",               // Lease
+  "discovery.k8s.io",                  // EndpointSlice
+  "events.k8s.io",                     // Event
+  "flowcontrol.apiserver.k8s.io",      // FlowSchema
+  "node.k8s.io",                       // RuntimeClass
+  "scheduling.k8s.io",                 // PriorityClass
+]);
+
+/**
  * Parse a YAML manifest to extract the kind and apiGroup.
  *
  * The apiGroup is derived from the apiVersion field:
@@ -179,7 +210,18 @@ export async function kubectlApply(
         span.setAttribute("cluster_whisperer.k8s.resource_kind", metadata.kind);
         span.setAttribute("cluster_whisperer.k8s.api_group", metadata.apiGroup);
 
-        // Step 2: Validate against the capabilities catalog
+        // Step 2a: Reject standard Kubernetes built-in resource types immediately.
+        // These must never be deployable through this tool regardless of catalog
+        // contents — only platform-published custom resources are allowed.
+        if (BUILT_IN_API_GROUPS.has(metadata.apiGroup)) {
+          const displayGroup = metadata.apiGroup || "core";
+          const msg = `Resource type ${metadata.kind} (${displayGroup}) is a standard Kubernetes resource and cannot be deployed through this tool. Only platform-approved resource types from the capabilities catalog are allowed.`;
+          span.setAttribute("error.type", "BuiltInResourceRejection");
+          span.setStatus({ code: SpanStatusCode.ERROR, message: msg });
+          return { output: msg, isError: true };
+        }
+
+        // Step 2b: Validate against the capabilities catalog
         let catalogResults;
         try {
           catalogResults = await vectorStore.keywordSearch(
@@ -215,7 +257,7 @@ export async function kubectlApply(
           return { output: msg, isError: true };
         }
 
-        // Step 3: Apply the manifest via kubectl apply -f -
+        // Step 3: Apply the manifest via kubectl apply -f - (stdin)
         // Include --kubeconfig if specified (demo governance: agent has cluster access)
         const applyArgs = options?.kubeconfig
           ? ["--kubeconfig", options.kubeconfig, "apply", "-f", "-"]

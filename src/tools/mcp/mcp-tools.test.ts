@@ -102,8 +102,8 @@ describe("registerApplyTool", () => {
       keywordSearch: vi.fn().mockResolvedValue([
         {
           id: "1",
-          document: "Deployment resource",
-          metadata: { kind: "Deployment", apiGroup: "apps" },
+          document: "ManagedService resource",
+          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
         },
       ]),
     });
@@ -128,10 +128,10 @@ describe("registerApplyTool", () => {
 
     const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
     const result = await handler({
-      manifest: `apiVersion: apps/v1
-kind: Deployment
+      manifest: `apiVersion: platform.acme.io/v1alpha1
+kind: ManagedService
 metadata:
-  name: test-nginx`,
+  name: youchoose-db`,
     });
 
     expect(result).toEqual({
@@ -150,10 +150,10 @@ metadata:
 
     const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
     const result = await handler({
-      manifest: `apiVersion: v1
-kind: Secret
+      manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
-  name: test-secret`,
+  name: test-widget`,
     });
 
     expect(result).toEqual({

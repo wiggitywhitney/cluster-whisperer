@@ -74,8 +74,8 @@ describe("createApplyTools", () => {
       keywordSearch: vi.fn().mockResolvedValue([
         {
           id: "1",
-          document: "Deployment resource",
-          metadata: { kind: "Deployment", apiGroup: "apps" },
+          document: "ManagedService resource",
+          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
         },
       ]),
     });
@@ -101,10 +101,10 @@ describe("createApplyTools", () => {
     const tools = createApplyTools(mockVectorStore);
     const applyTool = tools[0];
 
-    const manifest = `apiVersion: apps/v1
-kind: Deployment
+    const manifest = `apiVersion: platform.acme.io/v1alpha1
+kind: ManagedService
 metadata:
-  name: test-nginx`;
+  name: youchoose-db`;
 
     const result = await applyTool.invoke({ manifest });
 
@@ -113,7 +113,7 @@ metadata:
       "capabilities",
       undefined,
       expect.objectContaining({
-        where: { kind: "Deployment", apiGroup: "apps" },
+        where: { kind: "ManagedService", apiGroup: "platform.acme.io" },
       })
     );
 
@@ -128,8 +128,8 @@ metadata:
 
     const tools = createApplyTools(unreachableStore);
     const result = await tools[0].invoke({
-      manifest: `apiVersion: apps/v1
-kind: Deployment
+      manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
   name: test`,
     });
@@ -145,8 +145,8 @@ metadata:
 
     const tools = createApplyTools(brokenStore);
     const result = await tools[0].invoke({
-      manifest: `apiVersion: apps/v1
-kind: Deployment
+      manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
   name: test`,
     });
@@ -169,10 +169,10 @@ metadata:
 
     const tools = createApplyTools(emptyStore);
     const result = await tools[0].invoke({
-      manifest: `apiVersion: v1
-kind: Secret
+      manifest: `apiVersion: widgets.example.com/v1beta1
+kind: Widget
 metadata:
-  name: test-secret`,
+  name: test-widget`,
     });
 
     expect(result).toContain("not in the approved platform catalog");
