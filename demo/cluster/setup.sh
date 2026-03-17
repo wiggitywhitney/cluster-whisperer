@@ -652,7 +652,8 @@ ${dd_api_key:+export DD_API_KEY=${dd_api_key}}
 ${dd_app_key:+export DD_APP_KEY=${dd_app_key}}
 
 # CLI alias — "plz" is the developer's interface to the platform
-alias plz='npx tsx src/index.ts'
+# noglob prevents zsh from interpreting ? ! * as glob characters
+alias plz='noglob npx tsx src/index.ts'
 
 # Clear audience-facing vars (clean slate when re-sourcing between runs)
 unset CLUSTER_WHISPERER_AGENT
