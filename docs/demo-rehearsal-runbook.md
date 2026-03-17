@@ -21,6 +21,18 @@ Run the reset between rehearsal runs too.
 
 ---
 
+## Step 0: Set up the CLI alias
+
+The CLI isn't installed globally. Create a shell alias so you can type `cluster-whisperer` naturally:
+
+```bash
+alias cluster-whisperer='npx tsx src/index.ts'
+```
+
+Add this to your shell profile if you want it to persist, or just run it at the start of each rehearsal session.
+
+---
+
 ## Step 1: Source environment
 
 ```bash
