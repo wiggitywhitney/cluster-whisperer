@@ -27,7 +27,13 @@ Run the reset between rehearsal runs too.
 source demo/.env
 ```
 
-This sets infrastructure URLs only. No audience-facing vars yet.
+Verify it worked:
+
+```bash
+echo $CLUSTER_WHISPERER_KUBECONFIG
+```
+
+Expected: a path like `/Users/you/.kube/config-cluster-whisperer`. If empty, the source failed.
 
 ## Step 2: Verify no kubectl access
 
@@ -35,7 +41,7 @@ This sets infrastructure URLs only. No audience-facing vars yet.
 kubectl get pods
 ```
 
-Expected: `error: no cluster configured` (presenter's shell has no kubeconfig).
+Expected: `The connection to the server localhost:8080 was refused` — the presenter's shell has no KUBECONFIG exported, so kubectl can't reach any cluster. This is intentional — the developer doesn't have direct cluster access.
 
 ---
 
