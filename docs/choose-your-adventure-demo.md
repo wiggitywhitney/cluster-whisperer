@@ -94,9 +94,8 @@ vectordb qdrant   # (or chroma)
 tools kubectl,vector
 ```
 
-`CLUSTER_WHISPERER_THREAD=demo` is already set from `demo/.env`, enabling multi-turn
-conversation memory. Same thread ID across invocations means the agent remembers what
-was said before.
+Thread memory is automatically enabled when vector tools are active — the agent defaults
+to thread ID `demo` so it remembers what was said across invocations. No manual setup needed.
 
 **Turn 1** — the presenter asks a broad question:
 

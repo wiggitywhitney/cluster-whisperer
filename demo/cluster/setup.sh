@@ -630,8 +630,6 @@ export CLUSTER_WHISPERER_KUBECONFIG=${KUBECONFIG_PATH}
 export CLUSTER_WHISPERER_CHROMA_URL=http://chroma.${BASE_DOMAIN}
 export CLUSTER_WHISPERER_QDRANT_URL=http://qdrant.${BASE_DOMAIN}
 
-# Multi-turn conversation memory (always "demo" — not audience-dependent)
-export CLUSTER_WHISPERER_THREAD=demo
 
 # OTel tracing configuration
 export OTEL_TRACING_ENABLED=true

@@ -259,8 +259,11 @@ async function main() {
       // Read kubeconfig from env var (demo governance: agent has cluster access, shell does not)
       const kubeconfig = process.env.CLUSTER_WHISPERER_KUBECONFIG || undefined;
 
-      // Thread ID for multi-turn conversation memory
-      const threadId = options.thread;
+      // Thread ID for multi-turn conversation memory.
+      // Auto-enable when vector tools are active — vector search implies multi-turn
+      // discovery where the agent asks follow-up questions.
+      const threadId = options.thread
+        ?? (toolGroups.includes("vector") ? "demo" : undefined);
 
       console.log(`\nQuestion: ${question}\n`);
 
