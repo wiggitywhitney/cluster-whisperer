@@ -70,6 +70,9 @@ export class LangGraphAdapter implements InvestigationAgent {
     const threadId = options?.threadId;
     const signal = options?.signal;
 
+    // Bail out immediately if the signal is already aborted before we do anything
+    if (signal?.aborted) return;
+
     // Load conversation memory if a thread ID is provided
     const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
 
