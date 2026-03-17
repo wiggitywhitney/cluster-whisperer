@@ -666,14 +666,15 @@ agent() {
   esac
 }
 tools() {
-  local valid=true
-  for t in \$(echo "\$1" | tr ',' ' '); do
+  local joined=\$(echo "\$*" | tr -d ' ' | tr ',' ' ')
+  local valid=true result=""
+  for t in \$joined; do
     case "\$t" in
-      kubectl|vector|apply) ;;
+      kubectl|vector|apply) result="\${result:+\$result,}\$t" ;;
       *) echo "Error: unknown tool '\$t'. Use: kubectl, vector, apply" >&2; valid=false ;;
     esac
   done
-  if \$valid; then export CLUSTER_WHISPERER_TOOLS=\$1; echo "Tools: \$1"; fi
+  if \$valid; then export CLUSTER_WHISPERER_TOOLS=\$result; echo "Tools: \$result"; fi
 }
 vectordb() {
   case "\$1" in
