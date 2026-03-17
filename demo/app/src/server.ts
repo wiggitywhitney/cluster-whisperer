@@ -43,7 +43,7 @@ export function createApp(deps: AppDependencies): Hono {
   <style>
     body {
       margin: 0;
-      background: #1a1a2e;
+      background: #ffffff;
       display: flex;
       justify-content: center;
       align-items: center;
