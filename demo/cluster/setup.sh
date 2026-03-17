@@ -682,6 +682,9 @@ vectordb() {
     *) echo "Error: unknown vector DB '\$1'. Use: chroma or qdrant" >&2; return 1 ;;
   esac
 }
+jaeger()  { echo "http://jaeger.${BASE_DOMAIN}"; }
+app()     { echo "http://demo-app.${BASE_DOMAIN}"; }
+datadog() { echo "https://app.datadoghq.com/llm/traces"; }
 
 # Audience-facing vars — set live on stage after each vote:
 #   agent langgraph        # (or vercel)
