@@ -272,7 +272,7 @@ async function main() {
       // adapter to stop iterating and then calls gracefulExit to flush OTel.
       const controller = new AbortController();
       process.once("SIGINT", async () => {
-        console.log("\n[interrupted]");
+        console.log("\n[interrupted]"); // eslint-disable-line no-console
         controller.abort();
         await gracefulExit(0);
       });
