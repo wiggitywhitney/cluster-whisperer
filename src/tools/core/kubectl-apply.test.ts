@@ -287,6 +287,7 @@ describe("kubectlApply", () => {
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("standard Kubernetes resource");
+      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
       expect(mockSpawnSync).not.toHaveBeenCalled();
     });
 
@@ -301,6 +302,7 @@ describe("kubectlApply", () => {
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("standard Kubernetes resource");
+      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
       expect(mockSpawnSync).not.toHaveBeenCalled();
     });
 
@@ -322,6 +324,7 @@ describe("kubectlApply", () => {
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("standard Kubernetes resource");
+      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
       expect(mockSpawnSync).not.toHaveBeenCalled();
     });
 

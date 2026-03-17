@@ -204,6 +204,26 @@ describe("kubectl-apply OTel spans", () => {
     });
   });
 
+  describe("built-in resource rejection", () => {
+    it("sets error status and BuiltInResourceRejection type", async () => {
+      const vectorStore = createMockVectorStore({
+        keywordSearch: vi.fn().mockResolvedValue([]),
+      });
+      const builtInManifest = [
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: nginx",
+      ].join("\n");
+
+      await kubectlApply(vectorStore, { manifest: builtInManifest });
+
+      const span = getSpanByName("kubectl apply")!;
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes["error.type"]).toBe("BuiltInResourceRejection");
+    });
+  });
+
   describe("catalog rejection", () => {
     it("sets catalog approved attribute to false", async () => {
       const vectorStore = createMockVectorStore({
