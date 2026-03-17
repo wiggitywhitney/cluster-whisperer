@@ -68,6 +68,7 @@ export class LangGraphAdapter implements InvestigationAgent {
     options?: InvestigateOptions
   ): AsyncGenerator<AgentEvent> {
     const threadId = options?.threadId;
+    const signal = options?.signal;
 
     // Load conversation memory if a thread ID is provided
     const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
@@ -92,6 +93,7 @@ export class LangGraphAdapter implements InvestigationAgent {
 
     // Translate LangGraph v2 events into AgentEvent objects
     for await (const event of eventStream) {
+      if (signal?.aborted) break;
       if (event.event !== "on_chain_stream") continue;
 
       const chunk = event.data?.chunk;
@@ -152,8 +154,8 @@ export class LangGraphAdapter implements InvestigationAgent {
       }
     }
 
-    // Save conversation memory after the investigation completes
-    if (checkpointer && threadId) {
+    // Save conversation memory after the investigation completes (skip if aborted)
+    if (checkpointer && threadId && !signal?.aborted) {
       saveCheckpointer(checkpointer, threadId);
     }
   }

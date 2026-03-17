@@ -162,6 +162,7 @@ export class VercelAgent implements InvestigationAgent {
         : { prompt: question }),
       tools,
       stopWhen: stepCountIs(RECURSION_LIMIT),
+      ...(options?.signal ? { abortSignal: options.signal } : {}),
       providerOptions: {
         anthropic: {
           thinking: { type: "enabled", budgetTokens: 4000 },

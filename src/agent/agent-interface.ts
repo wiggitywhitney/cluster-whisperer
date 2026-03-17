@@ -30,6 +30,14 @@ export interface InvestigateOptions {
    * Vercel uses ModelMessage JSON files).
    */
   threadId?: string;
+
+  /**
+   * AbortSignal for cancelling a running investigation.
+   * When the signal fires, the agent stops streaming and exits cleanly
+   * without saving conversation state. Wire to an AbortController in
+   * the caller (e.g., the CLI's SIGINT handler).
+   */
+  signal?: AbortSignal;
 }
 
 /**

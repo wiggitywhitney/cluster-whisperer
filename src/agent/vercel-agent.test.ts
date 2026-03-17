@@ -685,5 +685,24 @@ describe("VercelAgent", () => {
       // Clean up the generator
       await generator.return(undefined as never);
     });
+
+    it("passes signal as abortSignal to streamText", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        { type: "text-delta", text: "Hello" },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const controller = new AbortController();
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("What pods?", { signal: controller.signal })) {
+        events.push(event);
+      }
+
+      const callArgs = mockStreamText.mock.calls[0][0];
+      expect(callArgs.abortSignal).toBe(controller.signal);
+    });
   });
 });

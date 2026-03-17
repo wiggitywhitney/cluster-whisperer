@@ -605,4 +605,116 @@ describe("LangGraphAdapter", () => {
       result: "result data",
     });
   });
+
+  it("yields no events when signal is already aborted before iteration begins", async () => {
+    mockStreamEvents.mockReturnValue(
+      mockEventStream([
+        {
+          event: "on_chain_stream",
+          data: {
+            chunk: {
+              agent: {
+                messages: [
+                  { content: [{ type: "text", text: "Answer." }] },
+                ],
+              },
+            },
+          },
+        },
+      ])
+    );
+
+    const { LangGraphAdapter } = await import("./langgraph-adapter");
+    const controller = new AbortController();
+    controller.abort();
+
+    const adapter = new LangGraphAdapter({});
+    const events = await collectEvents(
+      adapter.investigate("Question?", { signal: controller.signal })
+    );
+
+    expect(events).toHaveLength(0);
+  });
+
+  it("stops yielding after signal is aborted mid-stream", async () => {
+    const controller = new AbortController();
+
+    // A stream that aborts the controller between two events
+    mockStreamEvents.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          event: "on_chain_stream",
+          data: {
+            chunk: {
+              agent: {
+                messages: [
+                  {
+                    content: [],
+                    tool_calls: [{ name: "kubectl_get", args: { resource: "pods" } }],
+                  },
+                ],
+              },
+            },
+          },
+        };
+        // Abort after the first event has been yielded
+        controller.abort();
+        yield {
+          event: "on_chain_stream",
+          data: {
+            chunk: {
+              agent: {
+                messages: [
+                  { content: [{ type: "text", text: "Final answer" }] },
+                ],
+              },
+            },
+          },
+        };
+      },
+    });
+
+    const { LangGraphAdapter } = await import("./langgraph-adapter");
+    const adapter = new LangGraphAdapter({});
+    const events = await collectEvents(
+      adapter.investigate("Question?", { signal: controller.signal })
+    );
+
+    // First event (tool_start) is emitted; second event (final_answer) is suppressed
+    const toolStarts = events.filter((e) => e.type === "tool_start");
+    const finalAnswers = events.filter((e) => e.type === "final_answer");
+    expect(toolStarts).toHaveLength(1);
+    expect(finalAnswers).toHaveLength(0);
+  });
+
+  it("does not save checkpointer when signal is aborted", async () => {
+    mockStreamEvents.mockReturnValue(
+      mockEventStream([
+        {
+          event: "on_chain_stream",
+          data: {
+            chunk: {
+              agent: {
+                messages: [
+                  { content: [{ type: "text", text: "Answer." }] },
+                ],
+              },
+            },
+          },
+        },
+      ])
+    );
+
+    const { LangGraphAdapter } = await import("./langgraph-adapter");
+    const { saveCheckpointer } = await import("./file-checkpointer");
+    const controller = new AbortController();
+    controller.abort();
+
+    const adapter = new LangGraphAdapter({});
+    await collectEvents(
+      adapter.investigate("Question?", { threadId: "my-thread", signal: controller.signal })
+    );
+
+    expect(saveCheckpointer).not.toHaveBeenCalled();
+  });
 });
