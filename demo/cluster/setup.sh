@@ -642,6 +642,9 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=${otel_endpoint}
 # This populates gen_ai.input.messages and gen_ai.output.messages on root spans
 export OTEL_CAPTURE_AI_PAYLOADS=true
 
+# Suppress OTel initialization logs in CLI output
+export CLUSTER_WHISPERER_QUIET=true
+
 # Demo app URL — 502 until the agent fixes the cluster, then shows the spider page
 export DEMO_APP_URL=http://demo-app.${BASE_DOMAIN}
 
