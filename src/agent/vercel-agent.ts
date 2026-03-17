@@ -162,6 +162,7 @@ export class VercelAgent implements InvestigationAgent {
         : { prompt: question }),
       tools,
       stopWhen: stepCountIs(RECURSION_LIMIT),
+      ...(options?.signal ? { abortSignal: options.signal } : {}),
       providerOptions: {
         anthropic: {
           thinking: { type: "enabled", budgetTokens: 4000 },
@@ -287,9 +288,9 @@ export class VercelAgent implements InvestigationAgent {
       yield { type: "final_answer", content: textBuffer };
     }
 
-    // Save conversation memory after investigation completes.
+    // Save conversation memory after investigation completes (skip if aborted).
     // result.response gives us the assistant + tool messages from all steps.
-    if (threadId) {
+    if (threadId && !options?.signal?.aborted) {
       const response = await result.response;
       const fullHistory: ModelMessage[] = [
         ...inputMessages,

@@ -267,6 +267,16 @@ async function main() {
 
       console.log(`\nQuestion: ${question}\n`);
 
+      // Create an AbortController so Ctrl+C can stop the agent mid-stream.
+      // The SIGINT handler aborts the controller, which signals the agent
+      // adapter to stop iterating and then calls gracefulExit to flush OTel.
+      const controller = new AbortController();
+      process.once("SIGINT", async () => {
+        console.log("\n[interrupted]"); // eslint-disable-line no-console
+        controller.abort();
+        await gracefulExit(0);
+      });
+
       /**
        * Wrap the entire agent invocation with tracing.
        *
@@ -307,7 +317,7 @@ async function main() {
          * - tool_result: Tool output (indented, truncated)
          * - final_answer: Agent's conclusion (after separator)
          */
-        for await (const event of agent.investigate(question, { threadId }) as AsyncGenerator<AgentEvent>) {
+        for await (const event of agent.investigate(question, { threadId, signal: controller.signal }) as AsyncGenerator<AgentEvent>) {
           switch (event.type) {
             case "thinking":
               // Display thinking so users can see the reasoning process

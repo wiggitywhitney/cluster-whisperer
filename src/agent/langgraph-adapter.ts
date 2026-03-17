@@ -68,6 +68,10 @@ export class LangGraphAdapter implements InvestigationAgent {
     options?: InvestigateOptions
   ): AsyncGenerator<AgentEvent> {
     const threadId = options?.threadId;
+    const signal = options?.signal;
+
+    // Bail out immediately if the signal is already aborted before we do anything
+    if (signal?.aborted) return;
 
     // Load conversation memory if a thread ID is provided
     const checkpointer = threadId ? loadCheckpointer(threadId) : undefined;
@@ -92,6 +96,7 @@ export class LangGraphAdapter implements InvestigationAgent {
 
     // Translate LangGraph v2 events into AgentEvent objects
     for await (const event of eventStream) {
+      if (signal?.aborted) break;
       if (event.event !== "on_chain_stream") continue;
 
       const chunk = event.data?.chunk;
@@ -106,6 +111,7 @@ export class LangGraphAdapter implements InvestigationAgent {
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type === "thinking" && block.thinking) {
+                if (signal?.aborted) return;
                 yield { type: "thinking", content: block.thinking };
               }
             }
@@ -114,6 +120,7 @@ export class LangGraphAdapter implements InvestigationAgent {
           // Tool calls = intermediate step
           if (msg.tool_calls?.length) {
             for (const tc of msg.tool_calls) {
+              if (signal?.aborted) return;
               yield {
                 type: "tool_start",
                 toolName: tc.name,
@@ -134,6 +141,7 @@ export class LangGraphAdapter implements InvestigationAgent {
             }
 
             if (answer.trim()) {
+              if (signal?.aborted) return;
               yield { type: "final_answer", content: answer };
             }
           }
@@ -143,6 +151,7 @@ export class LangGraphAdapter implements InvestigationAgent {
       // Tool result: output from a tool execution
       if (chunk.tools?.messages) {
         for (const msg of chunk.tools.messages) {
+          if (signal?.aborted) return;
           yield {
             type: "tool_result",
             toolName: msg.name ?? "unknown",
@@ -152,8 +161,8 @@ export class LangGraphAdapter implements InvestigationAgent {
       }
     }
 
-    // Save conversation memory after the investigation completes
-    if (checkpointer && threadId) {
+    // Save conversation memory after the investigation completes (skip if aborted)
+    if (checkpointer && threadId && !signal?.aborted) {
       saveCheckpointer(checkpointer, threadId);
     }
   }

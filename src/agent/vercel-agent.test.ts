@@ -40,6 +40,7 @@ const mockStreamText = vi.fn().mockImplementation(() => ({
       yield part;
     }
   })(),
+  response: Promise.resolve({ messages: [] }),
 }));
 
 const mockStepCountIs = vi.fn().mockReturnValue("step-count-predicate");
@@ -113,6 +114,14 @@ vi.mock("../tracing", () => ({
     },
   }),
   isCaptureAiPayloads: false,
+}));
+
+// Mock vercel-thread-store so thread save/load don't touch the filesystem
+const mockSaveVercelThread = vi.fn();
+const mockLoadVercelThread = vi.fn().mockReturnValue([]);
+vi.mock("./vercel-thread-store", () => ({
+  saveVercelThread: (...args: unknown[]) => mockSaveVercelThread(...args),
+  loadVercelThread: (...args: unknown[]) => mockLoadVercelThread(...args),
 }));
 
 // Mock fs for system prompt loading
@@ -684,6 +693,45 @@ describe("VercelAgent", () => {
 
       // Clean up the generator
       await generator.return(undefined as never);
+    });
+
+    it("passes signal as abortSignal to streamText", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        { type: "text-delta", text: "Hello" },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const controller = new AbortController();
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("What pods?", { signal: controller.signal })) {
+        events.push(event);
+      }
+
+      const callArgs = mockStreamText.mock.calls[0][0];
+      expect(callArgs.abortSignal).toBe(controller.signal);
+    });
+
+    it("does not save thread state when signal is aborted", async () => {
+      const { VercelAgent } = await import("./vercel-agent");
+
+      mockStreamParts = [
+        { type: "text-delta", text: "Hello" },
+        { type: "finish-step", finishReason: "stop" },
+      ];
+
+      const controller = new AbortController();
+      controller.abort();
+
+      const agent = new VercelAgent({ toolGroups: ["kubectl"] });
+      const events: AgentEvent[] = [];
+      for await (const event of agent.investigate("What pods?", { threadId: "test-thread", signal: controller.signal })) {
+        events.push(event);
+      }
+
+      expect(mockSaveVercelThread).not.toHaveBeenCalled();
     });
   });
 });
