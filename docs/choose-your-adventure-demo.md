@@ -139,21 +139,27 @@ The presenter adds the apply tool (same thread — the agent remembers which dat
 
 ```bash
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it. Once it's running, give me the URL where I can access my app."
+cluster-whisperer "Go ahead and deploy it"
 ```
 
 Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
 platform catalog. The tool validates the resource type against the capabilities
 collection before applying — this is enforced in code, not in the prompt.
 
-The agent deploys the platform-approved ManagedService. The PostgreSQL database comes
-up, and the demo app transitions from CrashLoopBackOff to Running — the audience sees
-the app come alive.
+The agent deploys the platform-approved ManagedService. Crossplane provisions the
+PostgreSQL database and the `db-service` endpoint (~15 seconds). The presenter talks
+through what just happened while the database comes up, then asks:
 
-The demo app is accessible at `http://demo-app.<base-domain>` (the `DEMO_APP_URL` from
-`demo/.env`). While the app was crashing, this URL returned 502. Now it serves a spider
-page with clickable zones linking to Whitney's and Viktor's YouTube channels. The presenter
-can share this URL with the audience or open it on screen as the payoff moment.
+```bash
+cluster-whisperer "Is my app running now? What's the URL to access it?"
+```
+
+The agent checks pods and ingresses, finds the demo app is now Running, and returns
+`http://demo-app.<base-domain>`. The presenter opens the URL — the spider page appears
+with clickable zones linking to Whitney's and Viktor's YouTube channels.
+
+The demo app URL is also in `demo/.env` as `DEMO_APP_URL`. While the app was crashing,
+this URL returned 502. Now it serves the spider page — the payoff moment.
 
 > "The agent found the right resource, and it could only deploy from the approved
 > catalog — the platform team controls what's allowed."
@@ -204,8 +210,10 @@ cluster-whisperer "Yes please, will you deploy it for me?"
 
 # Act 3b: add the apply tool → agent remembers which database, now it can deploy
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
-cluster-whisperer "Go ahead and deploy it. Once it's running, give me the URL where I can access my app."
-# Agent deploys, checks ingress, returns the demo-app URL → open in browser
+cluster-whisperer "Go ahead and deploy it"
+# talk through what happened while Crossplane provisions (~15s)
+cluster-whisperer "Is my app running now? What's the URL to access it?"
+# Agent checks pods + ingress, returns the demo-app URL → open in browser
 
 # Vote 3 result → Act 4
 # Open Jaeger or Datadog UI in the browser
