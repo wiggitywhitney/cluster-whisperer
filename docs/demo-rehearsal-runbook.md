@@ -69,7 +69,6 @@ Pick a vector backend (chroma or qdrant):
 ```bash
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-export CLUSTER_WHISPERER_THREAD=demo
 ```
 
 **Turn 1:**

@@ -92,11 +92,11 @@ The presenter sets the vector backend based on the vote and adds the vector tool
 ```bash
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant   # (or chroma)
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-export CLUSTER_WHISPERER_THREAD=demo
 ```
 
-The `CLUSTER_WHISPERER_THREAD` env var enables multi-turn conversation memory. Same thread ID across
-invocations means the agent remembers what was said before.
+`CLUSTER_WHISPERER_THREAD=demo` is already set from `demo/.env`, enabling multi-turn
+conversation memory. Same thread ID across invocations means the agent remembers what
+was said before.
 
 **Turn 1** — the presenter asks a broad question:
 
@@ -200,7 +200,6 @@ cluster-whisperer "Do you know what database I should use?"
 # Vote 2 result → Act 3a (vector search, multi-turn conversation)
 export CLUSTER_WHISPERER_VECTOR_BACKEND=qdrant          # (or chroma)
 export CLUSTER_WHISPERER_TOOLS=kubectl,vector
-export CLUSTER_WHISPERER_THREAD=demo
 cluster-whisperer "What database should I deploy for my app?"
 # Agent finds 20 similar ManagedService resources, asks follow-up questions
 cluster-whisperer "I'm not sure. My team is the You Choose team. I don't know if it's Postgres or MySQL."
