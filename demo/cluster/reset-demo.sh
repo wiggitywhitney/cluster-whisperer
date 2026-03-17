@@ -80,11 +80,25 @@ log_info "Waiting for Composition resources to be cleaned up..."
 # Give Crossplane a moment to process the deletion
 sleep 5
 
-# Check if db-service still exists
+# Clean up all non-default services in the default namespace.
+# The Composition creates db-service and platform-postgresql, and the agent may
+# create additional services during investigation. Only keep demo-app and kubernetes.
+for svc in $(kubectl get svc -n default --no-headers 2>/dev/null | awk '{print $1}' | grep -v -E '^(kubernetes|demo-app)$'); do
+    log_info "Deleting leftover service: ${svc}"
+    kubectl delete svc "${svc}" -n default --wait=false 2>/dev/null || true
+done
+
+# Wait for db-service specifically (Crossplane may recreate it during deletion)
 if kubectl get svc db-service -n default --no-headers 2>/dev/null | grep -q db-service; then
     log_warn "db-service still exists, waiting for Crossplane cleanup..."
     kubectl wait --for=delete svc/db-service -n default --timeout=30s 2>/dev/null || true
 fi
+
+# Clean up any leftover deployments from Compositions (e.g., platform-postgresql)
+for deploy in $(kubectl get deployments -n default --no-headers 2>/dev/null | awk '{print $1}' | grep -v -E '^demo-app$'); do
+    log_info "Deleting leftover deployment: ${deploy}"
+    kubectl delete deployment "${deploy}" -n default --wait=false 2>/dev/null || true
+done
 
 # ─── Step 3: Restart demo app so it's back in CrashLoopBackOff ───────────────
 # Scale to 0 then back to 1 instead of rollout restart. This avoids the old
