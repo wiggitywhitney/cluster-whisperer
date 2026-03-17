@@ -111,6 +111,7 @@ export class LangGraphAdapter implements InvestigationAgent {
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type === "thinking" && block.thinking) {
+                if (signal?.aborted) return;
                 yield { type: "thinking", content: block.thinking };
               }
             }
@@ -119,6 +120,7 @@ export class LangGraphAdapter implements InvestigationAgent {
           // Tool calls = intermediate step
           if (msg.tool_calls?.length) {
             for (const tc of msg.tool_calls) {
+              if (signal?.aborted) return;
               yield {
                 type: "tool_start",
                 toolName: tc.name,
@@ -139,6 +141,7 @@ export class LangGraphAdapter implements InvestigationAgent {
             }
 
             if (answer.trim()) {
+              if (signal?.aborted) return;
               yield { type: "final_answer", content: answer };
             }
           }
@@ -148,6 +151,7 @@ export class LangGraphAdapter implements InvestigationAgent {
       // Tool result: output from a tool execution
       if (chunk.tools?.messages) {
         for (const msg of chunk.tools.messages) {
+          if (signal?.aborted) return;
           yield {
             type: "tool_result",
             toolName: msg.name ?? "unknown",
