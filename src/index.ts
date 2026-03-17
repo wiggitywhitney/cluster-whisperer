@@ -217,7 +217,7 @@ async function main() {
   // -------------------------------------------------------------------------
 
   program
-    .argument("<question>", "Natural language question about your cluster")
+    .argument("<question...>", "Natural language question about your cluster")
     .addOption(
       new Option("--tools <groups>", `Comma-separated tool groups: kubectl, vector, apply (default: ${DEFAULT_TOOL_GROUPS.join(",")})`)
         .env("CLUSTER_WHISPERER_TOOLS")
@@ -234,7 +234,10 @@ async function main() {
       new Option("--thread <id>", "Conversation thread ID for multi-turn memory. Same ID resumes prior conversation.")
         .env("CLUSTER_WHISPERER_THREAD")
     )
-    .action(async (question: string, options: { tools?: string; agent?: string; vectorBackend?: string; thread?: string }) => {
+    .action(async (questionParts: string[], options: { tools?: string; agent?: string; vectorBackend?: string; thread?: string }) => {
+      // Join variadic args into a single question (so quotes are optional)
+      const question = questionParts.join(" ");
+
       // Validate environment before doing anything else
       await validateInvestigateEnvironment();
 
