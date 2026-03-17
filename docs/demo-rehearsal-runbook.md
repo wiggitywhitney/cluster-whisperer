@@ -157,7 +157,7 @@ Everything was instrumented with OpenTelemetry the whole time.
 ## Troubleshooting
 
 **Vector search returns "not available":**
-Check that `CLUSTER_WHISPERER_QDRANT_URL` (or `_CHROMA_URL`) is exported. `source demo/.env` sets it but doesn't export. Run: `export CLUSTER_WHISPERER_QDRANT_URL`
+Verify `source demo/.env` was run in this terminal: `echo $CLUSTER_WHISPERER_QDRANT_URL`. If empty, re-source.
 
 **Agent says "database already deployed":**
 Stale thread memory. Run `rm -f data/threads/*.json` and start Act 3a over.
