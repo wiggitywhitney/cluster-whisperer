@@ -1194,18 +1194,17 @@ verify_vector_dbs() {
     local retries=12
     local retry_interval=10
 
-    # Chroma health check with retries: GET /api/v1/heartbeat
+    # Chroma health check with retries: GET /api/v2/heartbeat (Chroma 1.x uses v2 API)
     # Uses port-forward + local curl because the container image may lack wget/curl.
+    # Port-forward is kept alive across retries to avoid GKE tunnel setup latency.
     local chroma_ok=false
+    kubectl port-forward -n chroma \
+        svc/chroma-chromadb 18000:8000 &>/dev/null &
+    local chroma_pf_pid=$!
+    sleep 4
     for ((i=1; i<=retries; i++)); do
         local chroma_health
-        kubectl port-forward -n chroma \
-            svc/chroma-chromadb 18000:8000 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${chroma_health}" ]]; then
             log_success "Chroma is responding (heartbeat ok)"
             chroma_ok=true
@@ -1216,23 +1215,27 @@ verify_vector_dbs() {
             sleep $retry_interval
         fi
     done
+    kill $chroma_pf_pid 2>/dev/null || true
+    wait $chroma_pf_pid 2>/dev/null || true
     if [[ "${chroma_ok}" != "true" ]]; then
+        # Diagnostic: try once more with verbose curl to show the actual error
+        local diag
+        diag=$(curl -sv http://localhost:18000/api/v2/heartbeat 2>&1 || true)
         log_warning "Chroma health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
 
     # Qdrant health check with retries: GET /healthz
     # Uses port-forward + local curl because the container image may lack wget/curl.
     local qdrant_ok=false
+    kubectl port-forward -n qdrant \
+        qdrant-0 16333:6333 &>/dev/null &
+    local qdrant_pf_pid=$!
+    sleep 4
     for ((i=1; i<=retries; i++)); do
         local qdrant_health
-        kubectl port-forward -n qdrant \
-            qdrant-0 16333:6333 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${qdrant_health}" ]]; then
             log_success "Qdrant is responding (healthz ok)"
             qdrant_ok=true
@@ -1243,6 +1246,8 @@ verify_vector_dbs() {
             sleep $retry_interval
         fi
     done
+    kill $qdrant_pf_pid 2>/dev/null || true
+    wait $qdrant_pf_pid 2>/dev/null || true
     if [[ "${qdrant_ok}" != "true" ]]; then
         log_warning "Qdrant health check failed after ${retries} attempts"
         failures=$((failures + 1))
@@ -1363,21 +1368,20 @@ verify_observability() {
     log_info "Verifying observability backends..."
 
     local failures=0
-    local retries=6
+    local retries=12
     local retry_interval=10
 
     # Jaeger health check with retries via the v2 healthcheck extension
     # Uses port-forward + local curl for consistency with other health checks.
+    # Port-forward is kept alive across retries to avoid GKE tunnel setup latency.
     local jaeger_ok=false
+    kubectl port-forward -n jaeger \
+        deploy/jaeger 13133:13133 &>/dev/null &
+    local jaeger_pf_pid=$!
+    sleep 4
     for ((i=1; i<=retries; i++)); do
         local jaeger_health
-        kubectl port-forward -n jaeger \
-            deploy/jaeger 13133:13133 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${jaeger_health}" ]]; then
             log_success "Jaeger is responding (health check ok)"
             jaeger_ok=true
@@ -1388,6 +1392,8 @@ verify_observability() {
             sleep $retry_interval
         fi
     done
+    kill $jaeger_pf_pid 2>/dev/null || true
+    wait $jaeger_pf_pid 2>/dev/null || true
     if [[ "${jaeger_ok}" != "true" ]]; then
         log_warning "Jaeger health check failed after ${retries} attempts"
         failures=$((failures + 1))
@@ -1396,15 +1402,13 @@ verify_observability() {
     # OTel Collector health check with retries (default health extension on 13133)
     # Uses port-forward + local curl because the collector image is distroless.
     local otel_ok=false
+    kubectl port-forward -n otel-collector \
+        deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
+    local otel_pf_pid=$!
+    sleep 4
     for ((i=1; i<=retries; i++)); do
         local otel_health
-        kubectl port-forward -n otel-collector \
-            deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${otel_health}" ]]; then
             log_success "OTel Collector is responding (health check ok)"
             otel_ok=true
@@ -1415,6 +1419,8 @@ verify_observability() {
             sleep $retry_interval
         fi
     done
+    kill $otel_pf_pid 2>/dev/null || true
+    wait $otel_pf_pid 2>/dev/null || true
     if [[ "${otel_ok}" != "true" ]]; then
         log_warning "OTel Collector health check failed after ${retries} attempts"
         failures=$((failures + 1))
@@ -1447,7 +1453,7 @@ verify_trace_pipeline() {
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
     trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
-    sleep 2
+    sleep 4
 
     log_info "Sending test trace via agent query..."
     OTEL_TRACING_ENABLED=true \
@@ -1468,7 +1474,7 @@ verify_trace_pipeline() {
         deploy/jaeger 16686:16686 &>/dev/null &
     local jaeger_pf_pid=$!
     trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
-    sleep 2
+    sleep 4
 
     local jaeger_services
     local trace_verified=false

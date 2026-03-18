@@ -83,6 +83,7 @@ config:
         key: ${env:DD_API_KEY}
         site: datadoghq.com
   service:
+    extensions: [health_check]
     pipelines:
       traces:
         receivers: [otlp]
