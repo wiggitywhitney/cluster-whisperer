@@ -1261,12 +1261,15 @@ verify_vector_dbs() {
             sleep $retry_interval
         fi
     done
-    kill $qdrant_pf_pid 2>/dev/null || true
-    wait $qdrant_pf_pid 2>/dev/null || true
     if [[ "${qdrant_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:16333/healthz 2>&1 || true)
         log_warning "Qdrant health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $qdrant_pf_pid 2>/dev/null || true
+    wait $qdrant_pf_pid 2>/dev/null || true
 
     if [[ $failures -eq 0 ]]; then
         log_success "Both vector databases verified and healthy"
@@ -1406,12 +1409,15 @@ verify_observability() {
             sleep $retry_interval
         fi
     done
-    kill $jaeger_pf_pid 2>/dev/null || true
-    wait $jaeger_pf_pid 2>/dev/null || true
     if [[ "${jaeger_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:13133/status 2>&1 || true)
         log_warning "Jaeger health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $jaeger_pf_pid 2>/dev/null || true
+    wait $jaeger_pf_pid 2>/dev/null || true
 
     # OTel Collector health check with retries (default health extension on 13133)
     # Uses port-forward + local curl because the collector image is distroless.
@@ -1432,12 +1438,15 @@ verify_observability() {
             sleep $retry_interval
         fi
     done
-    kill $otel_pf_pid 2>/dev/null || true
-    wait $otel_pf_pid 2>/dev/null || true
     if [[ "${otel_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:13134 2>&1 || true)
         log_warning "OTel Collector health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $otel_pf_pid 2>/dev/null || true
+    wait $otel_pf_pid 2>/dev/null || true
 
     if [[ $failures -eq 0 ]]; then
         log_success "Both observability backends verified and healthy"
