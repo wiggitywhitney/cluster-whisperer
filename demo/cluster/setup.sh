@@ -1215,16 +1215,16 @@ verify_vector_dbs() {
             sleep $retry_interval
         fi
     done
-    kill $chroma_pf_pid 2>/dev/null || true
-    wait $chroma_pf_pid 2>/dev/null || true
     if [[ "${chroma_ok}" != "true" ]]; then
-        # Diagnostic: try once more with verbose curl to show the actual error
+        # Diagnostic: verbose curl while port-forward is still alive
         local diag
         diag=$(curl -sv http://localhost:18000/api/v2/heartbeat 2>&1 || true)
         log_warning "Chroma health check failed after ${retries} attempts"
         log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $chroma_pf_pid 2>/dev/null || true
+    wait $chroma_pf_pid 2>/dev/null || true
 
     # Qdrant health check with retries: GET /healthz
     # Uses port-forward + local curl because the container image may lack wget/curl.
