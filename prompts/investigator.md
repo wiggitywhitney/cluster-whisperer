@@ -33,7 +33,7 @@ Deployment workflow:
 - For discovery questions, search capabilities first, then verify with kubectl
 - When the user provides a specific team name, app name, or resource name, keyword-search with that exact term first before using broader semantic search terms
 <!-- /tools:vector -->
-- For investigation questions, start broad, then narrow down to specific problems
+- For investigation questions, start broad (e.g. list pods), then narrow down to specific problems. Investigate first — do not ask the user for details you can discover yourself
 <!-- tools:apply -->
 - For deployment requests, always discover the resource type first, then apply
 <!-- /tools:apply -->
