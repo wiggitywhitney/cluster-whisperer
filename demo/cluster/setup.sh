@@ -1187,6 +1187,23 @@ install_qdrant() {
 # Verify both vector databases are responding to health checks via in-cluster
 # port-forward probes. This catches cases where pods are "Ready" but the
 # application inside hasn't fully started.
+# Start or restart a port-forward, storing its PID in the named variable.
+# Usage: _ensure_port_forward PID_VAR_NAME namespace target local_port remote_port
+_ensure_port_forward() {
+    local pid_var="$1" ns="$2" target="$3" local_port="$4" remote_port="$5"
+    local current_pid="${!pid_var:-}"
+
+    # If the port-forward is still alive, nothing to do
+    if [[ -n "${current_pid}" ]] && kill -0 "${current_pid}" 2>/dev/null; then
+        return
+    fi
+
+    # Start a fresh port-forward
+    kubectl port-forward -n "${ns}" "${target}" "${local_port}:${remote_port}" &>/dev/null &
+    eval "${pid_var}=$!"
+    sleep 4
+}
+
 verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
@@ -1194,18 +1211,16 @@ verify_vector_dbs() {
     local retries=12
     local retry_interval=10
 
-    # Chroma health check with retries: GET /api/v1/heartbeat
+    # Chroma health check with retries: GET /api/v2/heartbeat (Chroma 1.x uses v2 API)
     # Uses port-forward + local curl because the container image may lack wget/curl.
+    # Port-forward is kept alive across retries; restarted if it dies mid-loop.
     local chroma_ok=false
+    local chroma_pf_pid=""
+    _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
         local chroma_health
-        kubectl port-forward -n chroma \
-            svc/chroma-chromadb 18000:8000 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${chroma_health}" ]]; then
             log_success "Chroma is responding (heartbeat ok)"
             chroma_ok=true
@@ -1217,22 +1232,25 @@ verify_vector_dbs() {
         fi
     done
     if [[ "${chroma_ok}" != "true" ]]; then
+        # Diagnostic: verbose curl while port-forward is still alive
+        local diag
+        diag=$(curl -sv http://localhost:18000/api/v2/heartbeat 2>&1 || true)
         log_warning "Chroma health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $chroma_pf_pid 2>/dev/null || true
+    wait $chroma_pf_pid 2>/dev/null || true
 
     # Qdrant health check with retries: GET /healthz
     # Uses port-forward + local curl because the container image may lack wget/curl.
     local qdrant_ok=false
+    local qdrant_pf_pid=""
+    _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
         local qdrant_health
-        kubectl port-forward -n qdrant \
-            qdrant-0 16333:6333 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${qdrant_health}" ]]; then
             log_success "Qdrant is responding (healthz ok)"
             qdrant_ok=true
@@ -1244,9 +1262,14 @@ verify_vector_dbs() {
         fi
     done
     if [[ "${qdrant_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:16333/healthz 2>&1 || true)
         log_warning "Qdrant health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $qdrant_pf_pid 2>/dev/null || true
+    wait $qdrant_pf_pid 2>/dev/null || true
 
     if [[ $failures -eq 0 ]]; then
         log_success "Both vector databases verified and healthy"
@@ -1363,21 +1386,19 @@ verify_observability() {
     log_info "Verifying observability backends..."
 
     local failures=0
-    local retries=6
+    local retries=12
     local retry_interval=10
 
     # Jaeger health check with retries via the v2 healthcheck extension
     # Uses port-forward + local curl for consistency with other health checks.
+    # Port-forward is kept alive across retries; restarted if it dies mid-loop.
     local jaeger_ok=false
+    local jaeger_pf_pid=""
+    _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
         local jaeger_health
-        kubectl port-forward -n jaeger \
-            deploy/jaeger 13133:13133 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${jaeger_health}" ]]; then
             log_success "Jaeger is responding (health check ok)"
             jaeger_ok=true
@@ -1389,22 +1410,24 @@ verify_observability() {
         fi
     done
     if [[ "${jaeger_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:13133/status 2>&1 || true)
         log_warning "Jaeger health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $jaeger_pf_pid 2>/dev/null || true
+    wait $jaeger_pf_pid 2>/dev/null || true
 
     # OTel Collector health check with retries (default health extension on 13133)
     # Uses port-forward + local curl because the collector image is distroless.
     local otel_ok=false
+    local otel_pf_pid=""
+    _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
         local otel_health
-        kubectl port-forward -n otel-collector \
-            deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
-        local pf_pid=$!
-        sleep 2
         otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
-        kill $pf_pid 2>/dev/null || true
-        wait $pf_pid 2>/dev/null || true
         if [[ -n "${otel_health}" ]]; then
             log_success "OTel Collector is responding (health check ok)"
             otel_ok=true
@@ -1416,9 +1439,14 @@ verify_observability() {
         fi
     done
     if [[ "${otel_ok}" != "true" ]]; then
+        local diag
+        diag=$(curl -sv http://localhost:13134 2>&1 || true)
         log_warning "OTel Collector health check failed after ${retries} attempts"
+        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
+    kill $otel_pf_pid 2>/dev/null || true
+    wait $otel_pf_pid 2>/dev/null || true
 
     if [[ $failures -eq 0 ]]; then
         log_success "Both observability backends verified and healthy"
@@ -1447,7 +1475,7 @@ verify_trace_pipeline() {
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
     trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
-    sleep 2
+    sleep 4
 
     log_info "Sending test trace via agent query..."
     OTEL_TRACING_ENABLED=true \
@@ -1468,7 +1496,7 @@ verify_trace_pipeline() {
         deploy/jaeger 16686:16686 &>/dev/null &
     local jaeger_pf_pid=$!
     trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
-    sleep 2
+    sleep 4
 
     local jaeger_services
     local trace_verified=false
