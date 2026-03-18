@@ -1187,6 +1187,23 @@ install_qdrant() {
 # Verify both vector databases are responding to health checks via in-cluster
 # port-forward probes. This catches cases where pods are "Ready" but the
 # application inside hasn't fully started.
+# Start or restart a port-forward, storing its PID in the named variable.
+# Usage: _ensure_port_forward PID_VAR_NAME namespace target local_port remote_port
+_ensure_port_forward() {
+    local pid_var="$1" ns="$2" target="$3" local_port="$4" remote_port="$5"
+    local current_pid="${!pid_var:-}"
+
+    # If the port-forward is still alive, nothing to do
+    if [[ -n "${current_pid}" ]] && kill -0 "${current_pid}" 2>/dev/null; then
+        return
+    fi
+
+    # Start a fresh port-forward
+    kubectl port-forward -n "${ns}" "${target}" "${local_port}:${remote_port}" &>/dev/null &
+    eval "${pid_var}=$!"
+    sleep 4
+}
+
 verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
@@ -1196,13 +1213,12 @@ verify_vector_dbs() {
 
     # Chroma health check with retries: GET /api/v2/heartbeat (Chroma 1.x uses v2 API)
     # Uses port-forward + local curl because the container image may lack wget/curl.
-    # Port-forward is kept alive across retries to avoid GKE tunnel setup latency.
+    # Port-forward is kept alive across retries; restarted if it dies mid-loop.
     local chroma_ok=false
-    kubectl port-forward -n chroma \
-        svc/chroma-chromadb 18000:8000 &>/dev/null &
-    local chroma_pf_pid=$!
-    sleep 4
+    local chroma_pf_pid=""
+    _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
         local chroma_health
         chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
         if [[ -n "${chroma_health}" ]]; then
@@ -1229,11 +1245,10 @@ verify_vector_dbs() {
     # Qdrant health check with retries: GET /healthz
     # Uses port-forward + local curl because the container image may lack wget/curl.
     local qdrant_ok=false
-    kubectl port-forward -n qdrant \
-        qdrant-0 16333:6333 &>/dev/null &
-    local qdrant_pf_pid=$!
-    sleep 4
+    local qdrant_pf_pid=""
+    _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
         local qdrant_health
         qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
         if [[ -n "${qdrant_health}" ]]; then
@@ -1373,13 +1388,12 @@ verify_observability() {
 
     # Jaeger health check with retries via the v2 healthcheck extension
     # Uses port-forward + local curl for consistency with other health checks.
-    # Port-forward is kept alive across retries to avoid GKE tunnel setup latency.
+    # Port-forward is kept alive across retries; restarted if it dies mid-loop.
     local jaeger_ok=false
-    kubectl port-forward -n jaeger \
-        deploy/jaeger 13133:13133 &>/dev/null &
-    local jaeger_pf_pid=$!
-    sleep 4
+    local jaeger_pf_pid=""
+    _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
         local jaeger_health
         jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
         if [[ -n "${jaeger_health}" ]]; then
@@ -1402,11 +1416,10 @@ verify_observability() {
     # OTel Collector health check with retries (default health extension on 13133)
     # Uses port-forward + local curl because the collector image is distroless.
     local otel_ok=false
-    kubectl port-forward -n otel-collector \
-        deploy/otel-collector-opentelemetry-collector 13134:13133 &>/dev/null &
-    local otel_pf_pid=$!
-    sleep 4
+    local otel_pf_pid=""
+    _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
     for ((i=1; i<=retries; i++)); do
+        _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
         local otel_health
         otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
         if [[ -n "${otel_health}" ]]; then
