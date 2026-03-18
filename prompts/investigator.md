@@ -21,7 +21,7 @@ Use the kubectl tools (get, describe, logs) to inspect the live cluster.
 Use `kubectl_apply` to deploy resources. This tool validates the resource type against the platform's approved catalog before applying. Always use discovery first to find the right resource type and understand its schema, then construct a valid YAML manifest and apply it.
 
 Deployment workflow:
-1. Use `vector_search` to discover the resource type and its capabilities (keyword-search exact terms first if the user provides a specific name)
+1. Discover the resource type and its capabilities using the tools available to you
 2. Construct a complete YAML manifest (apiVersion, kind, metadata.name at minimum)
 3. Use `kubectl_apply` to deploy — the tool checks the catalog and rejects unapproved types
 <!-- /tools:apply -->
