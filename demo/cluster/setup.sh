@@ -1823,11 +1823,28 @@ deploy_cluster_whisperer_serve() {
         # unmodified on GKE creates a pod that immediately enters ImagePullBackOff,
         # and the subsequent patch triggers a second rollout — adding minutes of
         # unnecessary delay while the old pod terminates.
-        sed \
-            -e "s|image: cluster-whisperer:latest|image: ${tagged_image}|" \
-            -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
-            "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml" \
-            | kubectl apply -f -
+        #
+        # Retry loop: after registering 300+ CRDs, the GKE control plane may
+        # auto-resize, causing transient TLS handshake timeouts on the API server.
+        local retries=5
+        local retry_interval=15
+        local applied=false
+        for i in $(seq 1 "$retries"); do
+            if sed \
+                -e "s|image: cluster-whisperer:latest|image: ${tagged_image}|" \
+                -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
+                "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml" \
+                | kubectl apply -f - 2>/dev/null; then
+                applied=true
+                break
+            fi
+            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} API server not ready, retrying in ${retry_interval}s..."
+            sleep "$retry_interval"
+        done
+        if [[ "${applied}" != "true" ]]; then
+            log_error "Failed to apply cluster-whisperer manifest after ${retries} attempts"
+            return 1
+        fi
     fi
 
     wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600
