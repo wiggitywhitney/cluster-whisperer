@@ -1841,8 +1841,10 @@ deploy_cluster_whisperer_serve() {
                 applied=true
                 break
             fi
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} kubectl apply failed, retrying in ${retry_interval}s..."
-            sleep "$retry_interval"
+            if [[ $i -lt $retries ]]; then
+                echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} kubectl apply failed, retrying in ${retry_interval}s..."
+                sleep "$retry_interval"
+            fi
         done
         if [[ "${applied}" != "true" ]]; then
             log_error "Failed to apply cluster-whisperer manifest after ${retries} attempts"
