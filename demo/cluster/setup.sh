@@ -1176,7 +1176,7 @@ install_qdrant() {
         --namespace qdrant \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/qdrant.yaml" \
-        --wait --timeout 180s
+        --wait --timeout 300s
 
     log_success "Qdrant installed"
 
