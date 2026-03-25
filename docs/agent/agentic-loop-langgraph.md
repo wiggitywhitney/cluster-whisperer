@@ -83,7 +83,7 @@ const model = new ChatAnthropic({
 
 **Extended Thinking**: The `thinking` option enables Claude to show its reasoning process. With `interleaved-thinking-2025-05-14`, Claude reasons between every tool call - not just at the start. This makes the "Reason" step of ReAct visible.
 
-See [Extended Thinking Research](./extended-thinking-research.md) for details.
+See [Extended Thinking Research](../research/extended-thinking-research.md) for details.
 
 ### 2. createReactAgent
 

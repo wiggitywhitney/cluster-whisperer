@@ -200,7 +200,7 @@ Add to your `.mcp.json` (in project root or `~/.claude/`):
 
 **Note**: Use an absolute path in `args`. MCP clients spawn the server as a subprocess, and relative paths resolve from the client's working directory.
 
-See `docs/mcp-server.md` for details on how MCP works.
+See [`docs/agent/mcp-server.md`](docs/agent/mcp-server.md) for details on how MCP works.
 
 ### REST API
 
@@ -329,7 +329,7 @@ Default: `--tools kubectl,vector` (backwards compatible).
 
 ## Observability
 
-OpenTelemetry tracing provides visibility into agent operations. OTel SDK packages are **optional peer dependencies** — tracing works when installed but everything runs fine without them. See [`docs/opentelemetry.md`](docs/opentelemetry.md) for installation and configuration details.
+OpenTelemetry tracing provides visibility into agent operations. OTel SDK packages are **optional peer dependencies** — tracing works when installed but everything runs fine without them. See [`docs/observability/opentelemetry.md`](docs/observability/opentelemetry.md) for installation and configuration details.
 
 ```text
 cluster-whisperer.investigate (root span)
@@ -370,7 +370,7 @@ npm run telemetry:check     # Validate registry structure and references
 npm run telemetry:resolve   # Resolve all references to flat JSON
 ```
 
-See [`docs/tracing-conventions.md`](docs/tracing-conventions.md) for tracing architecture and design rationale, and [`docs/telemetry-generated/attributes/cluster-whisperer.md`](docs/telemetry-generated/attributes/cluster-whisperer.md) for the auto-generated attribute reference.
+See [`docs/observability/tracing-conventions.md`](docs/observability/tracing-conventions.md) for tracing architecture and design rationale, and [`docs/observability/telemetry-generated/attributes/cluster-whisperer.md`](docs/observability/telemetry-generated/attributes/cluster-whisperer.md) for the auto-generated attribute reference.
 
 ## Project Structure
 
