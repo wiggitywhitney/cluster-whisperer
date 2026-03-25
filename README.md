@@ -469,7 +469,7 @@ demo/
 
 ## Demo App
 
-The `demo/app/` directory contains a minimal Hono web server that requires a PostgreSQL database. It exists as a prop for the [KubeCon "Choose Your Own Adventure" demo](docs/choose-your-adventure-demo.md) — when deployed to Kubernetes without a database, it crashes immediately and enters CrashLoopBackOff. The cluster-whisperer agent then investigates why the app is broken, discovers the missing database, and deploys one.
+The `demo/app/` directory contains a minimal Hono web server that requires a PostgreSQL database. It exists as a prop for the [KubeCon "Choose Your Own Adventure" demo](docs/talk/choose-your-adventure-demo.md) — when deployed to Kubernetes without a database, it crashes immediately and enters CrashLoopBackOff. The cluster-whisperer agent then investigates why the app is broken, discovers the missing database, and deploys one.
 
 The app is intentionally simple. It connects to `DATABASE_URL` on startup: if the connection succeeds, it serves HTTP traffic; if it fails (or the variable is missing), it crashes with a clear, single-line error message designed for the agent to parse from `kubectl logs`.
 
