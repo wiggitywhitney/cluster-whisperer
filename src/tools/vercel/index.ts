@@ -52,6 +52,7 @@ import {
   type KubectlOptions,
 } from "../core";
 import { withToolTracing } from "../../tracing/tool-tracing";
+import { truncateToolResult } from "../../utils/truncate";
 import type { VectorStore } from "../../vectorstore";
 import {
   CAPABILITIES_COLLECTION,
@@ -78,7 +79,7 @@ export function createKubectlTools(options?: KubectlOptions) {
         { name: "kubectl_get", description: kubectlGetDescription },
         async (input: KubectlGetInput) => {
           const { output } = await kubectlGet(input, options);
-          return output;
+          return truncateToolResult(output);
         }
       ),
     }),
@@ -90,7 +91,7 @@ export function createKubectlTools(options?: KubectlOptions) {
         { name: "kubectl_describe", description: kubectlDescribeDescription },
         async (input: KubectlDescribeInput) => {
           const { output } = await kubectlDescribe(input, options);
-          return output;
+          return truncateToolResult(output);
         }
       ),
     }),
@@ -102,7 +103,7 @@ export function createKubectlTools(options?: KubectlOptions) {
         { name: "kubectl_logs", description: kubectlLogsDescription },
         async (input: KubectlLogsInput) => {
           const { output } = await kubectlLogs(input, options);
-          return output;
+          return truncateToolResult(output);
         }
       ),
     }),

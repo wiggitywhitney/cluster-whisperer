@@ -127,6 +127,7 @@ export class VercelAgent implements InvestigationAgent {
     // the system parameter, NOT in the messages array.
     const result = streamText({
       model: anthropic(ANTHROPIC_MODEL),
+      maxOutputTokens: 16000,
       system: systemPrompt,
       ...(threadId
         ? { messages: inputMessages }
