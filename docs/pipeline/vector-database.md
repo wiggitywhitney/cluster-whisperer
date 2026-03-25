@@ -68,11 +68,11 @@ We use two separate collections (like two separate tables):
 
 **What it stores:** One document per Kubernetes resource *type* (e.g., Deployment, Instance.rds.aws.upbound.io).
 
-**What's in each document:** An AI-generated description of what the resource does, its capabilities, providers, complexity, and when to use it. See `docs/capability-inference-pipeline.md` for the full data structure.
+**What's in each document:** An AI-generated description of what the resource does, its capabilities, providers, complexity, and when to use it. See [capability-inference-pipeline.md](./capability-inference-pipeline.md) for the full data structure.
 
 **When it's searched:** "How do I deploy a database?" → semantic search finds `instances.rds.aws.upbound.io` because its description mentions managed database, MySQL, PostgreSQL.
 
-**Populated by:** The `sync` command (`npx tsx src/index.ts sync`). See `docs/capability-inference-pipeline.md` for setup and usage.
+**Populated by:** The `sync` command (`npx tsx src/index.ts sync`). See [capability-inference-pipeline.md](./capability-inference-pipeline.md) for setup and usage.
 
 ### 2. Instances Collection
 

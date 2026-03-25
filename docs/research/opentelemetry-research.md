@@ -209,7 +209,7 @@ The initial PRD #6 assessment concluded Weaver was not useful because:
 | Then (PRD #6) | Now (PRD #19) |
 |---------------|---------------|
 | Zero custom attributes | 5 custom attributes (`cluster_whisperer.*`) |
-| No documented conventions | 364-line `docs/tracing-conventions.md` |
+| No documented conventions | 364-line `docs/observability/tracing-conventions.md` |
 | Single entry point | Two modes (CLI/MCP) with distinct attribute sets |
 
 **Weaver is now in use** for schema validation following the commit-story-v2 lightweight pattern:
@@ -288,7 +288,7 @@ Analysis of Viktor's `dot-ai` repository OpenTelemetry implementation.
 
 ### Span Hierarchy
 
-```
+```text
 SERVER (HTTP entry point)
   └── INTERNAL (Tool execution: execute_tool kubectl_get)
         └── CLIENT (kubectl get pods)
@@ -450,7 +450,7 @@ npm install @opentelemetry/sdk-node \
 
 ### Hierarchy
 
-```
+```text
 INTERNAL (execute_tool kubectl_get)
   └── CLIENT (kubectl get pods)
 ```

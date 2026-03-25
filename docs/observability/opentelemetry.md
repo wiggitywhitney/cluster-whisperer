@@ -686,4 +686,4 @@ We track two upstream issues:
 - [OpenTelemetry GenAI SIG](https://github.com/open-telemetry/community/blob/main/projects/gen-ai.md)
 - [OpenLLMetry Documentation](https://www.traceloop.com/docs/openllmetry/introduction) - LLM observability
 - [OpenLLMetry Privacy Settings](https://www.traceloop.com/docs/openllmetry/privacy/traces) - Disabling content tracing
-- [`docs/opentelemetry-research.md`](./opentelemetry-research.md) - Detailed research findings
+- [`docs/research/opentelemetry-research.md`](../research/opentelemetry-research.md) - Detailed research findings

@@ -20,7 +20,7 @@
 
 ### Previous Assessment (PRD #6, January 2026)
 
-`docs/opentelemetry-research.md` Section 3 concluded "Weaver is NOT Applicable" because:
+`docs/research/opentelemetry-research.md` Section 3 concluded "Weaver is NOT Applicable" because:
 
 > 1. **Constants already exist** - The `@opentelemetry/semantic-conventions` npm package provides all TypeScript constants we need.
 > 2. **Solves enterprise-scale problems** - Designed for organizations managing custom semantic conventions across many teams/services.
@@ -33,7 +33,7 @@
 | Then (PRD #6) | Now (PRD #19) |
 |---------------|---------------|
 | Zero custom attributes | 5 custom attributes (`service.operation`, `user.question`, `mcp.tool.name`, `k8s.namespace`, `k8s.output_size_bytes`) |
-| No documented conventions | 364-line `docs/tracing-conventions.md` with 20+ attributes across 4 span types |
+| No documented conventions | 364-line `docs/observability/tracing-conventions.md` with 20+ attributes across 4 span types |
 | Simple kubectl wrapper | Full MCP server with CLI and MCP modes, each with distinct attribute sets |
 | Single entry point | Two entry points (`withAgentTracing`, `withMcpRequestTracing`) with different GenAI semconv requirements |
 
@@ -41,7 +41,7 @@
 
 1. **Custom attributes need typing**: Our `k8s.*` and `mcp.*` attributes have no semconv package. Weaver provides schema-driven type definitions.
 
-2. **Drift risk is real**: `docs/tracing-conventions.md` documents attributes that could diverge from code without detection. Weaver validates the schema.
+2. **Drift risk is real**: `docs/observability/tracing-conventions.md` documents attributes that could diverge from code without detection. Weaver validates the schema.
 
 3. **OTel reference validation**: We claim to use `gen_ai.*` and `process.*` semconvs. Weaver can verify these references resolve correctly.
 
@@ -206,7 +206,7 @@ weaver registry resolve telemetry/registry -f json -o telemetry/registry/resolve
 ### Expected Output
 
 **`weaver registry check`** (success):
-```
+```text
 Registry check completed successfully.
 ```
 
@@ -351,5 +351,5 @@ groups:
 - [OpenTelemetry Weaver](https://github.com/open-telemetry/weaver)
 - [OTel Semantic Conventions v1.37.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.37.0)
 - commit-story-v2 implementation: (external project reference - see local clone)
-- Existing conventions: `docs/tracing-conventions.md`
-- Previous assessment: `docs/opentelemetry-research.md` Section 3
+- Existing conventions: `docs/observability/tracing-conventions.md`
+- Previous assessment: `docs/research/opentelemetry-research.md` Section 3

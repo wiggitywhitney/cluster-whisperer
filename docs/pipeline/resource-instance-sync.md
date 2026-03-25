@@ -6,7 +6,7 @@ This document explains how cluster-whisperer discovers what's currently running 
 
 ## The Problem
 
-The capability inference pipeline (see `docs/capability-inference-pipeline.md`) tells the agent what resource *types* are available — "this cluster can run SQL databases, Ingresses, and Deployments." But when a developer asks "what databases are running?", the agent needs to know about actual *instances*: the specific nginx Deployment in `default`, the postgres StatefulSet in `production`, the SQL claim called `my-app-db`.
+The capability inference pipeline (see [capability-inference-pipeline.md](./capability-inference-pipeline.md)) tells the agent what resource *types* are available — "this cluster can run SQL databases, Ingresses, and Deployments." But when a developer asks "what databases are running?", the agent needs to know about actual *instances*: the specific nginx Deployment in `default`, the postgres StatefulSet in `production`, the SQL claim called `my-app-db`.
 
 The agent already has kubectl tools for querying instances at runtime, but it doesn't scale when the developer doesn't know which resource types to look for. Pre-indexing instance metadata in the vector database lets the agent search across all resource types in a single query.
 
@@ -130,7 +130,7 @@ The server exposes these routes:
 | `/api/v1/instances/sync` | POST | Receive batched instance upserts and deletes |
 | `/api/v1/capabilities/scan` | POST | Trigger capability inference for specific CRDs (optional — see below) |
 
-The capabilities route is optionally mounted. When the server is started with `ANTHROPIC_API_KEY` and `VOYAGE_API_KEY` available, it enables capability scanning for CRD changes alongside instance sync. See `docs/capability-inference-pipeline.md` for details on the capability scan endpoint, payload format, and async processing model.
+The capabilities route is optionally mounted. When the server is started with `ANTHROPIC_API_KEY` and `VOYAGE_API_KEY` available, it enables capability scanning for CRD changes alongside instance sync. See [capability-inference-pipeline.md](./capability-inference-pipeline.md) for details on the capability scan endpoint, payload format, and async processing model.
 
 ### Running the Controller
 

@@ -262,4 +262,4 @@ Once capabilities are synced, the investigator agent has a `vector_search` tool 
 3. Optionally verifies with kubectl (e.g., checks if the provider is actually running)
 4. Recommends the best resource type with usage guidance
 
-See `docs/vector-database.md` for details on the search tool's three dimensions (semantic, keyword, metadata filter).
+See [vector-database.md](./vector-database.md) for details on the search tool's three dimensions (semantic, keyword, metadata filter).
