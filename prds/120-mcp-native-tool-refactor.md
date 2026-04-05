@@ -137,17 +137,19 @@ Before building `kubectl_apply`, understand whether the MCP `prompts` primitive 
 
 **Finding**: MCP prompts do **not** adequately replace the investigator.md system prompt for reliable multi-step investigations. Prompts are pull-based (user must explicitly invoke them), not auto-applied. Claude Code may follow the strategy once invoked, but cannot enforce it across a full conversation the way a system prompt can. For the talk/blog, this is intentional: the MCP path is lighter-weight by design — guardrails come from the cluster, not the application.
 
-### Milestone 4: Session State Gate for `kubectl_apply`
+### Milestone 4: Session State Gate for `kubectl_apply` ✅ Complete
 The session state gate is the application-layer control on writes. It ensures the AI cannot pass arbitrary YAML to `kubectl_apply` at invocation time — it can only reference a manifest that was already dry-run validated.
 
-- [ ] Research and decide session state semantics before implementing:
+- [x] Research and decide session state semantics before implementing:
   - Session ID lifetime (how long is a session valid?)
   - Multiple dry-runs: does a second `kubectl_apply_dryrun` overwrite or create a new session?
   - Stale session handling: what if the user changes their mind and calls dry-run again?
-- [ ] `kubectl_apply_dryrun`: validates manifest, stores in session state, returns sessionId
-- [ ] `kubectl_apply`: accepts sessionId only; reads manifest from session state; rejects if session doesn't exist or is invalid
-- [ ] **Catalog validation stays in place** — PRD #121 M3 removes it once Kyverno is deployed
-- [ ] Tool descriptions enforce dry-run-first pattern
+- [x] `kubectl_apply_dryrun`: validates manifest, stores in session state, returns sessionId
+- [x] `kubectl_apply`: accepts sessionId only; reads manifest from session state; rejects if session doesn't exist or is invalid
+- [x] **Catalog validation stays in place** — PRD #121 M3 removes it once Kyverno is deployed
+- [x] Tool descriptions enforce dry-run-first pattern
+
+**Session state decisions**: Process-scoped in-memory store (`SessionStore`). One pending session at a time — new dry-run replaces previous, invalidating old session ID. Sessions are single-use: `consume()` removes the session on read. No TTL needed (process dies on client disconnect).
 
 **Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` with a fabricated or missing session ID returns an error — not silently fails. `kubectl_apply` without a prior successful `kubectl_apply_dryrun` is rejected.
 

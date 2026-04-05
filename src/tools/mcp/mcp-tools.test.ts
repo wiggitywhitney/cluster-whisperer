@@ -1,5 +1,5 @@
 // ABOUTME: Unit tests for MCP tool registration — covers native kubectl and apply tool registration
-// ABOUTME: Tests the MCP wrapper layer that exposes tools to MCP clients (kubectl_get, describe, logs, vector_search, apply)
+// ABOUTME: Tests the MCP wrapper layer that exposes tools to MCP clients (kubectl_get, describe, logs, vector_search, apply, apply_dryrun)
 
 /**
  * Tests for MCP tool registration
@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as mcpModule from "./index";
+import { SessionStore } from "./session-store";
 
 // Mock the tracing modules
 vi.mock("../../tracing/context-bridge", () => ({
@@ -48,6 +49,7 @@ vi.mock("child_process", () => ({
 import { spawnSync } from "child_process";
 import {
   registerApplyTool,
+  registerDryrunTool,
   registerGetTool,
   registerDescribeTool,
   registerLogsTool,
@@ -323,13 +325,85 @@ describe("registerVectorSearchTool", () => {
   });
 });
 
-describe("registerApplyTool", () => {
+describe("registerDryrunTool", () => {
   let mockServer: ReturnType<typeof createMockServer>;
-  let mockVectorStore: VectorStore;
+  let sessionStore: SessionStore;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockServer = createMockServer();
+    sessionStore = new SessionStore();
+  });
+
+  it("registers a tool named kubectl_apply_dryrun", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerDryrunTool(mockServer as any, sessionStore);
+
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      "kubectl_apply_dryrun",
+      expect.objectContaining({
+        description: expect.stringContaining("dry-run"),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("handler returns sessionId and output on successful dry-run", async () => {
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "managedservice.platform.acme.io/youchoose-db configured (dry run)\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerDryrunTool(mockServer as any, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply_dryrun")!.handler;
+
+    const result = await handler({
+      manifest: "apiVersion: platform.acme.io/v1alpha1\nkind: ManagedService\nmetadata:\n  name: youchoose-db",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("sessionId");
+  });
+
+  it("handler returns isError: true when dry-run fails", async () => {
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "",
+      stderr: "Error from server: admission webhook rejected",
+      status: 1,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerDryrunTool(mockServer as any, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply_dryrun")!.handler;
+
+    const result = await handler({
+      manifest: "apiVersion: platform.acme.io/v1alpha1\nkind: ManagedService\nmetadata:\n  name: test",
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("rejected");
+  });
+});
+
+describe("registerApplyTool", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+  let mockVectorStore: VectorStore;
+  let sessionStore: SessionStore;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+    sessionStore = new SessionStore();
     mockVectorStore = createMockVectorStore({
       keywordSearch: vi.fn().mockResolvedValue([
         {
@@ -343,28 +417,40 @@ describe("registerApplyTool", () => {
 
   it("registers a tool named kubectl_apply", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, mockVectorStore);
+    registerApplyTool(mockServer as any, mockVectorStore, sessionStore);
 
     expect(mockServer.registerTool).toHaveBeenCalledWith(
       "kubectl_apply",
       expect.objectContaining({
-        description: expect.stringContaining("catalog"),
+        description: expect.stringContaining("sessionId"),
       }),
       expect.any(Function)
     );
   });
 
-  it("handler returns MCP-formatted response on success", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, mockVectorStore);
+  it("handler returns success when sessionId is valid and catalog approves", async () => {
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "managedservice.platform.acme.io/youchoose-db created\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
 
-    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
-    const result = await handler({
-      manifest: `apiVersion: platform.acme.io/v1alpha1
+    // Pre-populate session store with a manifest
+    const manifest = `apiVersion: platform.acme.io/v1alpha1
 kind: ManagedService
 metadata:
-  name: youchoose-db`,
-    });
+  name: youchoose-db`;
+    const sessionId = sessionStore.store(manifest);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerApplyTool(mockServer as any, mockVectorStore, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
+
+    const result = await handler({ sessionId });
 
     expect(result).toEqual({
       content: [{ type: "text", text: expect.stringContaining("created") }],
@@ -372,21 +458,59 @@ metadata:
     });
   });
 
+  it("handler returns isError: true when sessionId is not found", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerApplyTool(mockServer as any, mockVectorStore, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
+
+    const result = await handler({ sessionId: "nonexistent-session-id" });
+
+    expect(result).toEqual({
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("kubectl_apply_dryrun"),
+        },
+      ],
+      isError: true,
+    });
+  });
+
+  it("handler returns isError: true when sessionId is already consumed", async () => {
+    const manifest = `apiVersion: platform.acme.io/v1alpha1
+kind: ManagedService
+metadata:
+  name: youchoose-db`;
+    const sessionId = sessionStore.store(manifest);
+    sessionStore.consume(sessionId); // consume it manually
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerApplyTool(mockServer as any, mockVectorStore, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
+
+    const result = await handler({ sessionId });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("kubectl_apply_dryrun");
+  });
+
   it("handler returns isError: true for catalog rejection", async () => {
     const emptyStore = createMockVectorStore({
       keywordSearch: vi.fn().mockResolvedValue([]),
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, emptyStore);
-
-    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
-    const result = await handler({
-      manifest: `apiVersion: widgets.example.com/v1beta1
+    // Use a custom-group manifest (passes built-in guard, fails catalog check)
+    const manifest = `apiVersion: widgets.example.com/v1beta1
 kind: Widget
 metadata:
-  name: test-widget`,
-    });
+  name: test-widget`;
+    const sessionId = sessionStore.store(manifest);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerApplyTool(mockServer as any, emptyStore, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
+
+    const result = await handler({ sessionId });
 
     expect(result).toEqual({
       content: [
@@ -397,6 +521,34 @@ metadata:
       ],
       isError: true,
     });
+  });
+
+  it("session is consumed after successful apply (single-use)", async () => {
+    vi.mocked(spawnSync).mockReturnValue({
+      stdout: "created\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    const manifest = `apiVersion: platform.acme.io/v1alpha1
+kind: ManagedService
+metadata:
+  name: youchoose-db`;
+    const sessionId = sessionStore.store(manifest);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerApplyTool(mockServer as any, mockVectorStore, sessionStore);
+    const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
+
+    await handler({ sessionId }); // first apply
+    const secondResult = await handler({ sessionId }); // second apply — session consumed
+
+    expect(secondResult.isError).toBe(true);
+    expect(secondResult.content[0].text).toContain("kubectl_apply_dryrun");
   });
 });
 

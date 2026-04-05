@@ -36,8 +36,10 @@ import {
   registerLogsTool,
   registerVectorSearchTool,
   registerApplyTool,
+  registerDryrunTool,
   registerInvestigatePrompt,
 } from "./tools/mcp";
+import { SessionStore } from "./tools/mcp/session-store";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -78,14 +80,21 @@ async function main(): Promise<void> {
   await vectorStore.initialize("capabilities", { distanceMetric: "cosine" });
   await vectorStore.initialize("instances", { distanceMetric: "cosine" });
 
+  // Create the session store singleton for the Layer 2 session state gate (PRD #120 M4).
+  // Shared between kubectl_apply_dryrun and kubectl_apply — one store per server instance.
+  const sessionStore = new SessionStore();
+
   // Register native read-only kubectl tool handlers (PRD #120 M3)
   registerGetTool(server, { kubeconfig });
   registerDescribeTool(server, { kubeconfig });
   registerLogsTool(server, { kubeconfig });
   registerVectorSearchTool(server, vectorStore);
 
-  // Register kubectl_apply with catalog validation (catalog removed in PRD #121 M3)
-  registerApplyTool(server, vectorStore);
+  // Register the Layer 2 session state gate (PRD #120 M4):
+  // - kubectl_apply_dryrun validates the manifest and stores it; returns sessionId
+  // - kubectl_apply reads the manifest from session state via sessionId; catalog validation stays
+  registerDryrunTool(server, sessionStore, { kubeconfig });
+  registerApplyTool(server, vectorStore, sessionStore, { kubeconfig });
 
   // Register the investigate-cluster prompt resource (PRD #120 M3.5).
   // The prompt exposes the investigator.md strategy so MCP clients can invoke it

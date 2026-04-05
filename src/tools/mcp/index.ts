@@ -10,20 +10,22 @@
  * reasons about which tools to call and what to do with the results.
  *
  * Tools registered here:
- * - "kubectl_get"      — list Kubernetes resources
- * - "kubectl_describe" — detailed info about a specific resource
- * - "kubectl_logs"     — get container logs from a pod
- * - "vector_search"    — discover resources via the vector database
- * - "kubectl_apply"    — apply a manifest; validates against the platform catalog
- *                        (catalog validation will be replaced by Kyverno in PRD #121)
+ * - "kubectl_get"           — list Kubernetes resources
+ * - "kubectl_describe"      — detailed info about a specific resource
+ * - "kubectl_logs"          — get container logs from a pod
+ * - "vector_search"         — discover resources via the vector database
+ * - "kubectl_apply_dryrun"  — validate manifest, store in session state, return sessionId
+ * - "kubectl_apply"         — apply using sessionId (Layer 2 session state gate)
  *
  * Guardrails:
  * - Layer 1: Tool descriptions tell the AI what's in scope (prompt guidance)
+ * - Layer 2: Session state gate — kubectl_apply accepts sessionId only (this module)
  * - Layer 3: ServiceAccount RBAC limits what the cluster will permit (PRD #120 M5)
  * - Layer 4: Kyverno admission control (PRD #121)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import {
   kubectlGet,
   kubectlGetSchema,
@@ -42,13 +44,52 @@ import {
   vectorSearchDescription,
   type VectorSearchInput,
   kubectlApply,
-  kubectlApplySchema,
   kubectlApplyDescription,
-  type KubectlApplyInput,
+  kubectlApplyDryrun,
+  kubectlApplyDryrunSchema,
+  kubectlApplyDryrunDescription,
+  type KubectlApplyDryrunInput,
   type KubectlOptions,
 } from "../core";
 import type { VectorStore } from "../../vectorstore";
 import { withMcpRequestTracing } from "../../tracing/context-bridge";
+import type { SessionStore } from "./session-store";
+
+/**
+ * Input schema for the MCP kubectl_apply tool.
+ *
+ * Accepts only a sessionId — not a manifest directly. The manifest was
+ * stored in session state by kubectl_apply_dryrun and is retrieved here.
+ * This prevents the AI from passing arbitrary YAML at apply time.
+ */
+const mcpKubectlApplySchema = z.object({
+  sessionId: z
+    .string()
+    .min(1, "sessionId cannot be empty")
+    .describe(
+      "The session ID returned by kubectl_apply_dryrun. Required — kubectl_apply will not accept a manifest directly."
+    ),
+});
+
+type McpKubectlApplyInput = z.infer<typeof mcpKubectlApplySchema>;
+
+/**
+ * Tool description for the MCP kubectl_apply tool.
+ *
+ * Describes the sessionId-based workflow and explains why direct manifest
+ * input is not accepted (Layer 2 session state gate).
+ */
+const mcpKubectlApplyDescription = `Deploy a Kubernetes resource using a validated session.
+
+IMPORTANT: This tool requires a sessionId from kubectl_apply_dryrun. It does NOT accept a manifest directly. The manifest was already validated and stored when you called kubectl_apply_dryrun.
+
+Workflow:
+1. Use vector_search to discover available resource types
+2. Construct a YAML manifest for an approved resource type
+3. Call kubectl_apply_dryrun — validates the manifest, returns a sessionId
+4. Call this tool (kubectl_apply) with the sessionId to deploy
+
+The catalog validation stays in place: only resource types in the capabilities catalog can be deployed. Kyverno (PRD #121) will add an additional cluster-level enforcement layer.`;
 
 /**
  * Registers the kubectl_get tool with an MCP server.
@@ -165,7 +206,7 @@ export function registerLogsTool(
  * Registers the vector_search tool with an MCP server.
  *
  * Searches the vector database to discover what Kubernetes resources are
- * available in this cluster. Use this before kubectl_apply to find the
+ * available in this cluster. Use this before kubectl_apply_dryrun to find the
  * correct resource type for a given need (e.g., "managed database").
  *
  * @param server - The McpServer instance to register the tool with
@@ -235,34 +276,99 @@ export function registerInvestigatePrompt(
 }
 
 /**
+ * Registers the kubectl_apply_dryrun tool with an MCP server.
+ *
+ * This is Layer 2 of the guardrails design (PRD #120 M4). It validates a
+ * manifest via kubectl dry-run and stores it in session state, returning a
+ * sessionId. The AI must pass this sessionId to kubectl_apply — it cannot
+ * pass arbitrary YAML at apply time.
+ *
+ * @param server - The McpServer instance to register the tool with
+ * @param sessionStore - The shared SessionStore for this server instance
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
+ */
+export function registerDryrunTool(
+  server: McpServer,
+  sessionStore: SessionStore,
+  options?: KubectlOptions
+): void {
+  server.registerTool(
+    "kubectl_apply_dryrun",
+    {
+      description: kubectlApplyDryrunDescription,
+      inputSchema: kubectlApplyDryrunSchema.shape,
+    },
+    async (input: KubectlApplyDryrunInput) => {
+      return withMcpRequestTracing(
+        "kubectl_apply_dryrun",
+        input as Record<string, unknown>,
+        async () => {
+          const result = await kubectlApplyDryrun(input, sessionStore, options);
+
+          return {
+            content: [{ type: "text" as const, text: result.output }],
+            isError: result.isError,
+          };
+        }
+      );
+    }
+  );
+}
+
+/**
  * Registers the kubectl_apply tool with an MCP server.
  *
- * Unlike the investigate tool (which wraps the agent), this is a direct tool
- * that takes a YAML manifest and applies it to the cluster. MCP clients can
- * use this when they already know what resource to deploy.
+ * This is the apply side of the Layer 2 session state gate (PRD #120 M4).
+ * The tool accepts a sessionId only — it reads the manifest from session state
+ * (stored by kubectl_apply_dryrun) rather than accepting AI-generated YAML at
+ * call time. The AI cannot inject arbitrary YAML at apply time.
  *
- * The tool validates against the platform catalog before applying — only
- * resource types in the capabilities collection are allowed.
+ * Catalog validation stays in place (removed by PRD #121 M3 when Kyverno deploys).
  *
  * @param server - The McpServer instance to register the tool with
  * @param vectorStore - An initialized VectorStore for catalog validation
+ * @param sessionStore - The shared SessionStore for session state lookup
+ * @param options - Optional kubectl configuration (e.g., kubeconfig path)
  */
 export function registerApplyTool(
   server: McpServer,
-  vectorStore: VectorStore
+  vectorStore: VectorStore,
+  sessionStore: SessionStore,
+  options?: KubectlOptions
 ): void {
   server.registerTool(
     "kubectl_apply",
     {
-      description: kubectlApplyDescription,
-      inputSchema: kubectlApplySchema.shape,
+      description: mcpKubectlApplyDescription,
+      inputSchema: mcpKubectlApplySchema.shape,
     },
-    async (input: KubectlApplyInput) => {
+    async (input: McpKubectlApplyInput) => {
       return withMcpRequestTracing(
         "kubectl_apply",
         input as Record<string, unknown>,
         async () => {
-          const result = await kubectlApply(vectorStore, input);
+          // Look up the manifest from session state using the sessionId.
+          // consume() removes the session (single-use) to prevent replay.
+          const manifest = sessionStore.consume(input.sessionId);
+
+          if (manifest === undefined) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Session not found or already used. Call kubectl_apply_dryrun first to validate your manifest and get a sessionId.`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Run kubectl apply with catalog validation (catalog removed in PRD #121 M3)
+          const result = await kubectlApply(
+            vectorStore,
+            { manifest },
+            options
+          );
 
           return {
             content: [{ type: "text" as const, text: result.output }],
