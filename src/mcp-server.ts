@@ -101,7 +101,13 @@ async function main(): Promise<void> {
   // to load investigation guidance into their context on demand.
   // Path resolution: __dirname is dist/ at runtime, so ../prompts/ reaches the project root.
   const investigatorPath = path.join(__dirname, "..", "prompts", "investigator.md");
-  const investigatorContent = fs.readFileSync(investigatorPath, "utf-8");
+  let investigatorContent: string;
+  try {
+    investigatorContent = fs.readFileSync(investigatorPath, "utf-8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to load investigator prompt from ${investigatorPath}: ${message}`);
+  }
   registerInvestigatePrompt(server, investigatorContent);
 
   // Create stdio transport - communicates via stdin/stdout
