@@ -1,6 +1,6 @@
-# PRD #54: MCP Server — Native Tool Handlers
+# PRD #54: MCP Server — Native Tool Handlers + ServiceAccount RBAC
 
-**Status**: Not Started
+**Status**: In Progress (research complete)
 **Priority**: High
 **Created**: 2026-04-05
 **Branch**: `feature/prd-54-mcp-native-tools`
@@ -9,105 +9,147 @@
 
 ## Problem
 
-The current MCP server wraps the LangGraph agent as a single `investigate` tool. This means calling Cluster Whisperer via MCP invokes a redundant LLM instance inside the tool handler. The better architecture is an MCP server that exposes granular native tools — each tool does one thing (query the cluster, search the vector DB, apply a resource), and the AI coding assistant reasons about what to call and in what order.
+The current MCP server exposes the LangGraph agent as a single `investigate` tool. When called via Claude Code, this invokes a redundant LLM instance inside the tool handler — the AI coding assistant and the internal agent are doing the same reasoning job in parallel.
 
-Additionally, cluster-side authentication and access control are not scoped — the current implementation uses whatever cluster credentials the user has. For a real platform deployment, the MCP server should authenticate with a ServiceAccount that has narrowly scoped RBAC permissions, enforcing guardrails at the infrastructure layer rather than the application layer.
+The better architecture: native tool handlers containing Kubernetes business logic directly. The AI coding assistant reasons about which tools to call and what to do with results. Guardrails live at the cluster level (RBAC on the ServiceAccount), not just the application level.
+
+The existing tool catalog is also removed in this PRD — replaced by Kyverno admission control in PRD #55, which enforces guardrails at the cluster level regardless of how a request arrives.
+
+**The existing CLI (LangGraph) is not touched.** It remains the full-featured agent for direct terminal use and demos. This PRD changes only the MCP server.
 
 ---
 
-## Solution
+## Guardrails Design
 
-Build a new MCP server alongside the existing CLI (which stays as-is). The new MCP server exposes native tools reusing the existing core layer. Cluster access is scoped to a ServiceAccount with explicit RBAC permissions. Prompt guidance describes what the tools can and cannot do; cluster-side RBAC enforces it.
+**Layer 1 — Prompt guidance (descriptive):**
+Tool descriptions tell the AI coding assistant what each tool is for and what's in scope. Without this, the AI may repeatedly attempt operations that Kyverno will reject, wasting the conversation. Prompt guidance shapes intent before the cluster ever needs to enforce it. The `kubectl_apply` description should clearly bound the scope of what the agent is meant to create.
 
-**The existing CLI (LangGraph) is not touched.** It remains the full-featured agent for direct terminal use and demos.
+**Layer 2 — Session state gate (application-layer enforcement):**
+- `kubectl_apply_dryrun` validates the manifest, stores it in session state, returns a `sessionId`
+- `kubectl_apply` only accepts a `sessionId` — reads the manifest from session state, not from AI-generated input at call time
+- The AI cannot pass arbitrary YAML to `kubectl_apply` at runtime
+
+**Layer 3 — Kubernetes RBAC on ServiceAccount (infrastructure-layer, the real wall):**
+The MCP server's ServiceAccount gets narrowly scoped RBAC. Read verbs on standard resources; `create` only on platform-specific resource types. Even if Layers 1 and 2 fail, the cluster rejects unauthorized operations.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-whisperer-mcp
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["platform.acme.io"]
+    resources: ["managedservices"]
+    verbs: ["get", "list", "create"]
+```
+
+**Layer 4 — Kyverno admission control:** Handled in PRD #55. Enforces policy at the cluster admission layer, independent of application code.
+
+---
+
+## `kubectl_apply` Simplification
+
+With Kyverno in place (PRD #55), `kubectl_apply` becomes simple:
+1. Parse YAML (useful for reporting what's about to happen)
+2. Run `kubectl apply`
+3. Return the result, including any Kyverno rejection errors
+
+The error from a Kyverno rejection surfaces naturally: `admission webhook "validate.kyverno.svc" denied the request: only ManagedService resources from platform.acme.io are allowed`. The AI coding assistant interprets this for the developer in natural language — no custom error handling needed.
+
+The tool catalog validation is removed entirely. Kyverno is the real guardrail.
+
+---
+
+## Authentication Modes
+
+| Mode | How | When |
+|---|---|---|
+| Local / demo | `CLUSTER_WHISPERER_KUBECONFIG` env var | Dev + demo |
+| In-cluster | Pod's ServiceAccount | Production |
+
+Existing core functions already accept a `kubeconfig` option — MCP tool handlers pass it through the same way.
 
 ---
 
 ## Tools to Expose
 
-| Tool | Description |
-|---|---|
-| `kubectl_get` | Get Kubernetes resources by type and namespace |
-| `kubectl_describe` | Describe a specific resource |
-| `kubectl_logs` | Fetch logs from a pod |
-| `vector_search` | Search the cluster's capability knowledge base by natural language |
-| `kubectl_apply` | Apply a Kubernetes resource (with guardrails — see below) |
-
-All reuse existing functions from `src/core/`. No new business logic needs to be written — this is a new exposure layer for existing code.
-
----
-
-## Guardrails
-
-**Cluster-side (primary enforcement):**
-- ServiceAccount with RBAC limited to `get`, `describe`, `logs` for read operations
-- `kubectl_apply` scoped to specific resource types / namespaces allowed by RBAC
-- Even if the AI tries to delete or modify something unauthorized, the cluster rejects it
-
-**Prompt guidance (secondary, descriptive):**
-- Tool descriptions state what each tool is for and what it should not be used for
-- System prompt / MCP prompt describes the intended use of `kubectl_apply` (adding capabilities, not removing or modifying existing app resources)
-
-**Open question (research milestone):**
-How to limit what `kubectl_apply` can create? Viktor's dot-ai repo may have solved this — see Milestone 1.
+| Tool | Source | Notes |
+|---|---|---|
+| `kubectl_get` | `src/core/` | Reuse existing |
+| `kubectl_describe` | `src/core/` | Reuse existing |
+| `kubectl_logs` | `src/core/` | Reuse existing |
+| `kubectl_apply_dryrun` | New | Dry-run + store in session; returns sessionId |
+| `kubectl_apply` | Modified | Accepts sessionId only; removes catalog validation |
+| `vector_search` | `src/core/` | Reuse existing |
 
 ---
 
 ## Talk / Demo Plan
 
-**CLI demo (main):** Show the LangGraph agent in the terminal — full reasoning chain, full observability (OTel traces → Datadog), the Choose Your Own Adventure narrative. This is the compelling demo.
+**CLI demo (main)**: LangGraph agent in the terminal — full reasoning chain, OTel traces in Datadog, the Choose Your Own Adventure narrative. This is the compelling demo.
 
-**MCP coda:** After the CLI demo, show the MCP server running in Claude Code. Discuss: the CLI is great, but developers are increasingly working in AI coding agents. The MCP server meets them there. Guardrails are at the cluster level. You don't need a separate agent — your coding assistant already is one.
+**MCP coda**: Show the MCP server running in Claude Code. The guardrails come from the cluster, not the application. Try to create a non-approved resource — watch Kyverno reject it. The developer gets a natural language explanation from Claude Code of what the policy requires.
 
-The MCP server does not need to show observability in the talk — the CLI already demonstrated that.
+The MCP server does not need to show observability in the talk. The CLI already demonstrated it.
 
 ---
 
 ## Milestones
 
-### Milestone 1: Research — Guardrails and Viktor's Approach
-- [ ] Study Viktor Farcic's [dot-ai repo](https://github.com/vfarcic/dot-ai) — how does he handle cluster-side guardrails? How does he limit what `kubectl_apply` can do?
-- [ ] Understand how his approach differs between a CLI agent and an MCP server
-- [ ] Document: how to scope `kubectl_apply` — which resource types, which namespaces, what RBAC policy enforces it
-- [ ] Document: prompt guidance pattern for what the intelligence can and cannot apply to the cluster
-- [ ] Research: how to set up a Kubernetes ServiceAccount with narrowly scoped RBAC for the MCP server
-
-**Success criteria**: Clear design for cluster-side auth + RBAC + `kubectl_apply` guardrails, informed by real examples.
+### Milestone 1: Research ✅ Complete
+Researched guardrail patterns across Kubernetes agent implementations and tooling. Key decisions:
+- Session state gate replaces tool catalog
+- Narrow ServiceAccount RBAC as infrastructure-layer enforcement
+- Kyverno handles admission control (PRD #55)
+- `kubectl_apply` simplifies when Kyverno is in place
 
 ### Milestone 2: Remove Current MCP Wrapper
 - [ ] Remove the `investigate` MCP tool that wraps the LangGraph agent
-- [ ] Confirm CLI and REST API are unaffected
+- [ ] Confirm CLI and REST API unaffected
 
-**Success criteria**: MCP server no longer invokes the LangGraph agent. CLI and REST API work as before.
+**Success criteria**: MCP server no longer invokes the LangGraph agent. CLI works as before.
 
-### Milestone 3: Expose Native MCP Tools
-- [ ] Implement `kubectl_get`, `kubectl_describe`, `kubectl_logs` as MCP tool handlers using `src/core/`
-- [ ] Implement `vector_search` as an MCP tool handler
-- [ ] Implement `kubectl_apply` with guardrails from Milestone 1 design
-- [ ] Write tool descriptions that give the AI coding assistant clear guidance on what each tool does and doesn't do
-- [ ] Add OTel spans to each tool handler (individual tool-level tracing)
+### Milestone 3: Native Read-Only Tool Handlers
+- [ ] `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `vector_search` as MCP tool handlers using `src/core/`
+- [ ] Clear tool descriptions with scope guidance
+- [ ] OTel span on each handler
 
-**Success criteria**: Claude Code can call each tool individually and get useful results. `kubectl_apply` respects the guardrails.
+**Success criteria**: Claude Code can call each read-only tool and get useful results.
 
-### Milestone 4: Cluster Authentication + RBAC
-- [ ] Create a ServiceAccount with scoped RBAC for the MCP server
-- [ ] Configure MCP server to authenticate using the ServiceAccount credentials
-- [ ] Test: verify the ServiceAccount cannot exceed its permissions regardless of what Claude Code requests
+### Milestone 4: Session State Gate for `kubectl_apply`
+- [ ] `kubectl_apply_dryrun`: validates, stores manifest in session, returns sessionId
+- [ ] `kubectl_apply`: accepts sessionId only; reads from session; removes catalog validation
+- [ ] Tool descriptions enforce dry-run-first pattern
 
-**Success criteria**: MCP server authenticates to cluster with minimal permissions. Unauthorized operations are rejected at the cluster level.
+**Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` without a prior successful dry-run returns an error.
 
-### Milestone 5: Demo Readiness
-- [ ] End-to-end test: Claude Code investigates a broken pod using the native MCP tools
-- [ ] Test the `kubectl_apply` guardrails in the demo scenario (ManagedService deployment)
+### Milestone 5: ServiceAccount + RBAC Manifests
+- [ ] Create `k8s/mcp-rbac.yaml`: ServiceAccount + ClusterRole + ClusterRoleBinding
+- [ ] ClusterRole: read verbs on standard resources, `create` only on platform resource types
+- [ ] Configure in-cluster auth to use ServiceAccount credentials
+- [ ] Test: unauthorized operations rejected at cluster level
+
+**Success criteria**: ServiceAccount cannot create arbitrary resources. Cluster enforces this.
+
+### Milestone 6: Demo Readiness
+- [ ] End-to-end: Claude Code investigates broken pod and deploys ManagedService via native MCP tools
 - [ ] Update talk demo flow to include MCP coda
 
-**Success criteria**: MCP server is demo-ready for KCD Austin / SRE Day.
+**Success criteria**: Demo-ready for KCD Austin / SRE Day.
 
 ---
 
 ## References
 
-- [docs/architecture-research.md](../docs/architecture-research.md) — architecture decision and research background
-- Viktor Farcic's dot-ai: https://github.com/vfarcic/dot-ai
-- PRD #53: client-server split (separate concern, unaffected by this PRD)
-- PRD #16 (done): original MCP wrapper being replaced
+- PRD #55: Kyverno integration (Layer 4 — admission control, replaces tool catalog)
+- PRD #53: Client-server split (separate concern)
+- PRD #16 (done): original MCP wrapper being replaced in Milestone 2
