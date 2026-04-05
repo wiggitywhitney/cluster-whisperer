@@ -125,12 +125,28 @@ Researched guardrail patterns across Kubernetes agent implementations and toolin
 
 **Success criteria**: Claude Code can call each read-only tool and get useful results.
 
+### Milestone 3.5: MCP Prompts Primitive Research
+Before building `kubectl_apply`, understand whether the MCP `prompts` primitive can carry the investigation strategy from `prompts/investigator.md` into Claude Code. This shapes how coherent a multi-step investigation via MCP tools can be.
+
+- [ ] Test: expose an `investigate-cluster` prompt resource via MCP
+- [ ] Test: does Claude Code reliably follow a multi-step investigation strategy from a prompt resource?
+- [ ] Document findings — even if implementation is deferred, findings inform the blog post and talk
+
+**Success criteria**: Clear answer on whether MCP prompts primitive adequately replaces the investigator.md system prompt for multi-step investigations.
+
 ### Milestone 4: Session State Gate for `kubectl_apply`
-- [ ] `kubectl_apply_dryrun`: validates, stores manifest in session, returns sessionId
-- [ ] `kubectl_apply`: accepts sessionId only; reads from session; removes catalog validation
+The session state gate is the application-layer control on writes. It ensures the AI cannot pass arbitrary YAML to `kubectl_apply` at invocation time — it can only reference a manifest that was already dry-run validated.
+
+- [ ] Research and decide session state semantics before implementing:
+  - Session ID lifetime (how long is a session valid?)
+  - Multiple dry-runs: does a second `kubectl_apply_dryrun` overwrite or create a new session?
+  - Stale session handling: what if the user changes their mind and calls dry-run again?
+- [ ] `kubectl_apply_dryrun`: validates manifest, stores in session state, returns sessionId
+- [ ] `kubectl_apply`: accepts sessionId only; reads manifest from session state; rejects if session doesn't exist or is invalid
+- [ ] **Catalog validation stays in place** — PRD #55 M3 removes it once Kyverno is deployed
 - [ ] Tool descriptions enforce dry-run-first pattern
 
-**Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` without a prior successful dry-run returns an error.
+**Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` with a fabricated or missing session ID returns an error — not silently fails. `kubectl_apply` without a prior successful `kubectl_apply_dryrun` is rejected.
 
 ### Milestone 5: ServiceAccount + RBAC Manifests
 - [ ] Create `k8s/mcp-rbac.yaml`: ServiceAccount + ClusterRole + ClusterRoleBinding

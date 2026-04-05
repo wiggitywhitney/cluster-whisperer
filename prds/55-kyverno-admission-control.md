@@ -98,20 +98,28 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 **Success criteria**: `kubectl get pods -n kyverno` shows Kyverno running. A test policy blocks a test resource.
 
 ### Milestone 2: ClusterPolicy — Resource Allowlist
-- [ ] Write `k8s/kyverno-allowlist.yaml` with the policy above
-- [ ] Scope to `cluster-whisperer-mcp` ServiceAccount
-- [ ] Test: creating a ManagedService succeeds; creating a Pod is rejected
+- [ ] **Decide demo scoping strategy first**: The policy is scoped to the `cluster-whisperer-mcp` ServiceAccount. But in the demo, the MCP server may run locally with `CLUSTER_WHISPERER_KUBECONFIG` — in which case kubectl authenticates as the kubeconfig user, not the ServiceAccount, and the Kyverno policy won't match. Options:
+  - Use `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` to impersonate the ServiceAccount (requires impersonation RBAC)
+  - Run the MCP server in-cluster for the demo (as a pod, not locally)
+  - Scope the policy by namespace instead of ServiceAccount for the demo
+  - Document the chosen approach before writing the policy
+- [ ] Write `k8s/kyverno-allowlist.yaml` with the chosen scoping approach
+- [ ] **Verify Kyverno policy syntax**: The `subjects` block under `match` has changed across Kyverno versions. Apply the policy, attempt a create as the ServiceAccount (or impersonated identity), verify rejection before claiming success
+- [ ] Test: creating a ManagedService succeeds; creating a Pod is rejected with the Kyverno error message
 - [ ] Test: Crossplane operations are unaffected
 - [ ] Test: system ServiceAccounts are unaffected
 
-**Success criteria**: Only ManagedService resources can be created via the Cluster Whisperer ServiceAccount. All other create operations are rejected with a clear error message.
+**Success criteria**: The rejection is visible in the demo. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
 
 ### Milestone 3: Remove Tool Catalog from `kubectl_apply`
+*This is the only place the catalog removal happens. PRD #54 M4 leaves the catalog in place until this milestone runs.*
+
 - [ ] Remove catalog validation from `kubectl_apply` core function
 - [ ] `kubectl_apply` now: parse YAML → run `kubectl apply` → return result (including Kyverno errors)
+- [ ] The session state gate from PRD #54 M4 remains — Kyverno does not replace it
 - [ ] Verify: Kyverno rejection errors surface cleanly to Claude Code
 
-**Success criteria**: `kubectl_apply` is simpler. Kyverno handles enforcement. The error message from a rejection is informative and Claude Code can explain it naturally.
+**Success criteria**: `kubectl_apply` is simpler. Kyverno handles admission enforcement. The session state gate handles application-layer enforcement. The two layers are complementary, not redundant.
 
 ### Milestone 4: Demo Polish
 - [ ] Show Kyverno ClusterPolicy YAML in the talk slide deck
