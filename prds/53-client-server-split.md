@@ -86,9 +86,9 @@ clients never get cluster access.
 ### M3: Write RBAC for kubectl_apply
 *Note: enforcement strategy has evolved since this PRD was written. PRD #55 (Kyverno) is the primary enforcement layer; this milestone covers the ServiceAccount RBAC side.*
 
-- [ ] Update serve deployment's ClusterRole to include create permissions for approved resource types
+- [ ] Update serve deployment's ClusterRole to include create permissions for approved resource types (see PRD #55 for allowlist — currently `platform.acme.io/v1alpha1/ManagedService`)
 - [ ] Verify: agent running via serve endpoint can successfully apply approved resources
-- [ ] Verify: Kyverno ClusterPolicy (PRD #55) provides admission-level enforcement for the serve ServiceAccount as well as the MCP ServiceAccount
+- [ ] Verify: Kyverno ClusterPolicy (PRD #55) provides admission-level enforcement for the serve ServiceAccount (MCP ServiceAccount verification is owned by PRD #54 M5)
 
 ### M4: OTel Context for Remote Execution
 - [ ] Root span created on serve side (not CLI side) for remote investigations
