@@ -6,8 +6,7 @@
 **Execution Order**: After PRD #49 — the conference demo uses Option C (kubeconfig pass-through). This PRD builds the real governance architecture afterward.
 **Branch**: `feature/prd-53-client-server-split`
 
-> **Architecture note**: A separate architectural decision is pending about whether to refactor the MCP server from a LangGraph agent wrapper to native MCP tool handlers. That decision affects the shape of this PRD. Read the research before starting work here:
-> [cluster-whisperer-architecture-research.md](https://github.com/wiggitywhitney/journal/blob/main/cluster-whisperer-architecture-research.md)
+> **Architecture decision made**: The MCP server native tool refactor is implemented in PRD #54. Kyverno admission control is implemented in PRD #55. This PRD's M3 RBAC milestone aligns with those decisions.
 
 ## Problem
 
@@ -87,10 +86,11 @@ clients never get cluster access.
 - [ ] Integration test: CLI → serve endpoint → full investigation cycle
 
 ### M3: Write RBAC for kubectl_apply
-- [ ] Update serve deployment's ClusterRole to include write permissions for kubectl_apply resource types
-- [ ] Scope write permissions to resources in the capabilities catalog (not cluster-wide write)
+*Note: enforcement strategy has evolved since this PRD was written. PRD #55 (Kyverno) is the primary enforcement layer; this milestone covers the ServiceAccount RBAC side.*
+
+- [ ] Update serve deployment's ClusterRole to include create permissions for approved resource types (see PRD #55 for allowlist — currently `platform.acme.io/v1alpha1/ManagedService`)
 - [ ] Verify: agent running via serve endpoint can successfully apply approved resources
-- [ ] Verify: agent cannot apply resources outside the catalog (tool-level enforcement still works)
+- [ ] Verify: Kyverno ClusterPolicy (PRD #55) provides admission-level enforcement for the serve ServiceAccount (MCP ServiceAccount verification is owned by PRD #54 M5)
 
 ### M4: OTel Context for Remote Execution
 - [ ] Root span created on serve side (not CLI side) for remote investigations
