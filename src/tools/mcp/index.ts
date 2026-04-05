@@ -199,6 +199,42 @@ export function registerVectorSearchTool(
 }
 
 /**
+ * Registers the investigate-cluster prompt with an MCP server.
+ *
+ * This exposes the Kubernetes investigation strategy from prompts/investigator.md
+ * as an MCP prompt resource. MCP clients (e.g. Claude Code) can invoke this prompt
+ * to load the multi-step investigation strategy into their context.
+ *
+ * Research note (PRD #120 M3.5): MCP prompts are pull-based — the user must
+ * explicitly invoke the prompt (e.g. via /mcp or a slash command). They are NOT
+ * automatically applied as a system prompt to every conversation. This differs from
+ * the LangGraph agent, which always has investigator.md baked into its system prompt.
+ *
+ * @param server - The McpServer instance to register the prompt with
+ * @param content - The investigation strategy prompt content (from prompts/investigator.md)
+ */
+export function registerInvestigatePrompt(
+  server: McpServer,
+  content: string
+): void {
+  server.registerPrompt(
+    "investigate-cluster",
+    {
+      description:
+        "Load the Kubernetes cluster investigation strategy. Invoke this prompt to get step-by-step guidance on how to investigate cluster issues, discover platform capabilities, and deploy resources using the native kubectl tools.",
+    },
+    () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: { type: "text" as const, text: content },
+        },
+      ],
+    })
+  );
+}
+
+/**
  * Registers the kubectl_apply tool with an MCP server.
  *
  * Unlike the investigate tool (which wraps the agent), this is a direct tool

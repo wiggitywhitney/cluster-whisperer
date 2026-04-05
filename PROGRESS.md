@@ -5,6 +5,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 ## [Unreleased]
 
 ### Changed
+- (2026-04-05) MCP prompts primitive research (PRD #120 M3.5): exposed `investigate-cluster` MCP prompt resource backed by prompts/investigator.md. Finding: MCP prompts are pull-based and do not replace an always-active system prompt; documented in docs/research/mcp-prompts-findings.md.
 - (2026-04-05) MCP server native tool handlers (PRD #120 M3): kubectl_get, kubectl_describe, kubectl_logs, and vector_search registered as native MCP tool handlers backed by src/tools/core/ functions. Each handler includes OTel tracing via withMcpRequestTracing. mcp-server.ts wires all handlers with kubeconfig and vectorstore initialization.
 - (2026-04-05) MCP server refactored (PRD #120 M2): removed investigate tool wrapper (LangGraph agent no longer invoked from MCP). mcp-server.ts updated to reflect native tool handler architecture. CLI and REST API unaffected.
 

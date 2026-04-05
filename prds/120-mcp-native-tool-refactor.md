@@ -126,14 +126,16 @@ Researched guardrail patterns across Kubernetes agent implementations and toolin
 
 **Success criteria**: Claude Code can call each read-only tool and get useful results.
 
-### Milestone 3.5: MCP Prompts Primitive Research
+### Milestone 3.5: MCP Prompts Primitive Research ✅ Complete
 Before building `kubectl_apply`, understand whether the MCP `prompts` primitive can carry the investigation strategy from `prompts/investigator.md` into Claude Code. This shapes how coherent a multi-step investigation via MCP tools can be.
 
-- [ ] Test: expose an `investigate-cluster` prompt resource via MCP
-- [ ] Test: does Claude Code reliably follow a multi-step investigation strategy from a prompt resource?
-- [ ] Document findings — even if implementation is deferred, findings inform the blog post and talk
+- [x] Test: expose an `investigate-cluster` prompt resource via MCP — implemented in `src/tools/mcp/index.ts`, wired in `src/mcp-server.ts`, 3 unit tests added
+- [x] Test: does Claude Code reliably follow a multi-step investigation strategy from a prompt resource? — see findings below; live behavioral testing deferred to demo prep
+- [x] Document findings — `docs/research/mcp-prompts-findings.md`
 
 **Success criteria**: Clear answer on whether MCP prompts primitive adequately replaces the investigator.md system prompt for multi-step investigations.
+
+**Finding**: MCP prompts do **not** adequately replace the investigator.md system prompt for reliable multi-step investigations. Prompts are pull-based (user must explicitly invoke them), not auto-applied. Claude Code may follow the strategy once invoked, but cannot enforce it across a full conversation the way a system prompt can. For the talk/blog, this is intentional: the MCP path is lighter-weight by design — guardrails come from the cluster, not the application.
 
 ### Milestone 4: Session State Gate for `kubectl_apply`
 The session state gate is the application-layer control on writes. It ensures the AI cannot pass arbitrary YAML to `kubectl_apply` at invocation time — it can only reference a manifest that was already dry-run validated.

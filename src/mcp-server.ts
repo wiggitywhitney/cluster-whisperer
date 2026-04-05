@@ -36,7 +36,10 @@ import {
   registerLogsTool,
   registerVectorSearchTool,
   registerApplyTool,
+  registerInvestigatePrompt,
 } from "./tools/mcp";
+import * as fs from "fs";
+import * as path from "path";
 import {
   createVectorStore,
   VoyageEmbedding,
@@ -83,6 +86,14 @@ async function main(): Promise<void> {
 
   // Register kubectl_apply with catalog validation (catalog removed in PRD #121 M3)
   registerApplyTool(server, vectorStore);
+
+  // Register the investigate-cluster prompt resource (PRD #120 M3.5).
+  // The prompt exposes the investigator.md strategy so MCP clients can invoke it
+  // to load investigation guidance into their context on demand.
+  // Path resolution: __dirname is dist/ at runtime, so ../prompts/ reaches the project root.
+  const investigatorPath = path.join(__dirname, "..", "prompts", "investigator.md");
+  const investigatorContent = fs.readFileSync(investigatorPath, "utf-8");
+  registerInvestigatePrompt(server, investigatorContent);
 
   // Create stdio transport - communicates via stdin/stdout
   // This is how local MCP servers work: the client spawns this process

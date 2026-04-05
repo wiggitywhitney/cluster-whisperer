@@ -52,6 +52,7 @@ import {
   registerDescribeTool,
   registerLogsTool,
   registerVectorSearchTool,
+  registerInvestigatePrompt,
 } from "./index";
 import type { VectorStore } from "../../vectorstore";
 
@@ -79,6 +80,10 @@ function createMockServer() {
     string,
     { metadata: unknown; handler: Function }
   > = new Map();
+  const registeredPrompts: Map<
+    string,
+    { config: unknown; handler: Function }
+  > = new Map();
 
   return {
     registerTool: vi.fn(
@@ -86,7 +91,13 @@ function createMockServer() {
         registeredTools.set(name, { metadata, handler });
       }
     ),
+    registerPrompt: vi.fn(
+      (name: string, config: unknown, handler: Function) => {
+        registeredPrompts.set(name, { config, handler });
+      }
+    ),
     registeredTools,
+    registeredPrompts,
   };
 }
 
@@ -386,6 +397,54 @@ metadata:
       ],
       isError: true,
     });
+  });
+});
+
+describe("registerInvestigatePrompt", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+  });
+
+  it("registers a prompt named investigate-cluster", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerInvestigatePrompt(mockServer as any, "# Investigation Strategy\n\nUse kubectl tools.");
+
+    expect(mockServer.registerPrompt).toHaveBeenCalledWith(
+      "investigate-cluster",
+      expect.objectContaining({
+        description: expect.any(String),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("prompt callback returns messages containing the provided content", async () => {
+    const content = "# Investigation Strategy\n\nStart with kubectl_get pods.";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerInvestigatePrompt(mockServer as any, content);
+    const handler = mockServer.registeredPrompts.get("investigate-cluster")!.handler;
+
+    const result = await handler();
+
+    expect(result).toEqual({
+      messages: [
+        {
+          role: "user",
+          content: { type: "text", text: content },
+        },
+      ],
+    });
+  });
+
+  it("prompt description mentions investigation strategy", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerInvestigatePrompt(mockServer as any, "some content");
+
+    const config = mockServer.registerPrompt.mock.calls[0]?.[1] as { description: string };
+    expect(config.description.toLowerCase()).toContain("investigat");
   });
 });
 
