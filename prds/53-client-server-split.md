@@ -6,6 +6,9 @@
 **Execution Order**: After PRD #49 — the conference demo uses Option C (kubeconfig pass-through). This PRD builds the real governance architecture afterward.
 **Branch**: `feature/prd-53-client-server-split`
 
+> **Architecture note**: A separate architectural decision is pending about whether to refactor the MCP server from a LangGraph agent wrapper to native MCP tool handlers. That decision affects the shape of this PRD. Read the research before starting work here:
+> [cluster-whisperer-architecture-research.md](https://github.com/wiggitywhitney/journal/blob/main/cluster-whisperer-architecture-research.md)
+
 ## Problem
 
 The cluster-whisperer CLI currently runs the agent locally. The user must have a

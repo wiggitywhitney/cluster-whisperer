@@ -2,6 +2,8 @@
 
 AI agent that investigates Kubernetes clusters and makes their capabilities searchable by natural language. Available as a CLI, MCP server, and REST API — with OpenTelemetry tracing throughout.
 
+> **Architectural decision pending**: The MCP server currently wraps the LangGraph agent. Research recommends refactoring to native MCP tool handlers (business logic in tools, Claude Code provides orchestration). Read before doing significant work: [Architecture Research](https://github.com/wiggitywhitney/journal/blob/main/cluster-whisperer-architecture-research.md)
+
 ## What is this?
 
 An AI agent that lets you ask questions about your Kubernetes cluster in plain English. It investigates using kubectl, searches a vector database of cluster knowledge, and explains what it finds. Available via **CLI** for direct terminal use, as an **MCP server** for integration with Claude Code, Cursor, and other MCP clients, or as a **REST API** for receiving live updates from a Kubernetes controller.
