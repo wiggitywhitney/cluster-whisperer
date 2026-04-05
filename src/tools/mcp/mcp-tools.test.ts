@@ -1,4 +1,4 @@
-// ABOUTME: Unit tests for MCP tool registration — covers investigate and apply tool registration
+// ABOUTME: Unit tests for MCP tool registration — covers native kubectl and apply tool registration
 // ABOUTME: Tests the MCP wrapper layer that exposes tools to MCP clients
 
 /**
@@ -10,15 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// Mock the investigator module
-vi.mock("../../agent/investigator", () => ({
-  invokeInvestigator: vi.fn().mockResolvedValue({
-    answer: "Test answer",
-    thinking: [],
-    isError: false,
-  }),
-}));
+import * as mcpModule from "./index";
 
 // Mock the tracing modules
 vi.mock("../../tracing/context-bridge", () => ({
@@ -165,5 +157,15 @@ metadata:
       ],
       isError: true,
     });
+  });
+});
+
+describe("MCP module exports", () => {
+  it("does not export registerInvestigateTool (investigate wrapper removed in PRD #120 M2)", () => {
+    // The investigate tool wrapped the LangGraph agent — removed so the MCP
+    // server exposes native kubectl tools instead. This test ensures the
+    // wrapper is gone and cannot be accidentally re-added.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((mcpModule as any).registerInvestigateTool).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ABOUTME: MCP server entry point — exposes the investigate tool over stdio for MCP clients.
+// ABOUTME: MCP server entry point — exposes native kubectl tool handlers over stdio for MCP clients.
 // ABOUTME: Uses gracefulExit to flush OTel traces before exiting on errors.
 
 /**
@@ -8,21 +8,19 @@
  * What is this file?
  * This is the entry point for the MCP (Model Context Protocol) server. When an
  * MCP client like Claude Code connects, it spawns this process. The server
- * exposes our investigate tool over stdio.
+ * exposes native kubectl tool handlers over stdio.
  *
  * How it works:
  * 1. Create an McpServer with our server info
- * 2. Register the investigate tool (wraps our LangGraph agent)
+ * 2. Register native kubectl tool handlers (kubectl_get, kubectl_describe, etc.)
  * 3. Start the stdio transport (reads JSON-RPC from stdin, writes to stdout)
  * 4. Wait for the client to send tool requests
  *
- * Why a single investigate tool instead of low-level kubectl tools?
- * - Complete traces: One MCP call = one trace with all tool calls nested
- * - Better UX: Ask questions, get answers (same as CLI mode)
- * - Proper observability: See the full investigation flow in Datadog
- *
- * The investigate tool wraps the same LangGraph agent used by the CLI, so
- * MCP clients get the same investigation capabilities.
+ * Architecture (PRD #120):
+ * The MCP server exposes low-level kubectl tools directly. The AI coding
+ * assistant (e.g. Claude Code) reasons about which tools to call and what
+ * to do with the results — no LangGraph agent is invoked. Guardrails live
+ * at the cluster level via ServiceAccount RBAC (M5) and Kyverno (PRD #121).
  */
 
 // Initialize OpenTelemetry tracing before any other imports
@@ -32,7 +30,6 @@ import { gracefulExit } from "./tracing";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerInvestigateTool } from "./tools/mcp";
 
 /**
  * Creates and starts the MCP server.
@@ -49,9 +46,8 @@ async function main(): Promise<void> {
     version: "0.1.0",
   });
 
-  // Register the investigate tool with the server
-  // This single tool wraps our LangGraph agent for complete investigations
-  registerInvestigateTool(server);
+  // Native kubectl tool handlers are registered here (PRD #120 M3)
+  // kubectl_get, kubectl_describe, kubectl_logs, vector_search, kubectl_apply
 
   // Create stdio transport - communicates via stdin/stdout
   // This is how local MCP servers work: the client spawns this process
