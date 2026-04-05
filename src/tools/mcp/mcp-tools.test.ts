@@ -1,5 +1,5 @@
 // ABOUTME: Unit tests for MCP tool registration — covers native kubectl and apply tool registration
-// ABOUTME: Tests the MCP wrapper layer that exposes tools to MCP clients
+// ABOUTME: Tests the MCP wrapper layer that exposes tools to MCP clients (kubectl_get, describe, logs, vector_search, apply)
 
 /**
  * Tests for MCP tool registration
@@ -45,7 +45,14 @@ vi.mock("child_process", () => ({
   })),
 }));
 
-import { registerApplyTool } from "./index";
+import { spawnSync } from "child_process";
+import {
+  registerApplyTool,
+  registerGetTool,
+  registerDescribeTool,
+  registerLogsTool,
+  registerVectorSearchTool,
+} from "./index";
 import type { VectorStore } from "../../vectorstore";
 
 /**
@@ -82,6 +89,228 @@ function createMockServer() {
     registeredTools,
   };
 }
+
+describe("registerGetTool", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+  });
+
+  it("registers a tool named kubectl_get", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerGetTool(mockServer as any);
+
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      "kubectl_get",
+      expect.objectContaining({
+        description: expect.any(String),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("handler returns pod list on success", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerGetTool(mockServer as any);
+    const handler = mockServer.registeredTools.get("kubectl_get")!.handler;
+
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "NAME     READY   STATUS    RESTARTS   AGE\nnginx    1/1     Running   0          5d\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    const result = await handler({ resource: "pods" });
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("nginx") }],
+      isError: false,
+    });
+  });
+
+  it("handler returns isError: true when kubectl fails", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerGetTool(mockServer as any);
+    const handler = mockServer.registeredTools.get("kubectl_get")!.handler;
+
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "",
+      stderr: "Error from server (NotFound): pods not found",
+      status: 1,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    const result = await handler({ resource: "pods" });
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("Error") }],
+      isError: true,
+    });
+  });
+});
+
+describe("registerDescribeTool", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+  });
+
+  it("registers a tool named kubectl_describe", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerDescribeTool(mockServer as any);
+
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      "kubectl_describe",
+      expect.objectContaining({
+        description: expect.any(String),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("handler returns resource details on success", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerDescribeTool(mockServer as any);
+    const handler = mockServer.registeredTools.get("kubectl_describe")!.handler;
+
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "Name:         nginx\nNamespace:    default\nEvents:\n  Normal  Scheduled  5d  default-scheduler  Successfully assigned\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    const result = await handler({ resource: "pod", name: "nginx" });
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("nginx") }],
+      isError: false,
+    });
+  });
+});
+
+describe("registerLogsTool", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+  });
+
+  it("registers a tool named kubectl_logs", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerLogsTool(mockServer as any);
+
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      "kubectl_logs",
+      expect.objectContaining({
+        description: expect.any(String),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("handler returns log output on success", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerLogsTool(mockServer as any);
+    const handler = mockServer.registeredTools.get("kubectl_logs")!.handler;
+
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "2026-04-05T10:00:00Z INFO Server started\n2026-04-05T10:00:01Z ERROR connection refused\n",
+      stderr: "",
+      status: 0,
+      error: null,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as ReturnType<typeof spawnSync>);
+
+    const result = await handler({ pod: "nginx", namespace: "default" });
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("Server started") }],
+      isError: false,
+    });
+  });
+});
+
+describe("registerVectorSearchTool", () => {
+  let mockServer: ReturnType<typeof createMockServer>;
+  let mockVectorStore: VectorStore;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockServer = createMockServer();
+    mockVectorStore = createMockVectorStore({
+      keywordSearch: vi.fn().mockResolvedValue([
+        {
+          id: "platform.acme.io/v1alpha1/ManagedService",
+          text: "ManagedService resource for provisioning databases",
+          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
+          score: -1,
+        },
+      ]),
+    });
+  });
+
+  it("registers a tool named vector_search", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerVectorSearchTool(mockServer as any, mockVectorStore);
+
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      "vector_search",
+      expect.objectContaining({
+        description: expect.any(String),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("handler returns search results on success", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerVectorSearchTool(mockServer as any, mockVectorStore);
+    const handler = mockServer.registeredTools.get("vector_search")!.handler;
+
+    const result = await handler({ keyword: "database", collection: "capabilities" });
+
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("ManagedService") }],
+      isError: false,
+    });
+  });
+
+  it("handler returns isError: true when search fails", async () => {
+    const failingStore = createMockVectorStore({
+      keywordSearch: vi.fn().mockRejectedValue(new Error("Chroma connection refused")),
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerVectorSearchTool(mockServer as any, failingStore);
+    const handler = mockServer.registeredTools.get("vector_search")!.handler;
+
+    const result = await handler({ keyword: "database", collection: "capabilities" });
+
+    // vector_search catches errors internally and returns an error string
+    expect(result).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("failed") }],
+      isError: false,
+    });
+  });
+});
 
 describe("registerApplyTool", () => {
   let mockServer: ReturnType<typeof createMockServer>;

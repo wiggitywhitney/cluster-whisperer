@@ -119,10 +119,10 @@ Researched guardrail patterns across Kubernetes agent implementations and toolin
 
 **Success criteria**: MCP server no longer invokes the LangGraph agent. CLI works as before.
 
-### Milestone 3: Native Read-Only Tool Handlers
-- [ ] `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `vector_search` as MCP tool handlers using `src/core/`
-- [ ] Clear tool descriptions with scope guidance
-- [ ] OTel span on each handler
+### Milestone 3: Native Read-Only Tool Handlers ✅ Complete
+- [x] `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `vector_search` as MCP tool handlers using `src/core/`
+- [x] Clear tool descriptions with scope guidance
+- [x] OTel span on each handler
 
 **Success criteria**: Claude Code can call each read-only tool and get useful results.
 
