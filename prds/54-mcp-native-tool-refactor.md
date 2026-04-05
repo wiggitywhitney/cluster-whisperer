@@ -58,14 +58,14 @@ rules:
 
 ## `kubectl_apply` Simplification
 
-With Kyverno in place (PRD #55), `kubectl_apply` becomes simple:
-1. Parse YAML (useful for reporting what's about to happen)
-2. Run `kubectl apply`
+With the session state gate (PRD #54 M4) and Kyverno (PRD #55) in place, `kubectl_apply` works like this:
+1. Validate the manifest via `kubectl_apply_dryrun` — stores it in session state, returns a sessionId
+2. `kubectl_apply` accepts the sessionId, reads the manifest from session state, runs `kubectl apply`
 3. Return the result, including any Kyverno rejection errors
 
-The error from a Kyverno rejection surfaces naturally: `admission webhook "validate.kyverno.svc" denied the request: only ManagedService resources from platform.acme.io are allowed`. The AI coding assistant interprets this for the developer in natural language — no custom error handling needed.
+The session state gate ensures the AI cannot submit arbitrary YAML at apply time. Kyverno ensures only approved resource types can be created, regardless of how the request arrives. The error from a Kyverno rejection surfaces naturally to the AI coding assistant, which explains it to the developer in natural language.
 
-The tool catalog validation is removed entirely. Kyverno is the real guardrail.
+The tool catalog validation is removed in PRD #55 M3 once Kyverno is deployed.
 
 ---
 
@@ -157,10 +157,13 @@ The session state gate is the application-layer control on writes. It ensures th
 **Success criteria**: ServiceAccount cannot create arbitrary resources. Cluster enforces this.
 
 ### Milestone 6: Demo Readiness
+*Depends on PRD #55 M3 (catalog removal) for the full demo flow — the Kyverno rejection moment requires Kyverno to be deployed and the catalog validation removed. Do not close this PRD until PRD #55 M3 is complete.*
+
 - [ ] End-to-end: Claude Code investigates broken pod and deploys ManagedService via native MCP tools
+- [ ] Demonstrate Kyverno rejection of a non-approved resource type
 - [ ] Update talk demo flow to include MCP coda
 
-**Success criteria**: Demo-ready for KCD Austin / SRE Day.
+**Success criteria**: Demo-ready for KCD Austin / SRE Day. Kyverno is deployed, catalog validation is gone, rejection demo works.
 
 ---
 

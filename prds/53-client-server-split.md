@@ -6,6 +6,8 @@
 **Execution Order**: After PRD #49 — the conference demo uses Option C (kubeconfig pass-through). This PRD builds the real governance architecture afterward.
 **Branch**: `feature/prd-53-client-server-split`
 
+> **Architecture decision made**: The MCP server native tool refactor is implemented in PRD #54. Kyverno admission control is implemented in PRD #55. This PRD's M3 RBAC milestone aligns with those decisions.
+
 ## Problem
 
 The cluster-whisperer CLI currently runs the agent locally. The user must have a
