@@ -1805,6 +1805,22 @@ install_kyverno() {
     fi
 }
 
+# Apply Kyverno ClusterPolicy manifests from k8s/ in the repo root.
+# Idempotent — kubectl apply is safe to re-run.
+apply_kyverno_policies() {
+    log_info "Applying Kyverno ClusterPolicy manifests..."
+
+    kubectl apply -f "${REPO_ROOT}/k8s/kyverno-allowlist.yaml"
+
+    # Verify the policy was accepted by the cluster
+    if kubectl get clusterpolicy cluster-whisperer-resource-allowlist &>/dev/null; then
+        log_success "Kyverno allowlist policy applied"
+    else
+        log_error "Kyverno allowlist policy not found after apply"
+        return 1
+    fi
+}
+
 # =============================================================================
 # k8s-vectordb-sync Controller and cluster-whisperer Serve
 # =============================================================================
@@ -2194,6 +2210,7 @@ main() {
     verify_trace_pipeline
     deploy_demo_app
     install_kyverno
+    apply_kyverno_policies
     deploy_cluster_whisperer_serve
     create_ingress_resources
     run_capability_inference

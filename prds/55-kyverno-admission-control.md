@@ -35,6 +35,7 @@ spec:
       match:
         any:
           - resources:
+              kinds: ["*"]  # required by Kyverno — resources block must have at least one kind
               operations: ["CREATE"]
             subjects:
               - kind: ServiceAccount
@@ -99,17 +100,17 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 **Success criteria**: `kubectl get pods -n kyverno` shows Kyverno running. A test policy blocks a test resource.
 
-### Milestone 2: ClusterPolicy — Resource Allowlist
+### Milestone 2: ClusterPolicy — Resource Allowlist ✅ Complete
 **Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
 
 *Decision 1 resolved: SA-scoped policy (Option 2). Write the policy scoped to `cluster-whisperer-mcp` SA — this is the correct production form. Verify using `kubectl --as` impersonation now; the policy fires automatically once the MCP server runs in-cluster (future PRD). See Decision Log.*
 
 - [x] **Decide demo scoping strategy**: SA-scoped policy chosen (Decision 1). Policy is correct as written in this PRD's Policy Strategy section.
-- [ ] Write `k8s/kyverno-allowlist.yaml` with SA scoping and `background: false`
-- [ ] **Verify Kyverno policy syntax**: Apply the policy. Test rejection using `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` impersonation — attempt to create a non-approved resource and confirm Kyverno error fires.
-- [ ] Test: creating a ManagedService as the SA succeeds; creating a Pod as the SA is rejected with the Kyverno error message
-- [ ] Test: Crossplane operations are unaffected (Crossplane uses its own SA, policy won't match)
-- [ ] Test: system ServiceAccounts are unaffected
+- [x] Write `k8s/kyverno-allowlist.yaml` with SA scoping and `background: false`
+- [x] **Verify Kyverno policy syntax**: Applied to GKE cluster. Rejection confirmed via `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` — ConfigMap create blocked with clear Kyverno error. See Decision 3 for `kinds: ["*"]` fix required during apply.
+- [x] Test: creating a ManagedService as the SA succeeds; creating a Pod as the SA is rejected with the Kyverno error message
+- [x] Test: Crossplane operations are unaffected (Crossplane uses its own SA, policy won't match)
+- [x] Test: system ServiceAccounts are unaffected
 
 **Success criteria**: SA-scoped policy applied to cluster. Rejection verified via `kubectl --as` impersonation. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
 
@@ -141,6 +142,7 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 |---|------|----------|-----------|
 | 1 | 2026-04-06 | SA-scoped policy (Option 2) for demo | SA scoping is the correct production form — fires based on request identity, not namespace. Aligns with Viktor Farcic's reference architecture (in-cluster MCP). Impersonation (Option 1) requires MCP code changes; namespace scoping (Option 3) weakens the guardrails story. M2 verifies via `kubectl --as` now; live Claude Code rejection fires automatically once MCP runs in-cluster. |
 | 2 | 2026-04-06 | In-cluster MCP deployment needs a new PRD | PRD #53 explicitly excludes MCP-over-HTTP. No existing PRD covers in-cluster MCP server deployment (switching from stdio to Streamable HTTP transport + Kubernetes Deployment). This gap means M4's live rejection demo is blocked until that PRD is written and merged. |
+| 3 | 2026-04-06 | `kinds: ["*"]` required in resources block | Kyverno v1.17.1 rejects ClusterPolicy at apply time if `resources` has no `kinds` entry, even when using `subjects` scoping. The original PRD policy example omitted `kinds`. Fix: add `kinds: ["*"]` to capture all resource types and let deny conditions filter. Documented in `~/.claude/rules/kyverno-gotchas.md`. |
 
 ## References
 
