@@ -131,6 +131,7 @@ End-to-end verification that the Kyverno rejection demo moment works with in-clu
 | 2 | 2026-04-06 | Co-host on existing Hono server | MCP HTTP endpoint added to existing `src/api/server.ts` rather than a separate process. Reduces operational complexity — one pod, one port, same image. |
 | 3 | 2026-04-06 | No CLUSTER_WHISPERER_KUBECONFIG in-cluster | In-cluster pods authenticate via mounted SA token automatically. Passing a kubeconfig would conflict. The existing `executeKubectl` already handles in-cluster auth (no `--kubeconfig` flag when env var is unset). |
 | 4 | 2026-04-06 | Replace stdio transport, do not keep alongside | stdio is only useful for local development. Once in-cluster is the target, maintaining two transport modes adds complexity with no benefit. The LangGraph CLI path is unaffected (it never used MCP). |
+| 5 | 2026-04-06 | MCP HTTP port: 3457 | Distinct from the serve/REST API port to avoid conflicts. Concrete port pinned in the PRD so M1 and M2 share a single source of truth rather than M2 depending on M1's output. |
 
 ---
 
