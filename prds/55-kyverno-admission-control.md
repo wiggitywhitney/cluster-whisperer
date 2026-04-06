@@ -1,6 +1,6 @@
 # PRD #55: Kyverno Admission Control
 
-**Status**: Not Started
+**Status**: In Progress
 **Priority**: High
 **Created**: 2026-04-05
 **Depends on**: PRD #54 (ServiceAccount RBAC must exist for policy scoping)
@@ -29,6 +29,7 @@ metadata:
   name: cluster-whisperer-resource-allowlist
 spec:
   validationFailureAction: Enforce
+  background: false  # subjects matching only works on live admission requests, not background scans
   rules:
     - name: require-approved-resources
       match:
@@ -100,18 +101,17 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 ### Milestone 2: ClusterPolicy — Resource Allowlist
 **Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
-- [ ] **Decide demo scoping strategy first**: The policy is scoped to the `cluster-whisperer-mcp` ServiceAccount. But in the demo, the MCP server may run locally with `CLUSTER_WHISPERER_KUBECONFIG` — in which case kubectl authenticates as the kubeconfig user, not the ServiceAccount, and the Kyverno policy won't match. Options:
-  - Use `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` to impersonate the ServiceAccount (requires impersonation RBAC)
-  - Run the MCP server in-cluster for the demo (as a pod, not locally)
-  - Scope the policy by namespace instead of ServiceAccount for the demo
-  - Document the chosen approach before writing the policy
-- [ ] Write `k8s/kyverno-allowlist.yaml` with the chosen scoping approach
-- [ ] **Verify Kyverno policy syntax**: The `subjects` block under `match` has changed across Kyverno versions. Apply the policy, attempt a create as the ServiceAccount (or impersonated identity), verify rejection before claiming success
-- [ ] Test: creating a ManagedService succeeds; creating a Pod is rejected with the Kyverno error message
-- [ ] Test: Crossplane operations are unaffected
+
+*Decision 1 resolved: SA-scoped policy (Option 2). Write the policy scoped to `cluster-whisperer-mcp` SA — this is the correct production form. Verify using `kubectl --as` impersonation now; the policy fires automatically once the MCP server runs in-cluster (future PRD). See Decision Log.*
+
+- [x] **Decide demo scoping strategy**: SA-scoped policy chosen (Decision 1). Policy is correct as written in this PRD's Policy Strategy section.
+- [ ] Write `k8s/kyverno-allowlist.yaml` with SA scoping and `background: false`
+- [ ] **Verify Kyverno policy syntax**: Apply the policy. Test rejection using `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` impersonation — attempt to create a non-approved resource and confirm Kyverno error fires.
+- [ ] Test: creating a ManagedService as the SA succeeds; creating a Pod as the SA is rejected with the Kyverno error message
+- [ ] Test: Crossplane operations are unaffected (Crossplane uses its own SA, policy won't match)
 - [ ] Test: system ServiceAccounts are unaffected
 
-**Success criteria**: The rejection is visible in the demo. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
+**Success criteria**: SA-scoped policy applied to cluster. Rejection verified via `kubectl --as` impersonation. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
 
 ### Milestone 3: Remove Tool Catalog from `kubectl_apply`
 *This is the only place the catalog removal happens. PRD #54 M4 leaves the catalog in place until this milestone runs.*
@@ -124,13 +124,23 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 **Success criteria**: `kubectl_apply` is simpler. Kyverno handles admission enforcement. The session state gate handles application-layer enforcement. The two layers are complementary, not redundant.
 
 ### Milestone 4: Demo Polish
+
+*Note: the live rejection moment (item 2) requires the MCP server running in-cluster so requests arrive as the `cluster-whisperer-mcp` SA. This is currently unplanned — no PRD covers in-cluster MCP deployment (PRD #53 explicitly excludes MCP-over-HTTP). A new PRD is needed before this milestone can be fully completed. See Decision Log Decision 2.*
+
 - [ ] Show Kyverno ClusterPolicy YAML in the talk slide deck
-- [ ] Demonstrate a rejection live: ask Claude Code to create a non-approved resource, show the Kyverno error, show Claude Code's natural language explanation
+- [ ] Demonstrate a rejection live via Claude Code (requires in-cluster MCP — Decision 2)
 - [ ] Document the full demo flow in `docs/talk/`
 
 **Success criteria**: The Kyverno demo moment is polished and tells the guardrails story convincingly.
 
 ---
+
+## Decision Log
+
+| # | Date | Decision | Rationale |
+|---|------|----------|-----------|
+| 1 | 2026-04-06 | SA-scoped policy (Option 2) for demo | SA scoping is the correct production form — fires based on request identity, not namespace. Aligns with Viktor Farcic's reference architecture (in-cluster MCP). Impersonation (Option 1) requires MCP code changes; namespace scoping (Option 3) weakens the guardrails story. M2 verifies via `kubectl --as` now; live Claude Code rejection fires automatically once MCP runs in-cluster. |
+| 2 | 2026-04-06 | In-cluster MCP deployment needs a new PRD | PRD #53 explicitly excludes MCP-over-HTTP. No existing PRD covers in-cluster MCP server deployment (switching from stdio to Streamable HTTP transport + Kubernetes Deployment). This gap means M4's live rejection demo is blocked until that PRD is written and merged. |
 
 ## References
 

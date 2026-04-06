@@ -60,7 +60,7 @@ clients never get cluster access.
 - Multi-tenant isolation (single-team use case for now)
 - WebSocket support (SSE is sufficient for unidirectional streaming)
 - Replacing the local CLI mode (it remains valuable for development and testing)
-- MCP protocol over HTTP (dot-ai does this, but cluster-whisperer's MCP server is stdio-based and serves a different purpose)
+- MCP protocol over HTTP in this PRD — the MCP server is currently stdio-based. In-cluster MCP deployment (switching to Streamable HTTP transport + Kubernetes Deployment) is a dependency for the Kyverno live demo (PRD #55 Decision 2) and needs its own PRD.
 
 ## Milestones
 
