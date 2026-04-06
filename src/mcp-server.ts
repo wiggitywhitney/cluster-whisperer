@@ -70,6 +70,11 @@ async function main(): Promise<void> {
   // Initialize vector store for vector_search and kubectl_apply (catalog validation).
   // Uses the default backend (chroma). The VOYAGE_API_KEY env var must be set
   // for semantic (embedding-based) searches; keyword-only searches work without it.
+  if (!process.env.VOYAGE_API_KEY) {
+    console.warn(
+      "[cluster-whisperer] VOYAGE_API_KEY is not set — semantic (embedding-based) search will fail with HTTP 401. Set VOYAGE_API_KEY to enable vector_search."
+    );
+  }
   const embedder = new VoyageEmbedding();
   const vectorStore = createVectorStore(embedder, DEFAULT_VECTOR_BACKEND, {
     chromaUrl: process.env.CHROMA_URL,
