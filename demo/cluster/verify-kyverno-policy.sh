@@ -66,9 +66,9 @@ kubectl create namespace "${NAMESPACE}" &>/dev/null
 # Test 1: Non-approved resource is REJECTED when created as cluster-whisperer-mcp SA
 # ─────────────────────────────────────────────────────────────────────────────
 
-info "Test 1: Pod creation as cluster-whisperer-mcp SA should be rejected..."
+info "Test 1: ConfigMap creation as cluster-whisperer-mcp SA should be rejected..."
 
-POD_MANIFEST=$(cat <<'EOF'
+CONFIGMAP_MANIFEST=$(cat <<'EOF'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -78,7 +78,7 @@ data:
 EOF
 )
 
-REJECT_OUTPUT=$(echo "${POD_MANIFEST}" | kubectl apply -f - \
+REJECT_OUTPUT=$(echo "${CONFIGMAP_MANIFEST}" | kubectl apply -f - \
     -n "${NAMESPACE}" \
     --as="${SA_IMPERSONATE}" 2>&1 || true)
 
@@ -131,7 +131,7 @@ info "Test 3: ConfigMap creation as Crossplane SA should NOT be blocked by Kyver
 
 CROSSPLANE_SA="system:serviceaccount:crossplane-system:crossplane"
 
-CROSSPLANE_OUTPUT=$(echo "${POD_MANIFEST}" | kubectl apply -f - \
+CROSSPLANE_OUTPUT=$(echo "${CONFIGMAP_MANIFEST}" | kubectl apply -f - \
     -n "${NAMESPACE}" \
     --as="${CROSSPLANE_SA}" 2>&1 || true)
 
@@ -149,7 +149,7 @@ info "Test 4: ConfigMap creation as default SA should NOT be blocked by Kyverno.
 
 SYSTEM_SA="system:serviceaccount:default:default"
 
-SYSTEM_OUTPUT=$(echo "${POD_MANIFEST}" | kubectl apply -f - \
+SYSTEM_OUTPUT=$(echo "${CONFIGMAP_MANIFEST}" | kubectl apply -f - \
     -n "${NAMESPACE}" \
     --as="${SYSTEM_SA}" 2>&1 || true)
 
