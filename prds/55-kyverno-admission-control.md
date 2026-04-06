@@ -90,14 +90,16 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 ## Milestones
 
-### Milestone 1: Kyverno Installation
-- [ ] Add Kyverno to the demo cluster setup (Helm chart or kubectl apply)
-- [ ] Verify Kyverno admission webhook is running and intercepting requests
-- [ ] Document install command in demo setup docs
+### Milestone 1: Kyverno Installation ✅ Complete
+**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
+- [x] Add Kyverno to the demo cluster setup (Helm chart or kubectl apply)
+- [x] Verify Kyverno admission webhook is running and intercepting requests
+- [x] Document install command in demo setup docs
 
 **Success criteria**: `kubectl get pods -n kyverno` shows Kyverno running. A test policy blocks a test resource.
 
 ### Milestone 2: ClusterPolicy — Resource Allowlist
+**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
 - [ ] **Decide demo scoping strategy first**: The policy is scoped to the `cluster-whisperer-mcp` ServiceAccount. But in the demo, the MCP server may run locally with `CLUSTER_WHISPERER_KUBECONFIG` — in which case kubectl authenticates as the kubeconfig user, not the ServiceAccount, and the Kyverno policy won't match. Options:
   - Use `kubectl --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` to impersonate the ServiceAccount (requires impersonation RBAC)
   - Run the MCP server in-cluster for the demo (as a pod, not locally)
