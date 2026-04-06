@@ -89,7 +89,7 @@ Existing core functions already accept a `kubeconfig` option — MCP tool handle
 | `kubectl_describe` | `src/core/` | Reuse existing |
 | `kubectl_logs` | `src/core/` | Reuse existing |
 | `kubectl_apply_dryrun` | New | Dry-run + store in session; returns sessionId |
-| `kubectl_apply` | Modified | Accepts sessionId only; removes catalog validation |
+| `kubectl_apply` | Modified | Accepts sessionId only (M4); catalog validation stays until PRD #121 M3 |
 | `vector_search` | `src/core/` | Reuse existing |
 
 ---
@@ -154,19 +154,25 @@ The session state gate is the application-layer control on writes. It ensures th
 **Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` with a fabricated or missing session ID returns an error — not silently fails. `kubectl_apply` without a prior successful `kubectl_apply_dryrun` is rejected.
 
 ### Milestone 5: ServiceAccount + RBAC Manifests
-- [ ] Create `k8s/mcp-rbac.yaml`: ServiceAccount + ClusterRole + ClusterRoleBinding
-- [ ] ClusterRole: read verbs on standard resources, `create` only on platform resource types
-- [ ] Configure in-cluster auth to use ServiceAccount credentials
-- [ ] Test: unauthorized operations rejected at cluster level
+*This milestone is a hard prerequisite for PRD #53 M4 (in-cluster MCP server deployment). M5 creates the ServiceAccount the pod will run as; PRD #53 M4 creates the Deployment that uses it. Complete M5 cleanly before starting PRD #53 M4.*
 
-**Success criteria**: ServiceAccount cannot create arbitrary resources. Cluster enforces this.
+- [ ] Create `demo/cluster/manifests/mcp-rbac.yaml`: ServiceAccount (`cluster-whisperer-mcp`) + ClusterRole + ClusterRoleBinding
+- [ ] ClusterRole: use the RBAC YAML from this PRD's Guardrails section verbatim as the spec — do NOT modify the existing `cluster-whisperer` ClusterRole in `cluster-whisperer-serve.yaml` (that role is for the serve/CLI agent and has intentionally broad read access)
+- [ ] Integrate into `setup.sh`: apply `mcp-rbac.yaml` alongside `cluster-whisperer-serve.yaml` in `deploy_cluster_whisperer_serve()`
+- [ ] Test unauthorized operations rejected: `kubectl auth can-i create deployments --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "no"; `kubectl auth can-i create managedservices.platform.acme.io --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "yes"
+
+**Success criteria**: `cluster-whisperer-mcp` ServiceAccount exists in the cluster. It can `get`/`list`/`watch` standard resources and `create` `platform.acme.io` resources. It cannot create `apps/v1` resources. PRD #53 M4 can proceed.
 
 ### Milestone 6: Demo Readiness
 *Depends on PRD #121 M3 (catalog removal) for the full demo flow — the Kyverno rejection moment requires Kyverno to be deployed and the catalog validation removed. Do not close this PRD until PRD #121 M3 is complete.*
 
+*Note on demo form: M6 can be completed with the MCP server running locally (stdio, `CLUSTER_WHISPERER_KUBECONFIG`). The production-grade form — MCP server running in-cluster as a pod, no local kubeconfig — is implemented in PRD #53 M4. M6 does not block on PRD #53 M4, but PRD #53 M4 is the fuller story for the governance narrative.*
+
+*Implementation order: (1) verify Kyverno is running (PRD #121 M1+M2 complete), (2) verify catalog validation removed (PRD #121 M3 complete), (3) run end-to-end, (4) update demo docs.*
+
 - [ ] End-to-end: Claude Code investigates broken pod and deploys ManagedService via native MCP tools
 - [ ] Demonstrate Kyverno rejection of a non-approved resource type
-- [ ] Update talk demo flow to include MCP coda
+- [ ] Update talk demo flow to include MCP coda — check `docs/talk/` for the demo runbook or flow file
 
 **Success criteria**: Demo-ready for KCD Austin / SRE Day. Kyverno is deployed, catalog validation is gone, rejection demo works.
 
@@ -175,5 +181,5 @@ The session state gate is the application-layer control on writes. It ensures th
 ## References
 
 - PRD #121: Kyverno integration (Layer 4 — admission control, replaces tool catalog)
-- PRD #53: Client-server split (separate concern)
+- PRD #53: Client-server split — M4 (in-cluster MCP server deployment) depends on PRD #120 M5. Complete M5 before starting PRD #53 M4.
 - PRD #16 (done): original MCP wrapper being replaced in Milestone 2
