@@ -153,13 +153,13 @@ The session state gate is the application-layer control on writes. It ensures th
 
 **Success criteria**: Claude Code cannot apply arbitrary YAML. `kubectl_apply` with a fabricated or missing session ID returns an error — not silently fails. `kubectl_apply` without a prior successful `kubectl_apply_dryrun` is rejected.
 
-### Milestone 5: ServiceAccount + RBAC Manifests
+### Milestone 5: ServiceAccount + RBAC Manifests ✅ Complete
 *This milestone is a hard prerequisite for PRD #53 M4 (in-cluster MCP server deployment). M5 creates the ServiceAccount the pod will run as; PRD #53 M4 creates the Deployment that uses it. Complete M5 cleanly before starting PRD #53 M4.*
 
-- [ ] Create `demo/cluster/manifests/mcp-rbac.yaml`: ServiceAccount (`cluster-whisperer-mcp`) + ClusterRole + ClusterRoleBinding
-- [ ] ClusterRole: use the RBAC YAML from this PRD's Guardrails section verbatim as the spec — do NOT modify the existing `cluster-whisperer` ClusterRole in `cluster-whisperer-serve.yaml` (that role is for the serve/CLI agent and has intentionally broad read access)
-- [ ] Integrate into `setup.sh`: apply `mcp-rbac.yaml` alongside `cluster-whisperer-serve.yaml` in `deploy_cluster_whisperer_serve()`
-- [ ] Test unauthorized operations rejected: `kubectl auth can-i create deployments --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "no"; `kubectl auth can-i create managedservices.platform.acme.io --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "yes"
+- [x] Create `demo/cluster/manifests/mcp-rbac.yaml`: ServiceAccount (`cluster-whisperer-mcp`) + ClusterRole + ClusterRoleBinding
+- [x] ClusterRole: use the RBAC YAML from this PRD's Guardrails section verbatim as the spec — do NOT modify the existing `cluster-whisperer` ClusterRole in `cluster-whisperer-serve.yaml` (that role is for the serve/CLI agent and has intentionally broad read access)
+- [x] Integrate into `setup.sh`: apply `mcp-rbac.yaml` alongside `cluster-whisperer-serve.yaml` in `deploy_cluster_whisperer_serve()`
+- [x] Test unauthorized operations rejected: `kubectl auth can-i create deployments --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "no"; `kubectl auth can-i create managedservices.platform.acme.io --as=system:serviceaccount:cluster-whisperer:cluster-whisperer-mcp` should return "yes"
 
 **Success criteria**: `cluster-whisperer-mcp` ServiceAccount exists in the cluster. It can `get`/`list`/`watch` standard resources and `create` `platform.acme.io` resources. It cannot create `apps/v1` resources. PRD #53 M4 can proceed.
 
