@@ -1,6 +1,6 @@
 # PRD #120: MCP Server — Native Tool Handlers + ServiceAccount RBAC
 
-**Status**: In Progress (research complete)
+**Status**: Complete (2026-04-07)
 **Priority**: High
 **Created**: 2026-04-05
 **GitHub Issue**: wiggitywhitney/cluster-whisperer#120
@@ -164,19 +164,21 @@ The session state gate is the application-layer control on writes. It ensures th
 **Success criteria**: `cluster-whisperer-mcp` ServiceAccount exists in the cluster. It can `get`/`list`/`watch` standard resources and `create` `platform.acme.io` resources. It cannot create `apps/v1` resources. PRD #53 M4 can proceed.
 
 ### Milestone 6: Demo Readiness
-*Depends on PRD #121 M3 (catalog removal) for the full demo flow — the Kyverno rejection moment requires Kyverno to be deployed and the catalog validation removed. Do not close this PRD until PRD #121 M3 is complete.*
+*All three items deferred to PRD #122 M4 — see Decision 6. The local stdio form could be done now but the in-cluster form is the real demo story.*
 
-*Note on demo form: M6 can be completed with the MCP server running locally (stdio, `CLUSTER_WHISPERER_KUBECONFIG`). The production-grade form — MCP server running in-cluster as a pod, no local kubeconfig — is implemented in PRD #53 M4. M6 does not block on PRD #53 M4, but PRD #53 M4 is the fuller story for the governance narrative.*
-
-*Implementation order: (1) verify Kyverno is running (PRD #121 M1+M2 complete), (2) verify catalog validation removed (PRD #121 M3 complete), (3) run end-to-end, (4) update demo docs.*
-
-- [ ] End-to-end: Claude Code investigates broken pod and deploys ManagedService via native MCP tools
-- [ ] Demonstrate Kyverno rejection of a non-approved resource type
-- [ ] Update talk demo flow to include MCP coda — check `docs/talk/` for the demo runbook or flow file
+- [~] End-to-end: Claude Code investigates broken pod and deploys ManagedService via native MCP tools (deferred to PRD #122 M4)
+- [~] Demonstrate Kyverno rejection of a non-approved resource type (deferred to PRD #122 M4)
+- [~] Update talk demo flow to include MCP coda (deferred to PRD #122 M4)
 
 **Success criteria**: Demo-ready for KCD Austin / SRE Day. Kyverno is deployed, catalog validation is gone, rejection demo works.
 
 ---
+
+## Decision Log
+
+| # | Date | Decision | Rationale |
+|---|------|----------|-----------|
+| 6 | 2026-04-07 | Defer all M6 items to PRD #122 M4 | The local stdio form could exercise M6 items but would need to be re-done once in-cluster MCP ships. PRD #122 M4 now explicitly covers all three: end-to-end investigation+deploy, Kyverno rejection, and demo doc update — in the real SA-identity form that the talk requires. Doing them twice adds no value. |
 
 ## References
 
