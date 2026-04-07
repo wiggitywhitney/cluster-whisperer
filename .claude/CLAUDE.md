@@ -29,6 +29,11 @@ Keep production dependencies minimal:
 
 - **NEVER run `teardown.sh` or delete Kind/GKE clusters without explicit human approval.** Always confirm with the user before executing any destructive infrastructure commands.
 - Do not run `setup.sh` without confirming the target mode (kind/gcp) with the user — GKE creates billable resources.
+- **A running GCP cluster is required for PRD work in this repo.** The demo is designed so the presenter's default shell has **no** `KUBECONFIG` set — `kubectl cluster-info` will always fail with "connection refused" and that is intentional. The correct check is:
+  ```bash
+  kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info
+  ```
+  If that fails, the cluster is not running. Halt and ask the user to provision one before continuing. Do NOT skip, defer, or design around the missing cluster. To provision: `./demo/cluster/setup.sh gcp` (no vals wrapper needed).
 
 ## Secrets Management
 

@@ -1,12 +1,12 @@
 # PRD #53: Client-Server Architecture Split
 
 **Status**: Not Started
-**Priority**: Medium (post-conference)
-**Dependencies**: PRD #48 (demo modifications, serve mode infrastructure), PRD #49 (Vercel agent — both agents must work through the serve endpoint)
-**Execution Order**: After PRD #49 — the conference demo uses Option C (kubeconfig pass-through). This PRD builds the real governance architecture afterward.
+**Priority**: High (KubeCon happened — post-conference work is now active)
+**Dependencies**: PRD #48 (demo modifications, serve mode infrastructure), PRD #120 (MCP native tool handlers + RBAC — prerequisite for M4 below)
+**Execution Order**: PRD #120 M5 (ServiceAccount + RBAC manifests) is a prerequisite for M4 below.
 **Branch**: `feature/prd-53-client-server-split`
 
-> **Architecture decision made**: The MCP server native tool refactor is implemented in PRD #54. Kyverno admission control is implemented in PRD #55. This PRD's M3 RBAC milestone aligns with those decisions.
+> **Architecture decisions made**: The MCP server native tool refactor is implemented in PRD #120. Kyverno admission control is implemented in PRD #121. The serve endpoint runs the same LangGraph agent as the CLI — not a separate implementation. In-cluster MCP server deployment with HTTP transport is now in scope (see Decision 5, M4 below).
 
 ## Problem
 
@@ -60,22 +60,25 @@ clients never get cluster access.
 - Multi-tenant isolation (single-team use case for now)
 - WebSocket support (SSE is sufficient for unidirectional streaming)
 - Replacing the local CLI mode (it remains valuable for development and testing)
-- MCP protocol over HTTP (dot-ai does this, but cluster-whisperer's MCP server is stdio-based and serves a different purpose)
 
 ## Milestones
 
 ### M1: Investigation Endpoint with SSE Streaming
+- [ ] Step zero: read `docs/architecture-research.md` for context on why this endpoint exists and how it fits the overall architecture
 - [ ] `POST /api/v1/investigate` Hono route accepting `{ question, toolGroups?, agentType?, vectorBackend? }`
-- [ ] Server-side agent creation using existing `createAgent()` factory
+- [ ] Server-side agent creation using existing `createAgent()` factory (LangGraph — same agent as the CLI)
 - [ ] `streamEvents()` output serialized as SSE events: `thinking`, `tool_call`, `tool_result`, `answer`, `error`
 - [ ] SSE event format documented and versioned
 - [ ] Error handling for mid-stream failures (agent errors, tool failures, timeouts)
-- [ ] Concurrency control (max concurrent investigations, similar to capability scan's in-flight limit)
+- [ ] Concurrency control (max concurrent investigations) — follow the in-flight limit pattern in `src/api/routes/capabilities.ts`
 - [ ] Non-streaming mode: `Accept: application/json` returns complete result (for CI, scripts, MCP-over-HTTP later)
 - [ ] Unit tests using Hono's `app.request()` test pattern
 - [ ] Integration test: POST question → receive SSE stream → verify event sequence
 
+**Success criteria**: `POST /api/v1/investigate` returns an SSE stream with at least one `thinking`, one `tool_call`, and one `answer` event for a valid question. `Accept: application/json` returns a complete result object. Both streaming and non-streaming paths have passing tests.
+
 ### M2: CLI Thin-Client Mode
+- [ ] Step zero: read `docs/architecture-research.md`
 - [ ] `CLUSTER_WHISPERER_URL` env var detection in CLI
 - [ ] When set: skip local agent creation, POST to `${url}/api/v1/investigate`
 - [ ] SSE stream reader that parses events into the same format as local `streamEvents()`
@@ -85,14 +88,34 @@ clients never get cluster access.
 - [ ] Unit tests for SSE parsing and event rendering
 - [ ] Integration test: CLI → serve endpoint → full investigation cycle
 
+**Success criteria**: `CLUSTER_WHISPERER_URL=http://localhost:3000 cluster-whisperer "why is my pod broken"` produces identical terminal output to local mode. The CLI has zero knowledge of whether it's local or remote — output is the contract.
+
 ### M3: Write RBAC for kubectl_apply
-*Note: enforcement strategy has evolved since this PRD was written. PRD #55 (Kyverno) is the primary enforcement layer; this milestone covers the ServiceAccount RBAC side.*
+*Note: enforcement strategy has evolved since this PRD was written. PRD #121 (Kyverno) is the primary enforcement layer; this milestone covers the ServiceAccount RBAC side.*
 
-- [ ] Update serve deployment's ClusterRole to include create permissions for approved resource types (see PRD #55 for allowlist — currently `platform.acme.io/v1alpha1/ManagedService`)
+- [ ] Step zero: read `docs/architecture-research.md`
+
+- [ ] Update serve deployment's ClusterRole to include create permissions for approved resource types (see PRD #121 for allowlist — currently `platform.acme.io/v1alpha1/ManagedService`)
 - [ ] Verify: agent running via serve endpoint can successfully apply approved resources
-- [ ] Verify: Kyverno ClusterPolicy (PRD #55) provides admission-level enforcement for the serve ServiceAccount (MCP ServiceAccount verification is owned by PRD #54 M5)
+- [ ] Verify: Kyverno ClusterPolicy (PRD #121) provides admission-level enforcement for the serve ServiceAccount (MCP ServiceAccount verification is owned by PRD #120 M5)
 
-### M4: OTel Context for Remote Execution
+**Success criteria**: The serve deployment's ServiceAccount can `kubectl apply` a `platform.acme.io/v1alpha1/ManagedService`. Attempting to create a `apps/v1/Deployment` is rejected. Kyverno enforcement verified end-to-end.
+
+### M4: In-Cluster MCP Server Deployment
+*Prerequisite: PRD #120 M5 (ServiceAccount + RBAC manifests). The MCP server runs as a pod using its ServiceAccount directly — no kubeconfig needed.*
+
+- [ ] Step zero: read `docs/architecture-research.md`
+- [ ] Research step: run `/research MCP Streamable HTTP transport` — `src/mcp-server.ts` currently uses `StdioServerTransport`; understand how to switch to `StreamableHTTPServerTransport`, what port/path conventions to use, and how Claude Code's `.mcp.json` should reference an HTTP server. Document findings before writing code.
+- [ ] Decide and implement entrypoint: add an `--http` flag to the existing `mcp-server` binary so one image serves both modes (stdio for local, HTTP for in-cluster)
+- [ ] Create `demo/cluster/manifests/mcp-server.yaml`: Deployment using the cluster-whisperer image with `--http` flag, ServiceAccount from PRD #120 M5
+- [ ] Stdio transport for local development must remain unchanged — the `--http` flag only activates HTTP mode
+- [ ] Apply manifests in `setup.sh` alongside the serve deployment
+- [ ] Configure Claude Code to connect via HTTP transport (update `.mcp.json`)
+- [ ] Test: Claude Code can call MCP tools against the in-cluster server with no local kubeconfig
+
+**Success criteria**: The MCP server runs in-cluster as a pod. Claude Code connects via HTTP transport. The pod's ServiceAccount RBAC is the only cluster access — no local kubeconfig required. Stdio mode for local development is unaffected.
+
+### M5: OTel Context for Remote Execution
 - [ ] Root span created on serve side (not CLI side) for remote investigations
 - [ ] Span attributes include: question, agent type, tool groups, vector backend
 - [ ] Tool spans (kubectl, vector search) are children of the investigation span
@@ -100,7 +123,7 @@ clients never get cluster access.
 - [ ] Verified: traces in Jaeger show complete investigation flow attributed to serve pod
 - [ ] W3C trace context propagation: CLI can optionally send traceparent header for correlation
 
-### M5: End-to-End Verification and Documentation
+### M6: End-to-End Verification and Documentation
 - [ ] Full investigation cycle: CLI (no kubeconfig) → serve endpoint → agent investigates → results streamed back
 - [ ] Both agent types (LangGraph, Vercel) work through the endpoint
 - [ ] Both vector backends (Chroma, Qdrant) work through the endpoint
@@ -169,7 +192,7 @@ The rendering code doesn't know or care where events come from.
 | OTel tracing middleware | `src/api/tracing-middleware.ts` | Already on all serve routes |
 | Zod validation | `src/api/schemas/` | Pattern for request validation |
 | Hono app factory | `src/api/server.ts` | Add new route alongside existing |
-| MCP invoke pattern | `src/tools/mcp/index.ts` `invokeInvestigator()` | Reference for non-streaming agent invocation |
+| MCP native tool handlers | `src/tools/mcp/index.ts` | Reference for how core tool functions are wrapped (PRD #120) |
 
 ### What dot-ai Does Differently
 
@@ -191,3 +214,6 @@ mode from the output alone, the implementation is correct.
 | 2026-03-13 | SSE over WebSocket | Unidirectional streaming (server → client) is all that's needed. SSE is simpler, works with standard HTTP, and Hono has built-in support. |
 | 2026-03-13 | Keep local CLI mode | Local mode is valuable for development and testing. Don't force all usage through the serve endpoint. dot-ai is server-only because it targets a different use case (always-on MCP server for AI assistants). |
 | 2026-03-13 | OTel root span on server | When running via serve endpoint, the server does the work, so the server owns the trace. The CLI is just a display client. This is more correct for the governance story (traces attributed to the platform's ServiceAccount, not the developer's machine). |
+| 2026-04-06 | Post-conference is now active | KubeCon happened. PRD priority raised to High. Work can begin. |
+| 2026-04-06 | Serve endpoint uses LangGraph (same as CLI) | The serve endpoint runs the same full-featured agent as the CLI — `createAgent()` factory. The MCP server refactor (PRD #120) is specific to the MCP path; it does not affect the CLI or serve endpoint. Architecture research (`docs/architecture-research.md`) raised whether the serve endpoint should use a simpler Anthropic SDK loop, but LangGraph is confirmed for both CLI and serve. |
+| 2026-04-06 | In-cluster MCP server deployment is in scope (M4) | Running the MCP server as a pod (instead of a local stdio process) enables real credential separation for Claude Code users: no local kubeconfig, no local API keys. Uses MCP's Streamable HTTP transport. Prerequisite: PRD #120 M5 (ServiceAccount + RBAC manifests). See `docs/architecture-research.md` for full context. |

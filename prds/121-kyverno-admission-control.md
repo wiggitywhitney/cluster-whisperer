@@ -1,10 +1,11 @@
-# PRD #55: Kyverno Admission Control
+# PRD #121: Kyverno Admission Control
 
 **Status**: Not Started
 **Priority**: High
 **Created**: 2026-04-05
-**Depends on**: PRD #54 (ServiceAccount RBAC must exist for policy scoping)
-**Branch**: `feature/prd-55-kyverno`
+**GitHub Issue**: wiggitywhitney/cluster-whisperer#121
+**Depends on**: PRD #120 (ServiceAccount RBAC must exist for policy scoping)
+**Branch**: `feature/prd-121-kyverno`
 
 ---
 
@@ -14,7 +15,7 @@ Application-layer guardrails (tool catalog, session state gate, RBAC) all live i
 
 Kyverno is a Kubernetes admission controller that enforces policies at the cluster level. A Kyverno ClusterPolicy rejecting a non-approved resource produces a real error from the cluster itself, not a custom string from application code. This is better for the demo, better for production, and is where the platform engineering industry is heading.
 
-This PRD replaces the tool catalog entirely with Kyverno. Once Kyverno is in place, `kubectl_apply` in PRD #54 removes its catalog validation and simply applies — trusting the cluster to enforce policy.
+This PRD replaces the tool catalog entirely with Kyverno. Once Kyverno is in place, `kubectl_apply` in PRD #120 removes its catalog validation and simply applies — trusting the cluster to enforce policy.
 
 ---
 
@@ -112,11 +113,11 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 **Success criteria**: The rejection is visible in the demo. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
 
 ### Milestone 3: Remove Tool Catalog from `kubectl_apply`
-*This is the only place the catalog removal happens. PRD #54 M4 leaves the catalog in place until this milestone runs.*
+*This is the only place the catalog removal happens. PRD #120 M4 leaves the catalog in place until this milestone runs.*
 
 - [ ] Remove catalog validation from `kubectl_apply` core function
 - [ ] `kubectl_apply` now: parse YAML → run `kubectl apply` → return result (including Kyverno errors)
-- [ ] The session state gate from PRD #54 M4 remains — Kyverno does not replace it
+- [ ] The session state gate from PRD #120 M4 remains — Kyverno does not replace it
 - [ ] Verify: Kyverno rejection errors surface cleanly to Claude Code
 
 **Success criteria**: `kubectl_apply` is simpler. Kyverno handles admission enforcement. The session state gate handles application-layer enforcement. The two layers are complementary, not redundant.
@@ -132,6 +133,6 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 ## References
 
-- PRD #54: MCP native tools and ServiceAccount RBAC (prerequisite)
+- PRD #120: MCP native tools and ServiceAccount RBAC (prerequisite)
 - Kyverno docs: https://kyverno.io/docs/
 - KCD Texas abstract: `kcd-texas-abstract.md`
