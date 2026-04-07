@@ -4,7 +4,7 @@
 **Priority**: High (required for KubeCon demo)
 **Created**: 2026-04-06
 **GitHub Issue**: wiggitywhitney/cluster-whisperer#122
-**Branch**: `feature/prd-122-in-cluster-mcp-server`
+**Branch**: `feature/prd-122-in-cluster-mcp-server` *(create from main after PRD #120 and #121 are merged)*
 **Depends on**:
 - PRD #54/55 M5: `cluster-whisperer-mcp` ServiceAccount + RBAC must exist ✅
 - PRD #55 M2: Kyverno SA-scoped policy must be applied (policy fires on SA identity)
@@ -76,8 +76,8 @@ When Claude Code calls `kubectl_apply` to create a non-ManagedService resource, 
 
 The MCP SDK supports Streamable HTTP via `StreamableHTTPServerTransport`. The server needs an HTTP framework to host it — Hono is already used in this project (`src/api/server.ts`).
 
-- [ ] Run `/research mcp streamable http transport` to get current SDK API for `StreamableHTTPServerTransport`
-- [ ] Replace stdio transport in `src/mcp-server.ts` with Streamable HTTP transport — stdio is not needed once in-cluster (Decision 4)
+- [ ] Run `/research mcp streamable http transport` before writing any code — SDK APIs for this transport have changed across versions; confirm the current module path and constructor signature
+- [ ] Replace stdio transport in `src/mcp-server.ts` with Streamable HTTP transport — Do NOT keep stdio as a fallback or dev-mode option (Decision 4)
 - [ ] Wire into the existing Hono server so the MCP endpoint is served on port 3457 (distinct from serve port to avoid conflicts)
 - [ ] Verify: local `curl` can reach the MCP endpoint; Claude Code can connect via `.mcp.json` HTTP config
 - [ ] Unit tests for HTTP transport initialization
@@ -103,6 +103,8 @@ The `cluster-whisperer-mcp` ServiceAccount already exists (`demo/cluster/manifes
 
 Update `.mcp.json` to connect via HTTP instead of spawning a local process.
 
+**Step 0:** Check the current `.mcp.json` format and the MCP spec for the HTTP transport config shape before editing — the URL field name and transport type key are spec-defined and easy to get wrong.
+
 - [ ] Update `.mcp.json` to use HTTP transport pointing at the in-cluster MCP service URL
 - [ ] Update `demo/.env` generation in `setup.sh` to include the MCP server ingress URL (`CLUSTER_WHISPERER_MCP_URL`)
 - [ ] Document in demo runbook: how to configure Claude Code to use in-cluster MCP
@@ -110,16 +112,19 @@ Update `.mcp.json` to connect via HTTP instead of spawning a local process.
 
 **Success criteria**: Claude Code uses in-cluster MCP server. No local MCP process needed. All 6 tools functional.
 
-### Milestone 4: Kyverno Rejection Demo Verification
+### Milestone 4: End-to-End Demo Verification
 
-End-to-end verification that the Kyverno rejection demo moment works with in-cluster MCP.
+Full demo verification with in-cluster MCP: investigation, deployment, and Kyverno enforcement — all using real SA identity.
 
+*Absorbs deferred items from PRD #120 M6 (items 1 and 3) and PRD #55 M4 (item 2). The local stdio MCP could test these in isolation, but the in-cluster form is the real demo story: SA identity, Kyverno enforcement, and the full audience-facing narrative.*
+
+- [ ] End-to-end: Claude Code investigates broken pod and deploys ManagedService via in-cluster MCP tools
 - [ ] Attempt `kubectl_apply` with a non-ManagedService resource via Claude Code → confirm Kyverno error fires
 - [ ] Attempt `kubectl_apply` with a ManagedService via Claude Code → confirm it succeeds
 - [ ] Confirm Crossplane operations are unaffected (its SA is not the MCP SA)
-- [ ] Update `demo-rehearsal-runbook.md` with the Kyverno rejection demo step
+- [ ] Update `docs/talk/` demo docs (rehearsal runbook + demo flow) to include the MCP coda
 
-**Success criteria**: Claude Code gets the Kyverno rejection error from the cluster. The demo moment works as designed in PRD #55.
+**Success criteria**: Claude Code, connected to the in-cluster MCP server, can investigate a broken pod, deploy the fix, and get a real Kyverno rejection when attempting a non-approved resource. Demo docs reflect the final in-cluster form.
 
 ---
 
