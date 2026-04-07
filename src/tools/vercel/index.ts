@@ -194,86 +194,28 @@ export function createVectorTools(vectorStore: VectorStore) {
 }
 
 /**
- * Creates the kubectl_apply tool bound to a VectorStore instance.
+ * Creates the kubectl_apply tool.
  *
- * Why a factory function?
- * Like the vector search tool, kubectl_apply needs a VectorStore for catalog
- * validation. The core kubectlApply function checks whether the resource type
- * exists in the capabilities collection before allowing the apply.
+ * Admission enforcement is handled by the cluster (Kyverno + RBAC), not this
+ * wrapper. Any rejection surfaces as a kubectl error and is returned to the
+ * agent so it can explain the policy to the developer in natural language.
  *
- * Graceful degradation:
- * If the vector database is unreachable, the tool returns a helpful error
- * message instead of crashing. Without catalog validation, apply is blocked
- * (fail-closed, not fail-open).
- *
- * @param vectorStore - A VectorStore instance for catalog validation
  * @param options - Optional kubectl configuration (e.g., kubeconfig path)
  * @returns Record<string, Tool> with kubectl_apply
  */
-export function createApplyTools(
-  vectorStore: VectorStore,
-  options?: KubectlOptions
-) {
-  let initialized = false;
-
-  /**
-   * Initializes the capabilities collection on first use.
-   * kubectl_apply needs the capabilities collection for catalog validation.
-   */
-  async function ensureInitialized(): Promise<void> {
-    if (initialized) return;
-    await vectorStore.initialize(CAPABILITIES_COLLECTION, {
-      distanceMetric: "cosine",
-    });
-    initialized = true;
-  }
-
-  /**
-   * Wraps the apply tool handler with initialization and connection error handling.
-   * Connection errors get a user-friendly message; other errors pass through
-   * from the core function (catalog rejections, parse failures, etc.).
-   */
-  function withGracefulDegradation(
-    handler: (input: KubectlApplyInput) => Promise<string>
-  ): (input: KubectlApplyInput) => Promise<string> {
-    return async (input: KubectlApplyInput): Promise<string> => {
-      try {
-        await ensureInitialized();
-        return await handler(input);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
-
-        if (
-          message.includes("ECONNREFUSED") ||
-          message.includes("fetch failed") ||
-          message.includes("ENOTFOUND") ||
-          message.includes("ETIMEDOUT") ||
-          message.includes("ECONNRESET")
-        ) {
-          return (
-            "Vector database is not available. Cannot validate resource against the platform catalog. " +
-            "The catalog database must be running for kubectl_apply to work."
-          );
-        }
-
-        throw error;
-      }
-    };
-  }
-
+export function createApplyTools(options?: KubectlOptions) {
   return {
     kubectl_apply: tool({
       description: kubectlApplyDescription,
       inputSchema: kubectlApplySchema,
       execute: withToolTracing(
         { name: "kubectl_apply", description: kubectlApplyDescription },
-        withGracefulDegradation(async (input: KubectlApplyInput) => {
-          const { output } = await kubectlApply(vectorStore, input, {
+        async (input: KubectlApplyInput) => {
+          const { output } = await kubectlApply(input, {
             kubeconfig: options?.kubeconfig,
           });
           return output;
-        })
+        }
       ),
     }),
   };

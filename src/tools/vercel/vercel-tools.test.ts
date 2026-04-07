@@ -228,39 +228,27 @@ describe("createVectorTools", () => {
 // --- createApplyTools ---
 
 describe("createApplyTools", () => {
-  let mockVectorStore: VectorStore;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockVectorStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([
-        {
-          id: "1",
-          text: "ManagedService resource",
-          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
-          score: -1,
-        },
-      ]),
-    });
   });
 
   it("returns a Record with one tool", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(Object.keys(tools)).toHaveLength(1);
     expect(Object.keys(tools)).toContain("kubectl_apply");
   });
 
   it("kubectl_apply has correct description", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(tools.kubectl_apply.description).toBe(kubectlApplyDescription);
   });
 
   it("kubectl_apply has correct inputSchema", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(tools.kubectl_apply.inputSchema).toBe(kubectlApplySchema);
   });
 
-  it("kubectl_apply execute delegates to core function", async () => {
+  it("kubectl_apply execute delegates to kubectl and returns output", async () => {
     const { spawnSync } = await import("child_process");
     (spawnSync as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       stdout: "managedservice.platform.acme.io/youchoose-db created\n",
@@ -274,63 +262,43 @@ kind: ManagedService
 metadata:
   name: youchoose-db`;
 
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     const result = await tools.kubectl_apply.execute(
       { manifest },
       { toolCallId: "test-6", messages: [], abortSignal: undefined as unknown as AbortSignal }
     );
 
-    // Core function should have queried the catalog
-    expect(mockVectorStore.keywordSearch).toHaveBeenCalledWith(
-      "capabilities",
-      undefined,
-      expect.objectContaining({
-        where: { kind: "ManagedService", apiGroup: "platform.acme.io" },
-      })
-    );
     expect(result).toContain("created");
   });
 
-  it("returns graceful message when vector DB is unreachable for catalog validation", async () => {
-    const unreachableStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+  it("surfaces Kyverno rejection from kubectl stderr", async () => {
+    const { spawnSync } = await import("child_process");
+    (spawnSync as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      stdout: "",
+      stderr: `Error from server: admission webhook "validate.kyverno.svc" denied the request: [require-approved-resources] Only ManagedService resources are allowed.`,
+      status: 1,
+      error: null,
     });
-    const tools = createApplyTools(unreachableStore);
+
+    const tools = createApplyTools();
     const result = await tools.kubectl_apply.execute(
       {
-        manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
+        manifest: `apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: test`,
+  name: test-config`,
       },
       { toolCallId: "test-7", messages: [], abortSignal: undefined as unknown as AbortSignal }
     );
-    // The core function handles ECONNREFUSED within catalog validation
-    expect(result).toContain("Catalog validation failed");
-  });
 
-  it("returns catalog rejection for unapproved resources", async () => {
-    const emptyStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([]),
-    });
-    const tools = createApplyTools(emptyStore);
-    const result = await tools.kubectl_apply.execute(
-      {
-        manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
-metadata:
-  name: test-widget`,
-      },
-      { toolCallId: "test-8", messages: [], abortSignal: undefined as unknown as AbortSignal }
-    );
-    expect(result).toContain("not in the approved platform catalog");
+    expect(result).toContain("admission webhook");
   });
 
   it("returns parse error for invalid YAML", async () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     const result = await tools.kubectl_apply.execute(
       { manifest: "not: valid: yaml: [" },
-      { toolCallId: "test-9", messages: [], abortSignal: undefined as unknown as AbortSignal }
+      { toolCallId: "test-8", messages: [], abortSignal: undefined as unknown as AbortSignal }
     );
     expect(result).toContain("Failed to parse YAML");
   });

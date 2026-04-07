@@ -45,7 +45,6 @@ import {
   kubectlApplyDescription,
   type KubectlApplyInput,
 } from "../core";
-import type { VectorStore } from "../../vectorstore";
 import {
   withMcpRequestTracing,
   setTraceOutput,
@@ -174,16 +173,13 @@ function buildTraceOutput(result: InvestigationResult): string {
  * that takes a YAML manifest and applies it to the cluster. MCP clients can
  * use this when they already know what resource to deploy.
  *
- * The tool validates against the platform catalog before applying — only
- * resource types in the capabilities collection are allowed.
+ * Admission enforcement is handled by the cluster (Kyverno + RBAC). Any
+ * rejection surfaces as a kubectl error in the response so the MCP client
+ * can explain the policy in natural language.
  *
  * @param server - The McpServer instance to register the tool with
- * @param vectorStore - An initialized VectorStore for catalog validation
  */
-export function registerApplyTool(
-  server: McpServer,
-  vectorStore: VectorStore
-): void {
+export function registerApplyTool(server: McpServer): void {
   server.registerTool(
     "kubectl_apply",
     {
@@ -195,7 +191,7 @@ export function registerApplyTool(
         "kubectl_apply",
         input as Record<string, unknown>,
         async () => {
-          const result = await kubectlApply(vectorStore, input);
+          const result = await kubectlApply(input);
 
           return {
             content: [{ type: "text" as const, text: result.output }],

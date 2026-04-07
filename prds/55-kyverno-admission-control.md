@@ -114,13 +114,13 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 **Success criteria**: SA-scoped policy applied to cluster. Rejection verified via `kubectl --as` impersonation. A non-approved create is blocked with a clear Kyverno error message. The policy is verified against the actual Kyverno version running in the cluster.
 
-### Milestone 3: Remove Tool Catalog from `kubectl_apply`
+### Milestone 3: Remove Tool Catalog from `kubectl_apply` ✅ Complete
 *This is the only place the catalog removal happens. PRD #54 M4 leaves the catalog in place until this milestone runs.*
 
-- [ ] Remove catalog validation from `kubectl_apply` core function
-- [ ] `kubectl_apply` now: parse YAML → run `kubectl apply` → return result (including Kyverno errors)
-- [ ] The session state gate from PRD #54 M4 remains — Kyverno does not replace it
-- [ ] Verify: Kyverno rejection errors surface cleanly to Claude Code
+- [x] Remove catalog validation from `kubectl_apply` core function
+- [x] `kubectl_apply` now: parse YAML → run `kubectl apply` → return result (including Kyverno errors)
+- [x] The session state gate from PRD #54 M4 remains — Kyverno does not replace it
+- [x] Verify: Kyverno rejection errors surface cleanly to Claude Code
 
 **Success criteria**: `kubectl_apply` is simpler. Kyverno handles admission enforcement. The session state gate handles application-layer enforcement. The two layers are complementary, not redundant.
 

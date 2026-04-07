@@ -46,7 +46,7 @@ vi.mock("../../tracing", () => ({
 
 vi.mock("child_process", () => ({
   spawnSync: vi.fn(() => ({
-    stdout: "deployment.apps/nginx created\n",
+    stdout: "managedservice.platform.acme.io/youchoose-db created\n",
     stderr: "",
     status: 0,
     error: null,
@@ -54,23 +54,6 @@ vi.mock("child_process", () => ({
 }));
 
 import { registerApplyTool } from "./index";
-import type { VectorStore } from "../../vectorstore";
-
-/**
- * Creates a mock VectorStore for testing.
- */
-function createMockVectorStore(
-  overrides: Partial<VectorStore> = {}
-): VectorStore {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    similaritySearch: vi.fn().mockResolvedValue([]),
-    keywordSearch: vi.fn().mockResolvedValue([]),
-    addDocuments: vi.fn().mockResolvedValue(undefined),
-    deleteCollection: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
 
 /**
  * Creates a mock McpServer that captures tool registrations.
@@ -93,30 +76,20 @@ function createMockServer() {
 
 describe("registerApplyTool", () => {
   let mockServer: ReturnType<typeof createMockServer>;
-  let mockVectorStore: VectorStore;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockServer = createMockServer();
-    mockVectorStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([
-        {
-          id: "1",
-          document: "ManagedService resource",
-          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
-        },
-      ]),
-    });
   });
 
   it("registers a tool named kubectl_apply", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, mockVectorStore);
+    registerApplyTool(mockServer as any);
 
     expect(mockServer.registerTool).toHaveBeenCalledWith(
       "kubectl_apply",
       expect.objectContaining({
-        description: expect.stringContaining("catalog"),
+        description: expect.any(String),
       }),
       expect.any(Function)
     );
@@ -124,7 +97,7 @@ describe("registerApplyTool", () => {
 
   it("handler returns MCP-formatted response on success", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, mockVectorStore);
+    registerApplyTool(mockServer as any);
 
     const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
     const result = await handler({
@@ -140,27 +113,34 @@ metadata:
     });
   });
 
-  it("handler returns isError: true for catalog rejection", async () => {
-    const emptyStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([]),
+  it("handler returns isError: true when kubectl fails", async () => {
+    const { spawnSync } = await import("child_process");
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "",
+      stderr: `Error from server: admission webhook "validate.kyverno.svc" denied the request: [require-approved-resources] Only ManagedService resources are allowed.`,
+      status: 1,
+      error: null,
+      pid: 0,
+      output: [],
+      signal: null,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerApplyTool(mockServer as any, emptyStore);
+    registerApplyTool(mockServer as any);
 
     const handler = mockServer.registeredTools.get("kubectl_apply")!.handler;
     const result = await handler({
-      manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
+      manifest: `apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: test-widget`,
+  name: test-config`,
     });
 
     expect(result).toEqual({
       content: [
         {
           type: "text",
-          text: expect.stringContaining("not in the approved platform catalog"),
+          text: expect.stringContaining("admission webhook"),
         },
       ],
       isError: true,
