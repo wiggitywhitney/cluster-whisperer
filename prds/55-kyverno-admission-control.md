@@ -130,7 +130,7 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 - [ ] Show Kyverno ClusterPolicy YAML in the talk slide deck
 - [ ] Demonstrate a rejection live via Claude Code (requires in-cluster MCP — Decision 2)
-- [ ] Document the full demo flow in `docs/talk/`
+- [x] Document the full demo flow in `docs/talk/`
 
 **Success criteria**: The Kyverno demo moment is polished and tells the guardrails story convincingly.
 

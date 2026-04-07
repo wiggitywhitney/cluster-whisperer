@@ -5,6 +5,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 ## [Unreleased]
 
 ### Added
+- (2026-04-07) Demo docs updated for Kyverno guardrail (PRD #55 M4): `choose-your-adventure-demo.md` updated — catalog validation references replaced with Kyverno enforcement description. Act 3b narrative, Tool Groups table, and `kubectl_apply` section now accurately describe RBAC + Kyverno as the cluster-level enforcement layers. Stale `cluster_whisperer.catalog.approved` OTel attribute in `telemetry/registry/attributes.yaml` flagged for follow-up.
 - (2026-04-07) Kyverno catalog removal (PRD #55 M3): removed VectorStore catalog validation from `kubectl_apply`. Flow is now parse YAML → `kubectl apply` → return result. Kyverno admission rejection errors surface directly from kubectl stderr. `createApplyTools()` no longer requires a VectorStore parameter; apply tools are no longer gated on `VOYAGE_API_KEY`. 672 unit tests pass.
 - (2026-04-06) PRD #122 created: in-cluster MCP server deployment (stdio → Streamable HTTP). Unblocks Kyverno live rejection demo (PRD #55 M4) and demo readiness (PRD #54/120 M6).
 - (2026-04-06) Kyverno admission controller (PRD #55 M1): `install_kyverno()` added to setup.sh using Helm chart 3.7.1 (app v1.17.1), runs after `deploy_demo_app` and before `deploy_cluster_whisperer_serve`. Admission webhook verified running on GKE cluster. Demo rehearsal runbook updated with Kyverno readiness verification step.
