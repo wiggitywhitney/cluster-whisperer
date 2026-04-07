@@ -1,6 +1,6 @@
 # PRD #55: Kyverno Admission Control
 
-**Status**: In Progress
+**Status**: Complete (2026-04-07)
 **Priority**: High
 **Created**: 2026-04-05
 **Depends on**: PRD #54 (ServiceAccount RBAC must exist for policy scoping)
@@ -126,10 +126,10 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 
 ### Milestone 4: Demo Polish
 
-*Note: the live rejection moment (item 2) requires the MCP server running in-cluster so requests arrive as the `cluster-whisperer-mcp` SA. This is currently unplanned — no PRD covers in-cluster MCP deployment (PRD #53 explicitly excludes MCP-over-HTTP). A new PRD is needed before this milestone can be fully completed. See Decision Log Decision 2.*
+*Note: items 1 and 2 are deferred — see Decisions 4 and 5.*
 
-- [ ] Show Kyverno ClusterPolicy YAML in the talk slide deck
-- [ ] Demonstrate a rejection live via Claude Code (requires in-cluster MCP — Decision 2)
+- [~] Show Kyverno ClusterPolicy YAML in the talk slide deck (deferred — no slide deck exists yet; Decision 4)
+- [~] Demonstrate a rejection live via Claude Code (deferred — requires in-cluster MCP; tracked in PRD #122 M4; Decision 5)
 - [x] Document the full demo flow in `docs/talk/`
 
 **Success criteria**: The Kyverno demo moment is polished and tells the guardrails story convincingly.
@@ -143,6 +143,8 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 | 1 | 2026-04-06 | SA-scoped policy (Option 2) for demo | SA scoping is the correct production form — fires based on request identity, not namespace. Aligns with Viktor Farcic's reference architecture (in-cluster MCP). Impersonation (Option 1) requires MCP code changes; namespace scoping (Option 3) weakens the guardrails story. M2 verifies via `kubectl --as` now; live Claude Code rejection fires automatically once MCP runs in-cluster. |
 | 2 | 2026-04-06 | In-cluster MCP deployment needs a new PRD | PRD #53 explicitly excludes MCP-over-HTTP. No existing PRD covers in-cluster MCP server deployment (switching from stdio to Streamable HTTP transport + Kubernetes Deployment). This gap means M4's live rejection demo is blocked until that PRD is written and merged. |
 | 3 | 2026-04-06 | `kinds: ["*"]` required in resources block | Kyverno v1.17.1 rejects ClusterPolicy at apply time if `resources` has no `kinds` entry, even when using `subjects` scoping. The original PRD policy example omitted `kinds`. Fix: add `kinds: ["*"]` to capture all resource types and let deny conditions filter. Documented in `~/.claude/rules/kyverno-gotchas.md`. |
+| 4 | 2026-04-07 | Defer slide deck work to a future PRD | No slide deck exists yet — creating one is out of scope for this PRD. When a slide deck PRD is created, the Kyverno ClusterPolicy YAML slide should be included as a milestone item. |
+| 5 | 2026-04-07 | Live rejection demo tracked in PRD #122 M4 | PRD #122 (In-Cluster MCP Server Deployment) M4 explicitly covers end-to-end Kyverno rejection verification via Claude Code. No separate work needed here — PRD #55 M4 item 2 is fully covered downstream. |
 
 ## References
 
