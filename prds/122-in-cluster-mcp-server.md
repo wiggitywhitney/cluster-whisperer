@@ -90,7 +90,7 @@ The `cluster-whisperer-mcp` ServiceAccount is defined in `demo/cluster/manifests
 
 - [ ] Create `demo/cluster/manifests/mcp-server.yaml`: Deployment + Service for the MCP server pod
   - `spec.serviceAccountName: cluster-whisperer-mcp`
-  - Same image as cluster-whisperer serve (already built and pushed by setup.sh)
+  - Same image as `cluster-whisperer-serve` (already built and pushed by setup.sh)
   - Env vars: `CLUSTER_WHISPERER_KUBECONFIG` is NOT needed in-cluster — pod uses SA token automatically
   - Port: 3457 (same port chosen in M1)
 - [ ] Add ingress rule for MCP server (same nip.io pattern as Jaeger/serve)
