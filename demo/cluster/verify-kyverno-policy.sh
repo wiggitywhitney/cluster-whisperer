@@ -149,7 +149,18 @@ info "Test 4: ConfigMap creation as default SA should NOT be blocked by Kyverno.
 
 SYSTEM_SA="system:serviceaccount:default:default"
 
-SYSTEM_OUTPUT=$(echo "${CONFIGMAP_MANIFEST}" | kubectl apply -f - \
+# Use a distinct resource name so this is a CREATE, not an UPDATE of the Test 3 resource
+SYSTEM_CONFIGMAP_MANIFEST=$(cat <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kyverno-test-system-sa
+data:
+  test: "system-sa-unaffected"
+EOF
+)
+
+SYSTEM_OUTPUT=$(echo "${SYSTEM_CONFIGMAP_MANIFEST}" | kubectl apply -f - \
     -n "${NAMESPACE}" \
     --as="${SYSTEM_SA}" 2>&1 || true)
 

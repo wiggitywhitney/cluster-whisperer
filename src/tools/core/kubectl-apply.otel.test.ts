@@ -177,7 +177,7 @@ describe("kubectl-apply OTel spans", () => {
 
       const span = getSpanByName("kubectl apply")!;
       expect(span.status.code).toBe(SpanStatusCode.ERROR);
-      expect(span.events.length).toBeGreaterThan(0);
+      expect(span.events.some((event) => event.name === "exception")).toBe(true);
     });
   });
 });

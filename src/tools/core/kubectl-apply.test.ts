@@ -202,6 +202,14 @@ describe("kubectlApply", () => {
 
   describe("Kyverno admission rejection", () => {
     it("surfaces Kyverno rejection error from kubectl stderr", async () => {
+      // Use a manifest that Kyverno would reject (not an approved ManagedService)
+      const rejectedManifest = [
+        "apiVersion: v1",
+        "kind: ConfigMap",
+        "metadata:",
+        "  name: blocked-config",
+      ].join("\n");
+
       const kyvernoError = [
         `Error from server: admission webhook "validate.kyverno.svc" denied the request:`,
         `[require-approved-resources] Only ManagedService resources from platform.acme.io are allowed through the cluster whisperer agent.`,
@@ -214,7 +222,7 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      const result = await kubectlApply({ manifest: managedServiceManifest });
+      const result = await kubectlApply({ manifest: rejectedManifest });
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("admission webhook");

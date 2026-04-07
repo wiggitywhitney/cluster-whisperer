@@ -54,7 +54,7 @@ Viktor Farcic's dot-ai uses Streamable HTTP exclusively — his MCP server runs 
 ### What Does NOT Change
 
 - Tool handler logic in `src/tools/mcp/index.ts` — transport-agnostic
-- Tool descriptions, session state gate, catalog validation
+- Tool descriptions, session state gate
 - The LangGraph CLI path (unaffected by MCP transport)
 - The REST investigation endpoint (separate from MCP)
 

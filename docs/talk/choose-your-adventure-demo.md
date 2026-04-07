@@ -270,9 +270,9 @@ The `kubectl_apply` tool is intentionally simple:
 
 Enforcement is handled at the cluster level by two complementary layers:
 
-**RBAC**: The `cluster-whisperer-mcp` ClusterRole grants CREATE permission only for
-`platform.acme.io/managedservices`. Standard resources (Deployment, ConfigMap, Service)
-are read-only for this ServiceAccount.
+**RBAC**: The `cluster-whisperer-mcp` ClusterRole (defined in `demo/cluster/manifests/mcp-rbac.yaml`,
+added by PRD #120) grants CREATE permission only for `platform.acme.io/managedservices`. Standard
+resources (Deployment, ConfigMap, Service) are read-only for this ServiceAccount.
 
 **Kyverno**: A ClusterPolicy (`k8s/kyverno-allowlist.yaml`) provides admission-level
 enforcement. Scoped to the `cluster-whisperer-mcp` ServiceAccount, it requires

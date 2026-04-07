@@ -93,7 +93,7 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 ## Milestones
 
 ### Milestone 1: Kyverno Installation ✅ Complete
-**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
+**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../../docs/research/kyverno-helm-install.md)
 - [x] Add Kyverno to the demo cluster setup (Helm chart or kubectl apply)
 - [x] Verify Kyverno admission webhook is running and intercepting requests
 - [x] Document install command in demo setup docs
@@ -101,7 +101,7 @@ These are out of scope for the KCD demo but worth mentioning in the talk as wher
 **Success criteria**: `kubectl get pods -n kyverno` shows Kyverno running. A test policy blocks a test resource.
 
 ### Milestone 2: ClusterPolicy — Resource Allowlist ✅ Complete
-**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../docs/research/kyverno-helm-install.md)
+**Step 0:** Read related research before starting: [Research: Kyverno Helm Install on GKE](../../docs/research/kyverno-helm-install.md)
 
 *Decision 1 resolved: SA-scoped policy (Option 2). Write the policy scoped to `cluster-whisperer-mcp` SA — this is the correct production form. Verify using `kubectl --as` impersonation now; the policy fires automatically once the MCP server runs in-cluster (future PRD). See Decision Log.*
 

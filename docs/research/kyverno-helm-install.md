@@ -4,6 +4,7 @@
 **Last Updated:** 2026-04-06
 
 ## Update Log
+
 | Date | Summary |
 |------|---------|
 | 2026-04-06 | Initial research — Helm install command, version mapping, subjects syntax, GKE firewall gotcha |
@@ -112,7 +113,7 @@ All four controller pods should be `Running`. The webhook configurations confirm
 ### Helm Repo and Chart Facts
 
 | Property | Value |
-|----------|-------|
+| -------- | ----- |
 | Helm repo URL | `https://kyverno.github.io/kyverno/` |
 | Chart name | `kyverno/kyverno` |
 | Current stable chart version | `3.7.1` |

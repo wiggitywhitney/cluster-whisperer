@@ -2212,6 +2212,8 @@ main() {
     install_kyverno
     apply_kyverno_policies
     deploy_cluster_whisperer_serve
+    # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
+    "${SCRIPT_DIR}/verify-kyverno-policy.sh"
     create_ingress_resources
     run_capability_inference
     verify_vector_search
