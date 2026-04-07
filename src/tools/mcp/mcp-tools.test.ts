@@ -317,7 +317,8 @@ describe("registerVectorSearchTool", () => {
 
     const result = await handler({ keyword: "database", collection: "capabilities" });
 
-    // vector_search catches errors internally and returns an error string
+    // vectorSearch catches errors internally and returns a descriptive string (not an MCP error)
+    // so the AI can read the message and gracefully try kubectl tools instead
     expect(result).toEqual({
       content: [{ type: "text", text: expect.stringContaining("failed") }],
       isError: false,
