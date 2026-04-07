@@ -14,7 +14,7 @@ The current MCP server exposes the LangGraph agent as a single `investigate` too
 
 The better architecture: native tool handlers containing Kubernetes business logic directly. The AI coding assistant reasons about which tools to call and what to do with results. Guardrails live at the cluster level (RBAC on the ServiceAccount), not just the application level.
 
-The existing tool catalog is also removed in this PRD — replaced by Kyverno admission control in PRD #121, which enforces guardrails at the cluster level regardless of how a request arrives.
+The existing tool catalog remains in place for this PRD as a defense-in-depth check. PRD #121 M3 removes it once Kyverno admission control is deployed — at that point, cluster-level guardrails apply regardless of how a request arrives.
 
 **The existing CLI (LangGraph) is not touched.** It remains the full-featured agent for direct terminal use and demos. This PRD changes only the MCP server.
 

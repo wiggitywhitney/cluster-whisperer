@@ -308,7 +308,8 @@ export function registerDryrunTool(
     async (input: KubectlApplyDryrunInput) => {
       return withMcpRequestTracing(
         "kubectl_apply_dryrun",
-        input as Record<string, unknown>,
+        // Redact manifest from traces — full YAML should not appear in span attributes
+        { manifest: "[REDACTED]" } as Record<string, unknown>,
         async () => {
           const result = await kubectlApplyDryrun(input, sessionStore, options);
 
@@ -352,11 +353,12 @@ export function registerApplyTool(
     async (input: McpKubectlApplyInput) => {
       return withMcpRequestTracing(
         "kubectl_apply",
-        input as Record<string, unknown>,
+        // Redact sessionId from traces — it is a one-time capability token
+        { sessionId: "[REDACTED]" } as Record<string, unknown>,
         async () => {
-          // Look up the manifest from session state using the sessionId.
-          // consume() removes the session (single-use) to prevent replay.
-          const manifest = sessionStore.consume(input.sessionId);
+          // Peek at the session without consuming it — consume only after successful apply
+          // so transient failures or catalog rejections leave the session intact for retry.
+          const manifest = sessionStore.peek(input.sessionId);
 
           if (manifest === undefined) {
             return {
@@ -376,6 +378,11 @@ export function registerApplyTool(
             { manifest },
             options
           );
+
+          // Consume session only on success — leave intact on failure so the AI can retry
+          if (!result.isError) {
+            sessionStore.consume(input.sessionId);
+          }
 
           return {
             content: [{ type: "text" as const, text: result.output }],

@@ -75,15 +75,23 @@ async function main(): Promise<void> {
       "[cluster-whisperer] VOYAGE_API_KEY is not set — semantic (embedding-based) search will fail with HTTP 401. Set VOYAGE_API_KEY to enable vector_search."
     );
   }
-  const embedder = new VoyageEmbedding();
-  const vectorStore = createVectorStore(embedder, DEFAULT_VECTOR_BACKEND, {
-    chromaUrl: process.env.CHROMA_URL,
-  });
+  // Initialize vector store — failures disable vector_search and kubectl_apply
+  // but do NOT abort server startup (read-only kubectl tools remain available).
+  let vectorStore;
+  try {
+    const embedder = new VoyageEmbedding();
+    vectorStore = createVectorStore(embedder, DEFAULT_VECTOR_BACKEND, {
+      chromaUrl: process.env.CHROMA_URL,
+    });
 
-  // Connect to existing collections (getOrCreateCollection — idempotent).
-  // The sync pipeline populates these; the MCP server reads from them.
-  await vectorStore.initialize("capabilities", { distanceMetric: "cosine" });
-  await vectorStore.initialize("instances", { distanceMetric: "cosine" });
+    // Connect to existing collections (getOrCreateCollection — idempotent).
+    // The sync pipeline populates these; the MCP server reads from them.
+    await vectorStore.initialize("capabilities", { distanceMetric: "cosine" });
+    await vectorStore.initialize("instances", { distanceMetric: "cosine" });
+  } catch (err) {
+    console.error("[cluster-whisperer] vector store initialization failed — vector_search and kubectl_apply disabled:", err);
+    vectorStore = undefined;
+  }
 
   // Create the session store singleton for the Layer 2 session state gate (PRD #120 M4).
   // Shared between kubectl_apply_dryrun and kubectl_apply — one store per server instance.
@@ -93,13 +101,16 @@ async function main(): Promise<void> {
   registerGetTool(server, { kubeconfig });
   registerDescribeTool(server, { kubeconfig });
   registerLogsTool(server, { kubeconfig });
-  registerVectorSearchTool(server, vectorStore);
 
-  // Register the Layer 2 session state gate (PRD #120 M4):
-  // - kubectl_apply_dryrun validates the manifest and stores it; returns sessionId
-  // - kubectl_apply reads the manifest from session state via sessionId; catalog validation stays
-  registerDryrunTool(server, sessionStore, { kubeconfig });
-  registerApplyTool(server, vectorStore, sessionStore, { kubeconfig });
+  if (vectorStore) {
+    registerVectorSearchTool(server, vectorStore);
+
+    // Register the Layer 2 session state gate (PRD #120 M4):
+    // - kubectl_apply_dryrun validates the manifest and stores it; returns sessionId
+    // - kubectl_apply reads the manifest from session state via sessionId; catalog validation stays
+    registerDryrunTool(server, sessionStore, { kubeconfig });
+    registerApplyTool(server, vectorStore, sessionStore, { kubeconfig });
+  }
 
   // Register the investigate-cluster prompt resource (PRD #120 M3.5).
   // The prompt exposes the investigator.md strategy so MCP clients can invoke it

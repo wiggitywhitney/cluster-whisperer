@@ -170,7 +170,8 @@ export async function kubectlApplyDryrun(
         // Step 3: Store manifest in session state, return sessionId
         const sessionId = sessionStore.store(input.manifest);
 
-        span.setAttribute("cluster_whisperer.session.id", sessionId);
+        // Record that a session was stored without emitting the token itself
+        span.setAttribute("cluster_whisperer.session.stored", true);
         span.setStatus({ code: SpanStatusCode.OK });
 
         const successMessage =

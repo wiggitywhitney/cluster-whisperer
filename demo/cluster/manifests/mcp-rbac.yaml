@@ -30,7 +30,8 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["platform.acme.io"]
     resources: ["managedservices"]
-    verbs: ["get", "list", "create"]
+    # patch and update are required for kubectl apply on existing ManagedService resources
+    verbs: ["get", "list", "create", "patch", "update"]
 ---
 # ClusterRoleBinding: bind the MCP role to the MCP ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1

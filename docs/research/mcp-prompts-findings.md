@@ -72,7 +72,8 @@ The MCP path is intentionally lighter-weight. The guardrails come from the clust
 ## Next Steps for Live Testing
 
 To verify that Claude Code follows the multi-step investigation strategy when the prompt is invoked:
-1. Start the MCP server: `vals exec -f .vals.yaml -- node dist/mcp-server.js`
-2. In Claude Code, type `/` and look for `investigate-cluster`
-3. Invoke the prompt, then ask a cluster investigation question
-4. Observe whether Claude Code follows the kubectl → describe → logs progression
+1. Source the demo environment: `source demo/.env` (provides `CLUSTER_WHISPERER_KUBECONFIG` and vector store URLs)
+2. Start the MCP server: `vals exec -f .vals.yaml -- node dist/mcp-server.js`
+3. In Claude Code, type `/` and look for `investigate-cluster`
+4. Invoke the prompt, then ask a cluster investigation question
+5. Observe whether Claude Code follows the kubectl → describe → logs progression

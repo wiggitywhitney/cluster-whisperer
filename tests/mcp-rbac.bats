@@ -117,6 +117,24 @@ setup_live() {
     [ "$output" = "yes" ]
 }
 
+@test "MCP ServiceAccount can patch platform.acme.io ManagedServices" {
+    setup_live
+    run kubectl auth can-i patch managedservices.platform.acme.io \
+        --as="$SA" \
+        --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
+    [ "$output" = "yes" ]
+}
+
+@test "MCP ServiceAccount can update platform.acme.io ManagedServices" {
+    setup_live
+    run kubectl auth can-i update managedservices.platform.acme.io \
+        --as="$SA" \
+        --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
+    [ "$output" = "yes" ]
+}
+
 @test "MCP ServiceAccount cannot create StatefulSets" {
     setup_live
     run kubectl auth can-i create statefulsets \
