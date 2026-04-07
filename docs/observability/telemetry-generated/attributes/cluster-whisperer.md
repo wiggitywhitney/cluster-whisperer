@@ -102,19 +102,16 @@ SHOULD include the [application root](/docs/http/http-spans.md#http-server-defin
 
 ## kubectl_apply Tool Attributes
 
-Attributes specific to the kubectl_apply tool's catalog validation
+Attributes on kubectl_apply tool spans for resource identification
 
 **Attributes:**
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="cluster-whisperer-catalog-approved" href="#cluster-whisperer-catalog-approved">`cluster_whisperer.catalog.approved`</a> | ![Development](https://img.shields.io/badge/-development-blue) | boolean | Whether the resource type passed platform catalog validation [6] | |
-| <a id="cluster-whisperer-k8s-api-group" href="#cluster-whisperer-k8s-api-group">`cluster_whisperer.k8s.api_group`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Kubernetes API group extracted from the YAML manifest [7] | `platform.acme.io`; `apps`; `` |
+| <a id="cluster-whisperer-k8s-api-group" href="#cluster-whisperer-k8s-api-group">`cluster_whisperer.k8s.api_group`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Kubernetes API group extracted from the YAML manifest [6] | `platform.acme.io`; `apps`; `` |
 | <a id="cluster-whisperer-k8s-resource-kind" href="#cluster-whisperer-k8s-resource-kind">`cluster_whisperer.k8s.resource_kind`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Kubernetes resource kind extracted from the YAML manifest | `ManagedService`; `Deployment`; `Pod` |
 
-**[6] `cluster_whisperer.catalog.approved`:** True if the resource kind+apiGroup was found in the capabilities collection. False means the apply was rejected.
-
-**[7] `cluster_whisperer.k8s.api_group`:** Empty string for core API resources (e.g., Pod, Service).
+**[6] `cluster_whisperer.k8s.api_group`:** Empty string for core API resources (e.g., Pod, Service).
 
 ## LLM Span Attributes
 
@@ -124,9 +121,9 @@ GenAI semantic convention attributes for LLM/chat completion spans
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="gen-ai-tool-definitions" href="#gen-ai-tool-definitions">`gen_ai.tool.definitions`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON array of tool definitions available to the LLM [8] | `[{"name":"kubectl_get","description":"List Kubernetes resources...","parameters":{...}}]` |
+| <a id="gen-ai-tool-definitions" href="#gen-ai-tool-definitions">`gen_ai.tool.definitions`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON array of tool definitions available to the LLM [7] | `[{"name":"kubectl_get","description":"List Kubernetes resources...","parameters":{...}}]` |
 
-**[8] `gen_ai.tool.definitions`:** Not yet in OTel semconv v1.37.0 registry. Datadog maps this to meta.tool_definitions in LLM Observability. Contains tool names, descriptions, and parameter schemas.
+**[7] `gen_ai.tool.definitions`:** Not yet in OTel semconv v1.37.0 registry. Datadog maps this to meta.tool_definitions in LLM Observability. Contains tool names, descriptions, and parameter schemas.
 
 ## MCP Tool Attributes
 
@@ -136,17 +133,17 @@ MCP tool execution attributes with GenAI semantic convention references
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="cluster-whisperer-mcp-tool-name" href="#cluster-whisperer-mcp-tool-name">`cluster_whisperer.mcp.tool.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The MCP tool name [9] | `kubectl_get`; `kubectl_describe`; `kubectl_logs`; `investigate` |
-| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [10] | `chat`; `generate_content`; `text_completion` |
+| <a id="cluster-whisperer-mcp-tool-name" href="#cluster-whisperer-mcp-tool-name">`cluster_whisperer.mcp.tool.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The MCP tool name [8] | `kubectl_get`; `kubectl_describe`; `kubectl_logs`; `investigate` |
+| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [9] | `chat`; `generate_content`; `text_completion` |
 | <a id="gen-ai-tool-call-id" href="#gen-ai-tool-call-id">`gen_ai.tool.call.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The tool call identifier. | `call_mszuSIzqtI65i1wAUOE8w5H4` |
 | <a id="gen-ai-tool-name" href="#gen-ai-tool-name">`gen_ai.tool.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Name of the tool utilized by the agent. | `Flights` |
-| <a id="gen-ai-tool-type" href="#gen-ai-tool-type">`gen_ai.tool.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Type of the tool utilized by the agent [11] | `function`; `extension`; `datastore` |
+| <a id="gen-ai-tool-type" href="#gen-ai-tool-type">`gen_ai.tool.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Type of the tool utilized by the agent [10] | `function`; `extension`; `datastore` |
 
-**[9] `cluster_whisperer.mcp.tool.name`:** OTel has MCP semantic conventions (development stability) as of 2025. See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/ This custom attribute provides MCP-specific tool identification.
+**[8] `cluster_whisperer.mcp.tool.name`:** OTel has MCP semantic conventions (development stability) as of 2025. See https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/ This custom attribute provides MCP-specific tool identification.
 
-**[10] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+**[9] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
 
-**[11] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
+**[10] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
   Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.
 Function: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.
   Client-side operations are actions taken on the user's end or within the client application.
@@ -174,14 +171,14 @@ OpenLLMetry/Traceloop attributes for LLM observability
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="traceloop-entity-input" href="#traceloop-entity-input">`traceloop.entity.input`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Input content (content-gated) [12] | `{"question":"Find the broken pod"}` |
+| <a id="traceloop-entity-input" href="#traceloop-entity-input">`traceloop.entity.input`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Input content (content-gated) [11] | `{"question":"Find the broken pod"}` |
 | <a id="traceloop-entity-name" href="#traceloop-entity-name">`traceloop.entity.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Entity identifier within the span kind | `investigate`; `kubectl_get`; `kubectl_describe` |
-| <a id="traceloop-entity-output" href="#traceloop-entity-output">`traceloop.entity.output`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Output content (content-gated) [13] | `The pod 'nginx-broken' is failing due to ImagePullBackOff...` |
+| <a id="traceloop-entity-output" href="#traceloop-entity-output">`traceloop.entity.output`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Output content (content-gated) [12] | `The pod 'nginx-broken' is failing due to ImagePullBackOff...` |
 | <a id="traceloop-span-kind" href="#traceloop-span-kind">`traceloop.span.kind`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | OpenLLMetry span category | `workflow`; `tool`; `task` |
 
-**[12] `traceloop.entity.input`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
+**[11] `traceloop.entity.input`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
 
-**[13] `traceloop.entity.output`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
+**[12] `traceloop.entity.output`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true
 
 ---
 
@@ -217,22 +214,22 @@ Attributes for root investigation/tool spans
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="cluster-whisperer-agent-framework" href="#cluster-whisperer-agent-framework">`cluster_whisperer.agent.framework`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Which agent framework is handling the investigation [14] | `langgraph`; `vercel` |
-| <a id="cluster-whisperer-invocation-mode" href="#cluster-whisperer-invocation-mode">`cluster_whisperer.invocation.mode`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | How the agent was invoked [15] | `cli`; `mcp` |
+| <a id="cluster-whisperer-agent-framework" href="#cluster-whisperer-agent-framework">`cluster_whisperer.agent.framework`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Which agent framework is handling the investigation [13] | `langgraph`; `vercel` |
+| <a id="cluster-whisperer-invocation-mode" href="#cluster-whisperer-invocation-mode">`cluster_whisperer.invocation.mode`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | How the agent was invoked [14] | `cli`; `mcp` |
 | <a id="cluster-whisperer-service-operation" href="#cluster-whisperer-service-operation">`cluster_whisperer.service.operation`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The high-level operation type | `investigate`; `kubectl_get`; `kubectl_describe`; `kubectl_logs` |
-| <a id="cluster-whisperer-user-question" href="#cluster-whisperer-user-question">`cluster_whisperer.user.question`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | User's natural language question (content-gated) [16] | `Find the broken pod and tell me why it's failing` |
-| <a id="gen-ai-input-messages" href="#gen-ai-input-messages">`gen_ai.input.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified input messages in OTel v1.37+ parts format (content-gated) [17] | `[{"role":"user","parts":[{"type":"text","content":"Find the broken pod"}]}]` |
-| <a id="gen-ai-output-messages" href="#gen-ai-output-messages">`gen_ai.output.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified output messages in OTel v1.37+ parts format (content-gated) [18] | `[{"role":"assistant","parts":[{"type":"text","content":"The pod is failing..."}],"finish_reason":"end_turn"}]` |
+| <a id="cluster-whisperer-user-question" href="#cluster-whisperer-user-question">`cluster_whisperer.user.question`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | User's natural language question (content-gated) [15] | `Find the broken pod and tell me why it's failing` |
+| <a id="gen-ai-input-messages" href="#gen-ai-input-messages">`gen_ai.input.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified input messages in OTel v1.37+ parts format (content-gated) [16] | `[{"role":"user","parts":[{"type":"text","content":"Find the broken pod"}]}]` |
+| <a id="gen-ai-output-messages" href="#gen-ai-output-messages">`gen_ai.output.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified output messages in OTel v1.37+ parts format (content-gated) [17] | `[{"role":"assistant","parts":[{"type":"text","content":"The pod is failing..."}],"finish_reason":"end_turn"}]` |
 
-**[14] `cluster_whisperer.agent.framework`:** Set on CLI root spans. Values correspond to the --agent flag.
+**[13] `cluster_whisperer.agent.framework`:** Set on CLI root spans. Values correspond to the --agent flag.
 
-**[15] `cluster_whisperer.invocation.mode`:** No OTel semconv exists for invocation mode. The closest analogy is faas.trigger (serverless trigger type) but that's scoped to FaaS. This custom attribute follows OTel convention of namespacing vendor-specific attributes under the service name.
+**[14] `cluster_whisperer.invocation.mode`:** No OTel semconv exists for invocation mode. The closest analogy is faas.trigger (serverless trigger type) but that's scoped to FaaS. This custom attribute follows OTel convention of namespacing vendor-specific attributes under the service name.
 
-**[16] `cluster_whisperer.user.question`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.
+**[15] `cluster_whisperer.user.question`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. CLI mode only.
 
-**[17] `gen_ai.input.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format. Format: [{"role":"user","parts":[{"type":"text","content":"..."}]}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+**[16] `gen_ai.input.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.prompt.N format. Format: [{"role":"user","parts":[{"type":"text","content":"..."}]}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
 
-**[18] `gen_ai.output.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format. Format: [{"role":"assistant","parts":[{"type":"text","content":"..."}],"finish_reason":"end_turn"}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+**[17] `gen_ai.output.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Manual workaround for OpenLLMetry-JS using deprecated gen_ai.completion.N format. Format: [{"role":"assistant","parts":[{"type":"text","content":"..."}],"finish_reason":"end_turn"}] See PRD #21 and https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
 
 ---
 
@@ -251,16 +248,16 @@ kubectl subprocess execution attributes with Process semantic convention referen
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="cluster-whisperer-k8s-namespace" href="#cluster-whisperer-k8s-namespace">`cluster_whisperer.k8s.namespace`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Kubernetes namespace from -n flag [19] | `default`; `kube-system`; `monitoring` |
-| <a id="cluster-whisperer-k8s-output-size-bytes" href="#cluster-whisperer-k8s-output-size-bytes">`cluster_whisperer.k8s.output_size_bytes`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Byte length of kubectl stdout [20] | `1234`; `5678`; `102400` |
+| <a id="cluster-whisperer-k8s-namespace" href="#cluster-whisperer-k8s-namespace">`cluster_whisperer.k8s.namespace`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Kubernetes namespace from -n flag [18] | `default`; `kube-system`; `monitoring` |
+| <a id="cluster-whisperer-k8s-output-size-bytes" href="#cluster-whisperer-k8s-output-size-bytes">`cluster_whisperer.k8s.output_size_bytes`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Byte length of kubectl stdout [19] | `1234`; `5678`; `102400` |
 | <a id="error-type" href="#error-type">`error.type`</a> | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | string | The full name of exception type. | `System.OperationCanceledException` |
 | <a id="process-command-args" href="#process-command-args">`process.command_args`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string[] | All the command arguments (including the command/executable itself) as received by the process. On Linux-based systems (and some other Unixoid systems supporting procfs), can be set according to the list of null-delimited strings extracted from `proc/[pid]/cmdline`. For libc-based executables, this would be the full argv vector passed to `main`. SHOULD NOT be collected by default unless there is sanitization that excludes sensitive data. | `["cmd/otecol", "--config=config.yaml"]` |
 | <a id="process-executable-name" href="#process-executable-name">`process.executable.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the process executable. On Linux based systems, this SHOULD be set to the base name of the target of `/proc/[pid]/exe`. On Windows, this SHOULD be set to the base name of `GetProcessImageFileNameW`. | `otelcol` |
 | <a id="process-exit-code" href="#process-exit-code">`process.exit.code`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The exit code of the process. | `127` |
 
-**[19] `cluster_whisperer.k8s.namespace`:** Extracted from command args when -n flag is present
+**[18] `cluster_whisperer.k8s.namespace`:** Extracted from command args when -n flag is present
 
-**[20] `cluster_whisperer.k8s.output_size_bytes`:** Only set on successful execution. Useful for debugging large responses.
+**[19] `cluster_whisperer.k8s.output_size_bytes`:** Only set on successful execution. Useful for debugging large responses.
 
 ---
 
@@ -278,21 +275,21 @@ GenAI semantic convention attributes for agentic tool execution spans
 
 | Key | Stability | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- |
-| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [21] | `chat`; `generate_content`; `text_completion` |
-| <a id="gen-ai-tool-call-arguments" href="#gen-ai-tool-call-arguments">`gen_ai.tool.call.arguments`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified tool input arguments (content-gated) [22] | `{"resource":"pods","namespace":"all"}` |
+| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [20] | `chat`; `generate_content`; `text_completion` |
+| <a id="gen-ai-tool-call-arguments" href="#gen-ai-tool-call-arguments">`gen_ai.tool.call.arguments`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified tool input arguments (content-gated) [21] | `{"resource":"pods","namespace":"all"}` |
 | <a id="gen-ai-tool-call-id" href="#gen-ai-tool-call-id">`gen_ai.tool.call.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The tool call identifier. | `call_mszuSIzqtI65i1wAUOE8w5H4` |
-| <a id="gen-ai-tool-call-result" href="#gen-ai-tool-call-result">`gen_ai.tool.call.result`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Tool execution result as string (content-gated) [23] | NAME  READY  STATUS  RESTARTS  AGE<br>nginx  1/1  Running  0  5m |
+| <a id="gen-ai-tool-call-result" href="#gen-ai-tool-call-result">`gen_ai.tool.call.result`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Tool execution result as string (content-gated) [22] | NAME  READY  STATUS  RESTARTS  AGE<br>nginx  1/1  Running  0  5m |
 | <a id="gen-ai-tool-description" href="#gen-ai-tool-description">`gen_ai.tool.description`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The tool description. | `Multiply two numbers` |
 | <a id="gen-ai-tool-name" href="#gen-ai-tool-name">`gen_ai.tool.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Name of the tool utilized by the agent. | `Flights` |
-| <a id="gen-ai-tool-type" href="#gen-ai-tool-type">`gen_ai.tool.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Type of the tool utilized by the agent [24] | `function`; `extension`; `datastore` |
+| <a id="gen-ai-tool-type" href="#gen-ai-tool-type">`gen_ai.tool.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Type of the tool utilized by the agent [23] | `function`; `extension`; `datastore` |
 
-**[21] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+**[20] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
 
-**[22] `gen_ai.tool.call.arguments`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+**[21] `gen_ai.tool.call.arguments`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
 
-**[23] `gen_ai.tool.call.result`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+**[22] `gen_ai.tool.call.result`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. Not yet a standalone attribute in OTel semconv v1.37.0 registry, but part of the execute_tool span spec. See https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
 
-**[24] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
+**[23] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.
   Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.
 Function: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.
   Client-side operations are actions taken on the user's end or within the client application.
@@ -322,11 +319,11 @@ Attributes for vector database operation spans
 | --- | --- | --- | --- | --- |
 | <a id="cluster-whisperer-vectorstore-document-count" href="#cluster-whisperer-vectorstore-document-count">`cluster_whisperer.vectorstore.document_count`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Number of documents in the operation (store batch size, delete batch size) | `10`; `50`; `100` |
 | <a id="cluster-whisperer-vectorstore-result-count" href="#cluster-whisperer-vectorstore-result-count">`cluster_whisperer.vectorstore.result_count`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Number of results returned from a search query | `5`; `10`; `20` |
-| <a id="db-collection-name" href="#db-collection-name">`db.collection.name`</a> | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | string | Cosmos DB container name. [25] | `public.users`; `customers` |
-| <a id="db-operation-name" href="#db-operation-name">`db.operation.name`</a> | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | string | The name of the operation or command being executed. [26] | `findAndModify`; `HMSET`; `SELECT` |
+| <a id="db-collection-name" href="#db-collection-name">`db.collection.name`</a> | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | string | Cosmos DB container name. [24] | `public.users`; `customers` |
+| <a id="db-operation-name" href="#db-operation-name">`db.operation.name`</a> | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | string | The name of the operation or command being executed. [25] | `findAndModify`; `HMSET`; `SELECT` |
 | <a id="db-system" href="#db-system">`db.system`</a> | ![Deprecated](https://img.shields.io/badge/-deprecated-red)<br>Replaced by `db.system.name`. | string | Deprecated, use `db.system.name` instead. | `other_sql`; `adabas`; `intersystems_cache` |
 
-**[25] `db.collection.name`:** It is RECOMMENDED to capture the value as provided by the application
+**[24] `db.collection.name`:** It is RECOMMENDED to capture the value as provided by the application
 without attempting to do any case normalization.
 
 The collection name SHOULD NOT be extracted from `db.query.text`,
@@ -336,7 +333,7 @@ in non-batch operations.
 For batch operations, if the individual operations are known to have the same
 collection name then that collection name SHOULD be used.
 
-**[26] `db.operation.name`:** It is RECOMMENDED to capture the value as provided by the application
+**[25] `db.operation.name`:** It is RECOMMENDED to capture the value as provided by the application
 without attempting to do any case normalization.
 
 The operation name SHOULD NOT be extracted from `db.query.text`,
@@ -417,50 +414,50 @@ Attributes for Vercel AI SDK streamText LLM spans
 | --- | --- | --- | --- | --- |
 | <a id="ai-model-id" href="#ai-model-id">`ai.model.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Model identifier on the outer ai.streamText span | `claude-sonnet-4-20250514` |
 | <a id="ai-model-provider" href="#ai-model-provider">`ai.model.provider`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Provider identifier on the outer ai.streamText span | `anthropic.messages` |
-| <a id="ai-operation-id" href="#ai-operation-id">`ai.operationId`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Vercel AI SDK operation identifier (SDK-generated, read by VercelSpanProcessor) [27] | `ai.streamText`; `ai.streamText.doStream`; `ai.toolCall` |
-| <a id="ai-prompt-messages" href="#ai-prompt-messages">`ai.prompt.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified prompt messages sent to the LLM (content-gated) [28] | `[{"role":"system","content":"You are a Kubernetes investigator..."}]` |
-| <a id="ai-prompt-tools" href="#ai-prompt-tools">`ai.prompt.tools`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified tool definitions available to the LLM [29] | `[{"name":"kubectl_get","description":"List Kubernetes resources..."}]` |
-| <a id="ai-response-ms-to-finish" href="#ai-response-ms-to-finish">`ai.response.msToFinish`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Milliseconds from request start to stream completion [30] | `3500`; `8000` |
-| <a id="ai-response-ms-to-first-chunk" href="#ai-response-ms-to-first-chunk">`ai.response.msToFirstChunk`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Milliseconds from request start to first response chunk [31] | `450`; `1200` |
-| <a id="ai-telemetry-function-id" href="#ai-telemetry-function-id">`ai.telemetry.functionId`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Logical function identifier for the telemetry-enabled call [32] | `cluster-whisperer-investigate` |
-| <a id="ai-telemetry-metadata-agent" href="#ai-telemetry-metadata-agent">`ai.telemetry.metadata.agent`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Custom metadata identifying the agent framework [33] | `vercel` |
-| <a id="ai-usage-completion-tokens" href="#ai-usage-completion-tokens">`ai.usage.completionTokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Aggregated completion token count across all steps (outer span) [34] | `500`; `1200` |
-| <a id="ai-usage-prompt-tokens" href="#ai-usage-prompt-tokens">`ai.usage.promptTokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Aggregated prompt token count across all steps (outer span) [35] | `1500`; `3000` |
-| <a id="gen-ai-agent-name" href="#gen-ai-agent-name">`gen_ai.agent.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Agent name for Datadog LLM Obs agent layer classification [36] | `cluster-whisperer` |
-| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [37] | `chat`; `generate_content`; `text_completion` |
-| <a id="gen-ai-request-model" href="#gen-ai-request-model">`gen_ai.request.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the GenAI model a request is being made to. [38] | `gpt-4` |
+| <a id="ai-operation-id" href="#ai-operation-id">`ai.operationId`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Vercel AI SDK operation identifier (SDK-generated, read by VercelSpanProcessor) [26] | `ai.streamText`; `ai.streamText.doStream`; `ai.toolCall` |
+| <a id="ai-prompt-messages" href="#ai-prompt-messages">`ai.prompt.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified prompt messages sent to the LLM (content-gated) [27] | `[{"role":"system","content":"You are a Kubernetes investigator..."}]` |
+| <a id="ai-prompt-tools" href="#ai-prompt-tools">`ai.prompt.tools`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | JSON-stringified tool definitions available to the LLM [28] | `[{"name":"kubectl_get","description":"List Kubernetes resources..."}]` |
+| <a id="ai-response-ms-to-finish" href="#ai-response-ms-to-finish">`ai.response.msToFinish`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Milliseconds from request start to stream completion [29] | `3500`; `8000` |
+| <a id="ai-response-ms-to-first-chunk" href="#ai-response-ms-to-first-chunk">`ai.response.msToFirstChunk`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Milliseconds from request start to first response chunk [30] | `450`; `1200` |
+| <a id="ai-telemetry-function-id" href="#ai-telemetry-function-id">`ai.telemetry.functionId`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Logical function identifier for the telemetry-enabled call [31] | `cluster-whisperer-investigate` |
+| <a id="ai-telemetry-metadata-agent" href="#ai-telemetry-metadata-agent">`ai.telemetry.metadata.agent`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Custom metadata identifying the agent framework [32] | `vercel` |
+| <a id="ai-usage-completion-tokens" href="#ai-usage-completion-tokens">`ai.usage.completionTokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Aggregated completion token count across all steps (outer span) [33] | `500`; `1200` |
+| <a id="ai-usage-prompt-tokens" href="#ai-usage-prompt-tokens">`ai.usage.promptTokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Aggregated prompt token count across all steps (outer span) [34] | `1500`; `3000` |
+| <a id="gen-ai-agent-name" href="#gen-ai-agent-name">`gen_ai.agent.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Agent name for Datadog LLM Obs agent layer classification [35] | `cluster-whisperer` |
+| <a id="gen-ai-operation-name" href="#gen-ai-operation-name">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [36] | `chat`; `generate_content`; `text_completion` |
+| <a id="gen-ai-request-model" href="#gen-ai-request-model">`gen_ai.request.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the GenAI model a request is being made to. [37] | `gpt-4` |
 | <a id="gen-ai-response-finish-reasons" href="#gen-ai-response-finish-reasons">`gen_ai.response.finish_reasons`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string[] | Array of reasons the model stopped generating tokens, corresponding to each generation received. | `["stop"]`; `["stop", "length"]` |
 | <a id="gen-ai-response-id" href="#gen-ai-response-id">`gen_ai.response.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier for the completion. | `chatcmpl-123` |
-| <a id="gen-ai-response-model" href="#gen-ai-response-model">`gen_ai.response.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the model that generated the response. [39] | `gpt-4-0613` |
+| <a id="gen-ai-response-model" href="#gen-ai-response-model">`gen_ai.response.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the model that generated the response. [38] | `gpt-4-0613` |
 | <a id="gen-ai-system" href="#gen-ai-system">`gen_ai.system`</a> | ![Deprecated](https://img.shields.io/badge/-deprecated-red)<br>Replaced by `gen_ai.provider.name`. | string | Deprecated, use `gen_ai.provider.name` instead. | `openai`; `gcp.gen_ai`; `gcp.vertex_ai` |
 | <a id="gen-ai-usage-input-tokens" href="#gen-ai-usage-input-tokens">`gen_ai.usage.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of tokens used in the GenAI input (prompt). | `100` |
 | <a id="gen-ai-usage-output-tokens" href="#gen-ai-usage-output-tokens">`gen_ai.usage.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of tokens used in the GenAI response (completion). | `180` |
 
-**[27] `ai.operationId`:** Set by the Vercel AI SDK's experimental_telemetry. Our VercelSpanProcessor reads this to determine which gen_ai.operation.name to add. Values: ai.streamText (outer), ai.streamText.doStream (inner), ai.toolCall (tool).
+**[26] `ai.operationId`:** Set by the Vercel AI SDK's experimental_telemetry. Our VercelSpanProcessor reads this to determine which gen_ai.operation.name to add. Values: ai.streamText (outer), ai.streamText.doStream (inner), ai.toolCall (tool).
 
-**[28] `ai.prompt.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. On inner doStream spans.
+**[27] `ai.prompt.messages`:** Only captured when OTEL_CAPTURE_AI_PAYLOADS=true. On inner doStream spans.
 
-**[29] `ai.prompt.tools`:** On inner doStream spans. Contains tool names, descriptions, and input schemas.
+**[28] `ai.prompt.tools`:** On inner doStream spans. Contains tool names, descriptions, and input schemas.
 
-**[30] `ai.response.msToFinish`:** On inner doStream spans. Measures total LLM call duration.
+**[29] `ai.response.msToFinish`:** On inner doStream spans. Measures total LLM call duration.
 
-**[31] `ai.response.msToFirstChunk`:** On inner doStream spans. Measures time-to-first-token latency.
+**[30] `ai.response.msToFirstChunk`:** On inner doStream spans. Measures time-to-first-token latency.
 
-**[32] `ai.telemetry.functionId`:** Set via experimental_telemetry.functionId in the streamText config.
+**[31] `ai.telemetry.functionId`:** Set via experimental_telemetry.functionId in the streamText config.
 
-**[33] `ai.telemetry.metadata.agent`:** Set via experimental_telemetry.metadata in the streamText config.
+**[32] `ai.telemetry.metadata.agent`:** Set via experimental_telemetry.metadata in the streamText config.
 
-**[34] `ai.usage.completionTokens`:** SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.output_tokens.
+**[33] `ai.usage.completionTokens`:** SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.output_tokens.
 
-**[35] `ai.usage.promptTokens`:** SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.input_tokens.
+**[34] `ai.usage.promptTokens`:** SDK-specific aggregation. Per-step counts are on doStream spans as gen_ai.usage.input_tokens.
 
-**[36] `gen_ai.agent.name`:** Set by VercelSpanProcessor on outer ai.streamText spans. Value is "cluster-whisperer". Combined with gen_ai.operation.name: "invoke_agent", this causes Datadog to classify the span as an agent layer.
+**[35] `gen_ai.agent.name`:** Set by VercelSpanProcessor on outer ai.streamText spans. Value is "cluster-whisperer". Combined with gen_ai.operation.name: "invoke_agent", this causes Datadog to classify the span as an agent layer.
 
-**[37] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
+**[36] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
 
-**[38] `gen_ai.request.model`:** The name of the GenAI model a request is being made to. If the model is supplied by a vendor, then the value must be the exact name of the model requested. If the model is a fine-tuned custom model, the value should have a more specific name than the base model that's been fine-tuned.
+**[37] `gen_ai.request.model`:** The name of the GenAI model a request is being made to. If the model is supplied by a vendor, then the value must be the exact name of the model requested. If the model is a fine-tuned custom model, the value should have a more specific name than the base model that's been fine-tuned.
 
-**[39] `gen_ai.response.model`:** If available. The name of the GenAI model that provided the response. If the model is supplied by a vendor, then the value must be the exact name of the model actually used. If the model is a fine-tuned custom model, the value should have a more specific name than the base model that's been fine-tuned.
+**[38] `gen_ai.response.model`:** If available. The name of the GenAI model that provided the response. If the model is supplied by a vendor, then the value must be the exact name of the model actually used. If the model is a fine-tuned custom model, the value should have a more specific name than the base model that's been fine-tuned.
 
 ---
 
@@ -490,20 +487,20 @@ Attributes for Vercel AI SDK streamText LLM spans
 | `azure.ai.openai` | Azure OpenAI | ![Development](https://img.shields.io/badge/-development-blue) |
 | `cohere` | Cohere | ![Development](https://img.shields.io/badge/-development-blue) |
 | `deepseek` | DeepSeek | ![Development](https://img.shields.io/badge/-development-blue) |
-| `gcp.gemini` | Gemini [40] | ![Development](https://img.shields.io/badge/-development-blue) |
-| `gcp.gen_ai` | Any Google generative AI endpoint [41] | ![Development](https://img.shields.io/badge/-development-blue) |
-| `gcp.vertex_ai` | Vertex AI [42] | ![Development](https://img.shields.io/badge/-development-blue) |
+| `gcp.gemini` | Gemini [39] | ![Development](https://img.shields.io/badge/-development-blue) |
+| `gcp.gen_ai` | Any Google generative AI endpoint [40] | ![Development](https://img.shields.io/badge/-development-blue) |
+| `gcp.vertex_ai` | Vertex AI [41] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `groq` | Groq | ![Development](https://img.shields.io/badge/-development-blue) |
 | `ibm.watsonx.ai` | IBM Watsonx AI | ![Development](https://img.shields.io/badge/-development-blue) |
 | `mistral_ai` | Mistral AI | ![Development](https://img.shields.io/badge/-development-blue) |
 | `openai` | OpenAI | ![Development](https://img.shields.io/badge/-development-blue) |
 | `perplexity` | Perplexity | ![Development](https://img.shields.io/badge/-development-blue) |
 
-**[40]:** This refers to the 'generativelanguage.googleapis.com' endpoint. Also known as the AI Studio API. May use common attributes prefixed with 'gcp.gen_ai.'.
+**[39]:** This refers to the 'generativelanguage.googleapis.com' endpoint. Also known as the AI Studio API. May use common attributes prefixed with 'gcp.gen_ai.'.
 
-**[41]:** May be used when specific backend is unknown. May use common attributes prefixed with 'gcp.gen_ai.'.
+**[40]:** May be used when specific backend is unknown. May use common attributes prefixed with 'gcp.gen_ai.'.
 
-**[42]:** This refers to the 'aiplatform.googleapis.com' endpoint. May use common attributes prefixed with 'gcp.gen_ai.'.
+**[41]:** This refers to the 'aiplatform.googleapis.com' endpoint. May use common attributes prefixed with 'gcp.gen_ai.'.
 
 ## Vercel AI SDK Tool Call Attributes
 

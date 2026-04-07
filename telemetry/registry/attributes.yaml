@@ -347,11 +347,13 @@ groups:
   - id: registry.cluster_whisperer.kubectl_apply
     type: attribute_group
     display_name: kubectl_apply Tool Attributes
-    brief: Attributes specific to the kubectl_apply tool's catalog validation
+    brief: Attributes on kubectl_apply tool spans for resource identification
     note: >
-      Set on kubectl_apply tool spans during platform catalog validation.
-      These attributes let you filter traces by resource kind and see whether
-      the apply was approved by the catalog.
+      Set on kubectl_apply tool spans. These attributes let you filter traces
+      by resource kind and API group to understand what resources the agent
+      is deploying. Enforcement (Kyverno admission control, RBAC) happens at
+      the cluster level — these attributes identify the resource, not whether
+      it was approved.
     attributes:
       - id: cluster_whisperer.k8s.resource_kind
         type: string
@@ -365,14 +367,6 @@ groups:
         brief: Kubernetes API group extracted from the YAML manifest
         note: Empty string for core API resources (e.g., Pod, Service).
         examples: ["platform.acme.io", "apps", ""]
-
-      - id: cluster_whisperer.catalog.approved
-        type: boolean
-        stability: development
-        brief: Whether the resource type passed platform catalog validation
-        note: >
-          True if the resource kind+apiGroup was found in the capabilities
-          collection. False means the apply was rejected.
 
   # ==========================================================================
   # MCP-SPECIFIC ATTRIBUTES

@@ -5,6 +5,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 ## [Unreleased]
 
 ### Added
+- (2026-04-07) Stale OTel attribute removed (PRD #55 M4): `cluster_whisperer.catalog.approved` removed from `telemetry/registry/attributes.yaml` (M3 removed catalog validation from code but registry wasn't updated). Group description updated. `telemetry:docs` npm script output path fixed (`docs/telemetry-generated` → `docs/observability/telemetry-generated`). Generated docs regenerated.
 - (2026-04-07) Demo docs updated for Kyverno guardrail (PRD #55 M4): `choose-your-adventure-demo.md` updated — catalog validation references replaced with Kyverno enforcement description. Act 3b narrative, Tool Groups table, and `kubectl_apply` section now accurately describe RBAC + Kyverno as the cluster-level enforcement layers. Stale `cluster_whisperer.catalog.approved` OTel attribute in `telemetry/registry/attributes.yaml` flagged for follow-up.
 - (2026-04-07) Kyverno catalog removal (PRD #55 M3): removed VectorStore catalog validation from `kubectl_apply`. Flow is now parse YAML → `kubectl apply` → return result. Kyverno admission rejection errors surface directly from kubectl stderr. `createApplyTools()` no longer requires a VectorStore parameter; apply tools are no longer gated on `VOYAGE_API_KEY`. 672 unit tests pass.
 - (2026-04-06) PRD #122 created: in-cluster MCP server deployment (stdio → Streamable HTTP). Unblocks Kyverno live rejection demo (PRD #55 M4) and demo readiness (PRD #54/120 M6).
