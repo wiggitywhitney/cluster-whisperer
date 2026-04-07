@@ -227,12 +227,19 @@ export function registerVectorSearchTool(
         "vector_search",
         input as Record<string, unknown>,
         async () => {
-          const output = await vectorSearch(vectorStore, input);
-
-          return {
-            content: [{ type: "text" as const, text: output }],
-            isError: false,
-          };
+          try {
+            const output = await vectorSearch(vectorStore, input);
+            return {
+              content: [{ type: "text" as const, text: output }],
+              isError: false,
+            };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return {
+              content: [{ type: "text" as const, text: `Vector search failed: ${message}` }],
+              isError: true,
+            };
+          }
         }
       );
     }

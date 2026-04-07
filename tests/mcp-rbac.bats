@@ -67,6 +67,9 @@ sys.exit(0)
 }
 
 @test "manifest passes kubectl dry-run validation" {
+    if ! kubectl cluster-info --kubeconfig "$KUBECONFIG" &>/dev/null; then
+        skip "no cluster accessible for dry-run validation"
+    fi
     run kubectl apply --dry-run=client -f "$MANIFEST" \
         --kubeconfig "$KUBECONFIG" 2>&1
     [ "$status" -eq 0 ]
@@ -92,6 +95,7 @@ setup_live() {
     run kubectl auth can-i create deployments \
         --as="$SA" \
         --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
     [ "$output" = "no" ]
 }
 
@@ -100,6 +104,7 @@ setup_live() {
     run kubectl auth can-i get pods \
         --as="$SA" \
         --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
     [ "$output" = "yes" ]
 }
 
@@ -108,6 +113,7 @@ setup_live() {
     run kubectl auth can-i create managedservices.platform.acme.io \
         --as="$SA" \
         --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
     [ "$output" = "yes" ]
 }
 
@@ -116,5 +122,6 @@ setup_live() {
     run kubectl auth can-i create statefulsets \
         --as="$SA" \
         --kubeconfig "$KUBECONFIG"
+    [ "$status" -eq 0 ]
     [ "$output" = "no" ]
 }
