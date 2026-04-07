@@ -86,7 +86,7 @@ The MCP SDK supports Streamable HTTP via `StreamableHTTPServerTransport`. The se
 
 ### Milestone 2: Kubernetes Deployment Manifest
 
-The `cluster-whisperer-mcp` ServiceAccount already exists (`demo/cluster/manifests/mcp-rbac.yaml`, PRD #54/55 M5). This milestone adds the Deployment that runs as that SA.
+The `cluster-whisperer-mcp` ServiceAccount is defined in `demo/cluster/manifests/mcp-rbac.yaml`, which is introduced by PRD #120 M5. **This branch must be started after PRD #120 merges** — the manifest does not exist on main until then. This milestone adds the Deployment that runs as that SA.
 
 - [ ] Create `demo/cluster/manifests/mcp-server.yaml`: Deployment + Service for the MCP server pod
   - `spec.serviceAccountName: cluster-whisperer-mcp`
@@ -132,7 +132,7 @@ Full demo verification with in-cluster MCP: investigation, deployment, and Kyver
 
 | # | Date | Decision | Rationale |
 |---|------|----------|-----------|
-| 1 | 2026-04-06 | Streamable HTTP over WebSocket | Matches MCP spec recommendation for remote servers. SDK has first-class `StreamableHTTPServerTransport` support. SSE is already used for the investigation endpoint (PRD #53 M1). |
+| 1 | 2026-04-06 | Streamable HTTP (not WebSocket) | Streamable HTTP and WebSocket are separate MCP transports — WebSocket is not standardized by the MCP spec (2025-11-25). The TypeScript SDK's `StreamableHTTPServerTransport` implements Streamable HTTP (HTTP POST/GET with optional SSE streaming), not WebSocket. SSE is already used for the investigation endpoint (PRD #53 M1). |
 | 2 | 2026-04-06 | Co-host on existing Hono server | MCP HTTP endpoint added to existing `src/api/server.ts` rather than a separate process. One pod, same image — two listener ports (serve/REST on its existing port, MCP on 3457). Fewer moving parts than a dedicated MCP pod. |
 | 3 | 2026-04-06 | No CLUSTER_WHISPERER_KUBECONFIG in-cluster | In-cluster pods authenticate via mounted SA token automatically. Passing a kubeconfig would conflict. The existing `executeKubectl` already handles in-cluster auth (no `--kubeconfig` flag when env var is unset). |
 | 4 | 2026-04-06 | Replace stdio transport, do not keep alongside | stdio is only useful for local development. Once in-cluster is the target, maintaining two transport modes adds complexity with no benefit. The LangGraph CLI path is unaffected (it never used MCP). |
