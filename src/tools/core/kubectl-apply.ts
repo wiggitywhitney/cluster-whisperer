@@ -1,31 +1,30 @@
-// ABOUTME: kubectl-apply core tool — deploys resources after validating against the capabilities catalog
-// ABOUTME: Parses YAML to extract kind/apiGroup, queries vector DB for approval, then runs kubectl apply
+// ABOUTME: kubectl-apply core tool — deploys Kubernetes resources via kubectl apply
+// ABOUTME: Parses YAML to validate structure, then runs kubectl apply and returns the result
 
 /**
- * kubectl-apply core - Deploys Kubernetes resources with catalog validation
+ * kubectl-apply core - Deploys Kubernetes resources
  *
  * This module adds a "write" tool to cluster-whisperer. Unlike the read-only
  * kubectl tools (get, describe, logs), this tool modifies the cluster by
  * applying resource manifests.
  *
- * Safety mechanism: Before applying, it validates the resource type against
- * the capabilities collection in the vector database. Only resource types that
- * have been synced (and therefore approved by the platform team) can be deployed.
- * This is tool-level enforcement — not a prompt-level guardrail that the LLM
- * could ignore.
+ * Enforcement is handled at the cluster level:
+ * - Kyverno admission control rejects non-approved resource types at admission
+ * - RBAC on the cluster-whisperer ServiceAccount limits what operations are allowed
+ *
+ * Any rejection (Kyverno or RBAC) surfaces as a kubectl error and is returned
+ * to the caller so the AI coding assistant can explain it in natural language.
  *
  * Flow:
- *   1. Parse YAML manifest → extract kind and apiGroup
- *   2. Query capabilities collection for this resource type (keywordSearch, no embeddings)
- *   3. If found → kubectl apply -f - (pipe manifest via stdin)
- *   4. If not found → return error to agent (tool rejects, not the prompt)
+ *   1. Parse YAML manifest → validate structure (apiVersion, kind required)
+ *   2. Run `kubectl apply -f -` (pipe manifest via stdin)
+ *   3. Return result, including any admission webhook errors
  */
 
 import { z } from "zod";
 import { spawnSync } from "child_process";
 import { load as yamlLoad } from "js-yaml";
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
-import type { VectorStore } from "../../vectorstore";
 import type { KubectlResult } from "../../utils/kubectl";
 import { getTracer } from "../../tracing";
 
@@ -33,7 +32,7 @@ import { getTracer } from "../../tracing";
  * Input schema for kubectl apply.
  *
  * Takes a complete YAML manifest string. The tool parses it internally
- * to extract the resource type for catalog validation.
+ * to validate structure before passing to kubectl.
  */
 export const kubectlApplySchema = z.object({
   manifest: z
@@ -49,16 +48,16 @@ export type KubectlApplyInput = z.infer<typeof kubectlApplySchema>;
 /**
  * Tool description for LLMs.
  *
- * Explains the catalog validation so the agent understands why some
- * resources will be rejected. The agent should use vector_search first
- * to discover what resource types are available before attempting to apply.
+ * Directs the agent toward platform-approved resource types. Kyverno will
+ * reject any other resource at admission — this guidance prevents wasted
+ * attempts before the cluster enforces the policy.
  */
 export const kubectlApplyDescription = `Deploy a Kubernetes resource by applying a YAML manifest.
 
-IMPORTANT: This tool validates the resource type against the platform's approved catalog before applying. Only resource types that appear in the capabilities collection can be deployed. If a resource type is not in the catalog, the apply will be rejected.
+IMPORTANT: Only platform-approved resource types (e.g., ManagedService from platform.acme.io) can be deployed. The cluster enforces this at admission — attempting to deploy standard Kubernetes resources (Deployment, Service, ConfigMap, etc.) will be rejected by the admission controller.
 
 Workflow:
-1. Use vector_search to discover available resource types
+1. Use vector_search to discover available resource types from the platform catalog
 2. Construct a YAML manifest for an approved resource type
 3. Use this tool to apply the manifest
 
@@ -73,37 +72,6 @@ interface ManifestMetadata {
 }
 
 /**
- * Standard Kubernetes built-in API groups that are always rejected.
- *
- * The demo's message is "the platform team controls what's allowed." Standard
- * k8s resources (Deployment, Service, ConfigMap, etc.) can appear in the
- * capabilities catalog because the sync pipeline indexes all cluster CRDs —
- * but they must never be deployable through this tool.
- *
- * Only resources from custom API groups (e.g., *.acme.io, *.crossplane.io)
- * that the platform team has explicitly published to the catalog are allowed.
- */
-const BUILT_IN_API_GROUPS = new Set([
-  "",                                  // core: Pod, Service, ConfigMap, Secret
-  "apps",                              // Deployment, StatefulSet, DaemonSet, ReplicaSet
-  "batch",                             // Job, CronJob
-  "autoscaling",                       // HorizontalPodAutoscaler
-  "extensions",                        // (deprecated, but still seen)
-  "policy",                            // PodDisruptionBudget
-  "networking.k8s.io",                 // Ingress, NetworkPolicy
-  "rbac.authorization.k8s.io",         // ClusterRole, RoleBinding
-  "storage.k8s.io",                    // StorageClass, PersistentVolume
-  "admissionregistration.k8s.io",      // MutatingWebhookConfiguration
-  "apiextensions.k8s.io",              // CustomResourceDefinition
-  "coordination.k8s.io",               // Lease
-  "discovery.k8s.io",                  // EndpointSlice
-  "events.k8s.io",                     // Event
-  "flowcontrol.apiserver.k8s.io",      // FlowSchema
-  "node.k8s.io",                       // RuntimeClass
-  "scheduling.k8s.io",                 // PriorityClass
-]);
-
-/**
  * Parse a YAML manifest to extract the kind and apiGroup.
  *
  * The apiGroup is derived from the apiVersion field:
@@ -112,8 +80,7 @@ const BUILT_IN_API_GROUPS = new Set([
  * - "v1" → apiGroup "" (core API, no group)
  *
  * Multi-document YAML (separated by ---) is rejected. This tool only
- * supports single-resource manifests to prevent smuggling unapproved
- * resources past catalog validation.
+ * supports single-resource manifests.
  *
  * @param manifest - Raw YAML string (single document only)
  * @returns ManifestMetadata on success, or { error: string } on failure
@@ -170,18 +137,18 @@ export function parseManifestMetadata(
 }
 
 /**
- * Execute kubectl apply with catalog validation.
+ * Execute kubectl apply.
  *
- * This is the core logic — framework wrappers (LangChain, MCP) call this.
- * The VectorStore is injected for testability and backend-agnosticism.
+ * This is the core logic — framework wrappers (LangChain, Vercel AI, MCP) call this.
+ * Admission enforcement (Kyverno, RBAC) is handled by the cluster, not this function.
+ * Any rejection from the cluster surfaces as a non-zero kubectl exit and is returned
+ * to the caller as-is.
  *
- * @param vectorStore - An initialized VectorStore instance for catalog queries
  * @param input - Validated input matching kubectlApplySchema
  * @param options - Optional configuration (e.g., kubeconfig path)
  * @returns KubectlResult with output string and isError flag
  */
 export async function kubectlApply(
-  vectorStore: VectorStore,
   input: KubectlApplyInput,
   options?: { kubeconfig?: string }
 ): Promise<KubectlResult> {
@@ -192,7 +159,7 @@ export async function kubectlApply(
     { kind: SpanKind.CLIENT },
     async (span) => {
       try {
-        // Step 1: Parse the YAML manifest
+        // Step 1: Parse the YAML manifest to validate structure and extract metadata
         const metadata = parseManifestMetadata(input.manifest);
 
         if ("error" in metadata) {
@@ -210,55 +177,9 @@ export async function kubectlApply(
         span.setAttribute("cluster_whisperer.k8s.resource_kind", metadata.kind);
         span.setAttribute("cluster_whisperer.k8s.api_group", metadata.apiGroup);
 
-        // Step 2a: Reject standard Kubernetes built-in resource types immediately.
-        // These must never be deployable through this tool regardless of catalog
-        // contents — only platform-published custom resources are allowed.
-        if (BUILT_IN_API_GROUPS.has(metadata.apiGroup)) {
-          const displayGroup = metadata.apiGroup || "core";
-          const msg = `Resource type ${metadata.kind} (${displayGroup}) is a standard Kubernetes resource and cannot be deployed through this tool. Only platform-approved resource types from the capabilities catalog are allowed.`;
-          span.setAttribute("error.type", "BuiltInResourceRejection");
-          span.setStatus({ code: SpanStatusCode.ERROR, message: msg });
-          return { output: msg, isError: true };
-        }
-
-        // Step 2b: Validate against the capabilities catalog
-        let catalogResults;
-        try {
-          catalogResults = await vectorStore.keywordSearch(
-            "capabilities",
-            undefined,
-            {
-              where: { kind: metadata.kind, apiGroup: metadata.apiGroup },
-              nResults: 1,
-            }
-          );
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          span.setAttribute("error.type", "CatalogValidationError");
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message,
-          });
-          return {
-            output: `Catalog validation failed: ${message}`,
-            isError: true,
-          };
-        }
-
-        span.setAttribute(
-          "cluster_whisperer.catalog.approved",
-          catalogResults.length > 0
-        );
-
-        if (catalogResults.length === 0) {
-          const msg = `Resource type ${metadata.kind} (${metadata.apiGroup || "core"}) is not in the approved platform catalog. Cannot apply.`;
-          span.setAttribute("error.type", "CatalogRejection");
-          span.setStatus({ code: SpanStatusCode.ERROR, message: msg });
-          return { output: msg, isError: true };
-        }
-
-        // Step 3: Apply the manifest via kubectl apply -f - (stdin)
-        // Include --kubeconfig if specified (demo governance: agent has cluster access)
+        // Step 2: Apply the manifest via kubectl apply -f - (stdin)
+        // Kyverno and RBAC handle admission enforcement — any rejection surfaces
+        // as a non-zero exit code with the webhook error message in stderr.
         const applyArgs = options?.kubeconfig
           ? ["--kubeconfig", options.kubeconfig, "apply", "-f", "-"]
           : ["apply", "-f", "-"];

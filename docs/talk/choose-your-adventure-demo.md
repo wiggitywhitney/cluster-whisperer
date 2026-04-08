@@ -130,7 +130,7 @@ the YAML and suggests `kubectl apply` manually.
 
 > "The agent found the needle in the haystack — one resource out of twenty with the
 > same name, because it has semantic understanding of what each one does. But it can't
-> act on it. Let's give it the ability to deploy — but only from the approved catalog."
+> act on it. Let's give it the ability to deploy — but with cluster-level guardrails."
 
 ### Act 3b: Agent Deploys
 
@@ -141,9 +141,11 @@ export CLUSTER_WHISPERER_TOOLS=kubectl,vector,apply
 plz "Go ahead and deploy it"
 ```
 
-Now the agent has `kubectl_apply`, but it can only deploy resources from the approved
-platform catalog. The tool validates the resource type against the capabilities
-collection before applying — this is enforced in code, not in the prompt.
+Now the agent has `kubectl_apply`. The tool is intentionally simple — it parses the
+YAML and runs `kubectl apply`. Enforcement lives in the cluster: a Kyverno ClusterPolicy
+at `k8s/kyverno-allowlist.yaml` restricts the `cluster-whisperer-mcp` ServiceAccount to
+`platform.acme.io/v1alpha1` ManagedService resources only. The policy lives in the
+repository as YAML — auditable, reviewable, and independent of application code.
 
 The agent deploys the platform-approved ManagedService. Crossplane provisions the
 PostgreSQL database and the `db-service` endpoint (~15 seconds). The presenter talks
@@ -160,8 +162,8 @@ with clickable zones linking to Whitney's and Viktor's YouTube channels.
 The demo app URL is also in `demo/.env` as `DEMO_APP_URL`. While the app was crashing,
 this URL returned 502. Now it serves the spider page — the payoff moment.
 
-> "The agent found the right resource, and it could only deploy from the approved
-> catalog — the platform team controls what's allowed."
+> "The agent found the right resource, and the platform team controls what it can deploy —
+> not in application code, but in a Kyverno policy that lives in the cluster as YAML."
 
 But how can platform engineers understand who is using their agent, and how, and for what?
 
@@ -256,18 +258,40 @@ src/agent/agent-events.ts        <- Shared AgentEvent union type (thinking, tool
 |-------|----------------|
 | `kubectl` | kubectl_get, kubectl_describe, kubectl_logs |
 | `vector` | vector_search (semantic + keyword + metadata) |
-| `apply` | kubectl_apply (with catalog validation) |
+| `apply` | kubectl_apply (cluster enforces via Kyverno + RBAC) |
 
-### kubectl_apply — Catalog Validation
+### kubectl_apply — Cluster-Level Enforcement
 
-The `kubectl_apply` tool enforces platform policy **in code, not in the prompt**:
+The `kubectl_apply` tool is intentionally simple:
 
-1. Parse incoming YAML to extract `kind` and `apiGroup`
-2. Query the capabilities collection — is this resource type in the catalog?
-3. If **not found**: return error `"Resource type X is not in the approved platform catalog"`
-4. If **found**: run `kubectl apply -f -`
+1. Parse YAML manifest — validate `apiVersion`, `kind`, and `metadata.name`
+2. Run `kubectl apply --filename -` (manifest via stdin)
+3. Return the result, including any admission webhook errors
 
-The agent cannot bypass this — it's the tool's execution path.
+Enforcement is handled at the cluster level by two complementary layers:
+
+**RBAC**: The `cluster-whisperer-mcp` ClusterRole (defined in `demo/cluster/manifests/mcp-rbac.yaml`,
+added by PRD #120) grants CREATE permission only for `platform.acme.io/managedservices`. Standard
+resources (Deployment, ConfigMap, Service) are read-only for this ServiceAccount.
+
+**Kyverno**: A ClusterPolicy (`k8s/kyverno-allowlist.yaml`) provides admission-level
+enforcement. Scoped to the `cluster-whisperer-mcp` ServiceAccount, it requires
+`apiVersion: platform.acme.io/v1alpha1` and `kind: ManagedService`. When the MCP
+server runs in-cluster as this SA and attempts to create a non-approved resource, the
+cluster returns:
+
+```text
+Error from server: admission webhook "validate.kyverno.svc" denied the request:
+[require-approved-resources] Only ManagedService resources from platform.acme.io are allowed through the cluster whisperer agent.
+```
+
+The ClusterPolicy is visible in the cluster (`kubectl get clusterpolicy
+cluster-whisperer-resource-allowlist --output yaml`), checked into the repo, and
+enforces policy regardless of how requests arrive — MCP server, raw kubectl, or CI pipeline.
+
+*Note: In CLI demo mode, requests use the presenter's kubeconfig and don't carry the
+`cluster-whisperer-mcp` SA identity, so Kyverno doesn't fire. The live Kyverno rejection
+demo requires the in-cluster MCP deployment (PRD #122).*
 
 ### Cluster Access
 
@@ -289,6 +313,7 @@ The agent has its own kubeconfig passed internally via `CLUSTER_WHISPERER_KUBECO
 | Datadog (via OTel Collector) | Observability option B |
 | k8s-vectordb-sync | Populates vector DBs with cluster data |
 | cluster-whisperer serve | Receives sync data from controller |
+| Kyverno | Admission controller enforcing ManagedService-only policy |
 | NGINX Ingress | External access via nip.io DNS |
 
 ---

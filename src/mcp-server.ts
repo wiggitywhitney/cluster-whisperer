@@ -107,9 +107,9 @@ async function main(): Promise<void> {
 
     // Register the Layer 2 session state gate (PRD #120 M4):
     // - kubectl_apply_dryrun validates the manifest and stores it; returns sessionId
-    // - kubectl_apply reads the manifest from session state via sessionId; catalog validation stays
+    // - kubectl_apply reads the manifest from session state via sessionId; Kyverno enforces at cluster level
     registerDryrunTool(server, sessionStore, { kubeconfig });
-    registerApplyTool(server, vectorStore, sessionStore, { kubeconfig });
+    registerApplyTool(server, sessionStore, { kubeconfig });
   }
 
   // Register the investigate-cluster prompt resource (PRD #120 M3.5).

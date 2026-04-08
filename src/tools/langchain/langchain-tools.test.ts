@@ -1,4 +1,4 @@
-// ABOUTME: Unit tests for LangChain tool wrappers — covers apply tool factory and graceful degradation
+// ABOUTME: Unit tests for LangChain tool wrappers — covers apply tool factory
 // ABOUTME: Tests the thin wrapper layer between core functions and LangChain agent integration
 
 /**
@@ -6,11 +6,12 @@
  *
  * These tests verify the LangChain-specific wrapper behavior:
  * - Factory creation (createApplyTools)
- * - Graceful degradation when vector DB is unavailable
  * - Tool metadata (name, description, schema)
+ * - Tool invocation passes through to core and returns output
  *
- * Core logic (YAML parsing, catalog validation) is tested in core/kubectl-apply.test.ts.
- * These tests focus on the LangChain integration layer.
+ * Core logic (YAML parsing, kubectl execution, Kyverno error surfacing) is
+ * tested in core/kubectl-apply.test.ts. These tests focus on the LangChain
+ * integration layer.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -38,7 +39,7 @@ vi.mock("../../tracing", () => ({
 // Mock child_process for kubectl calls
 vi.mock("child_process", () => ({
   spawnSync: vi.fn(() => ({
-    stdout: "deployment.apps/nginx created\n",
+    stdout: "managedservice.platform.acme.io/youchoose-db created\n",
     stderr: "",
     status: 0,
     error: null,
@@ -46,59 +47,29 @@ vi.mock("child_process", () => ({
 }));
 
 import { createApplyTools } from "./index";
-import type { VectorStore } from "../../vectorstore";
-
-/**
- * Creates a mock VectorStore for testing.
- * Mirrors the helper in core/kubectl-apply.test.ts.
- */
-function createMockVectorStore(
-  overrides: Partial<VectorStore> = {}
-): VectorStore {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    similaritySearch: vi.fn().mockResolvedValue([]),
-    keywordSearch: vi.fn().mockResolvedValue([]),
-    addDocuments: vi.fn().mockResolvedValue(undefined),
-    deleteCollection: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
 
 describe("createApplyTools", () => {
-  let mockVectorStore: VectorStore;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockVectorStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([
-        {
-          id: "1",
-          document: "ManagedService resource",
-          metadata: { kind: "ManagedService", apiGroup: "platform.acme.io" },
-        },
-      ]),
-    });
   });
 
   it("returns an array with one tool", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(tools).toHaveLength(1);
   });
 
   it("creates a tool named kubectl_apply", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(tools[0].name).toBe("kubectl_apply");
   });
 
   it("tool has a description", () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     expect(tools[0].description).toBeTruthy();
-    expect(tools[0].description).toContain("catalog");
   });
 
-  it("tool invocation calls core kubectlApply with the vectorStore", async () => {
-    const tools = createApplyTools(mockVectorStore);
+  it("tool invocation calls kubectl and returns output", async () => {
+    const tools = createApplyTools();
     const applyTool = tools[0];
 
     const manifest = `apiVersion: platform.acme.io/v1alpha1
@@ -108,73 +79,37 @@ metadata:
 
     const result = await applyTool.invoke({ manifest });
 
-    // Core function should have queried the catalog
-    expect(mockVectorStore.keywordSearch).toHaveBeenCalledWith(
-      "capabilities",
-      undefined,
-      expect.objectContaining({
-        where: { kind: "ManagedService", apiGroup: "platform.acme.io" },
-      })
-    );
-
     // Should return the kubectl output string
     expect(result).toContain("created");
   });
 
-  it("returns catalog validation error when vector DB is unreachable", async () => {
-    const unreachableStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
-    });
-
-    const tools = createApplyTools(unreachableStore);
-    const result = await tools[0].invoke({
-      manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
-metadata:
-  name: test`,
-    });
-
-    // Core function catches the error and returns a structured message
-    expect(result).toContain("Catalog validation failed");
-  });
-
-  it("returns error message for non-connection errors", async () => {
-    const brokenStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockRejectedValue(new Error("Invalid query")),
-    });
-
-    const tools = createApplyTools(brokenStore);
-    const result = await tools[0].invoke({
-      manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
-metadata:
-  name: test`,
-    });
-
-    // Non-connection errors pass through from core
-    expect(result).toContain("Invalid query");
-  });
-
   it("returns parse error for invalid YAML", async () => {
-    const tools = createApplyTools(mockVectorStore);
+    const tools = createApplyTools();
     const result = await tools[0].invoke({ manifest: "not: valid: yaml: [" });
 
     expect(result).toContain("Failed to parse YAML");
   });
 
-  it("returns catalog rejection for unapproved resources", async () => {
-    const emptyStore = createMockVectorStore({
-      keywordSearch: vi.fn().mockResolvedValue([]),
+  it("surfaces Kyverno rejection from kubectl stderr", async () => {
+    const { spawnSync } = await import("child_process");
+    vi.mocked(spawnSync).mockReturnValueOnce({
+      stdout: "",
+      stderr: `Error from server: admission webhook "validate.kyverno.svc" denied the request: [require-approved-resources] Only ManagedService resources are allowed.`,
+      status: 1,
+      error: null,
+      pid: 0,
+      output: [],
+      signal: null,
     });
 
-    const tools = createApplyTools(emptyStore);
+    const tools = createApplyTools();
     const result = await tools[0].invoke({
-      manifest: `apiVersion: widgets.example.com/v1beta1
-kind: Widget
+      manifest: `apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: test-widget`,
+  name: test-config`,
     });
 
-    expect(result).toContain("not in the approved platform catalog");
+    expect(result).toContain("admission webhook");
   });
 });

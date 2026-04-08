@@ -89,33 +89,26 @@ export interface InvestigationResult {
  * issues with let/reassign.
  */
 /**
- * Creates vector search and apply tools that share the same VectorStore instance.
+ * Creates vector search tools. Requires VOYAGE_API_KEY for embeddings.
  *
- * Both tool types need a VectorStore:
- * - Vector tools: for similarity and keyword search across collections
- * - Apply tools: for catalog validation (querying capabilities collection)
+ * Apply tools (kubectl_apply) are created separately — they no longer need
+ * a VectorStore since admission enforcement is handled by Kyverno at the
+ * cluster level.
  *
- * Sharing the same instance means a single connection to the vector DB.
- * Both tools independently ensure their collections are initialized.
- *
- * Returns { vectorTools, applyTools } — either may be empty if VOYAGE_API_KEY
- * is not set (the agent still works with kubectl-only investigation).
+ * Returns [] if VOYAGE_API_KEY is not set (the agent still works with
+ * kubectl-only investigation).
  */
-function createVectorAndApplyToolsSafe(
+function createVectorToolsSafe(
   vectorBackend: VectorBackendType = DEFAULT_VECTOR_BACKEND,
-  kubectlOpts?: { kubeconfig?: string }
 ) {
   if (!process.env.VOYAGE_API_KEY) {
-    console.debug("Vector and apply tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
-    return { vectorTools: [], applyTools: [] };
+    console.debug("Vector tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
+    return [];
   }
 
   const embedder = new VoyageEmbedding();
   const vectorStore = createVectorStore(embedder, vectorBackend);
-  return {
-    vectorTools: createVectorTools(vectorStore),
-    applyTools: createApplyTools(vectorStore, kubectlOpts),
-  };
+  return createVectorTools(vectorStore);
 }
 
 /**
@@ -253,17 +246,13 @@ export function getInvestigatorAgent(options?: InvestigatorOptions) {
       tools.push(...(kubectlOpts ? createKubectlTools(kubectlOpts) : kubectlTools));
     }
 
-    // Vector and apply tools share a VectorStore instance (single connection).
-    // Only create the shared backend if either group is requested.
-    if (toolGroups.includes("vector") || toolGroups.includes("apply")) {
-      const { vectorTools, applyTools } = createVectorAndApplyToolsSafe(vectorBackend, kubectlOpts);
+    if (toolGroups.includes("apply")) {
+      tools.push(...createApplyTools(kubectlOpts));
+    }
 
-      if (toolGroups.includes("vector")) {
-        tools.push(...vectorTools);
-      }
-      if (toolGroups.includes("apply")) {
-        tools.push(...applyTools);
-      }
+    // Vector tools require VOYAGE_API_KEY for embeddings.
+    if (toolGroups.includes("vector")) {
+      tools.push(...createVectorToolsSafe(vectorBackend));
     }
 
     const agent = createReactAgent({

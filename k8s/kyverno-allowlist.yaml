@@ -1,0 +1,42 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: cluster-whisperer-resource-allowlist
+spec:
+  # validationFailureAction: Enforce blocks the request outright.
+  # Audit would only log — wrong for a demo guardrail that needs to produce a real error.
+  validationFailureAction: Enforce
+  # background: false is required when using match.any[].subjects.
+  # Subject info (ServiceAccount identity) is only present in live admission requests,
+  # not in background scans. Without this, the policy may produce unexpected errors.
+  background: false
+  rules:
+    - name: require-approved-resources
+      match:
+        any:
+          - resources:
+              # kinds is required by Kyverno even when subject-scoping — the
+              # resources block must have at least one kind. Wildcard captures
+              # all resource types so the deny conditions can filter to ManagedService.
+              kinds: ["*"]
+              operations: ["CREATE"]
+            # subjects is a sibling of resources (same indentation level).
+            # Scoped to the cluster-whisperer-mcp ServiceAccount so Crossplane
+            # and system SAs are completely unaffected by this policy.
+            subjects:
+              - kind: ServiceAccount
+                name: cluster-whisperer-mcp
+                namespace: cluster-whisperer
+      validate:
+        message: "Only ManagedService resources from platform.acme.io are allowed through the cluster whisperer agent."
+        deny:
+          conditions:
+            # Deny if EITHER condition is true (OR logic).
+            # A resource must be platform.acme.io/v1alpha1 AND ManagedService to pass.
+            any:
+              - key: "{{ request.object.apiVersion }}"
+                operator: NotEquals
+                value: "platform.acme.io/v1alpha1"
+              - key: "{{ request.object.kind }}"
+                operator: NotEquals
+                value: "ManagedService"

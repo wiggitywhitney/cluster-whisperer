@@ -290,24 +290,21 @@ export class VercelAgent implements InvestigationAgent {
       tools = { ...tools, ...createKubectlTools(kubectlOpts) };
     }
 
-    // Vector and apply tools share a VectorStore instance.
-    // Only create the shared backend if either group is requested.
-    if (toolGroups.includes("vector") || toolGroups.includes("apply")) {
+    if (toolGroups.includes("apply")) {
+      tools = { ...tools, ...createApplyTools(kubectlOpts) };
+    }
+
+    // Vector tools require VOYAGE_API_KEY for embeddings.
+    if (toolGroups.includes("vector")) {
       if (process.env.VOYAGE_API_KEY) {
         const embedder = new VoyageEmbedding();
         const vectorStore = createVectorStore(
           embedder,
           this.options.vectorBackend ?? DEFAULT_VECTOR_BACKEND
         );
-
-        if (toolGroups.includes("vector")) {
-          tools = { ...tools, ...createVectorTools(vectorStore) };
-        }
-        if (toolGroups.includes("apply")) {
-          tools = { ...tools, ...createApplyTools(vectorStore, kubectlOpts) };
-        }
+        tools = { ...tools, ...createVectorTools(vectorStore) };
       } else {
-        console.debug("Vector and apply tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
+        console.debug("Vector tools disabled: VOYAGE_API_KEY is not set"); // eslint-disable-line no-console
       }
     }
 

@@ -46,6 +46,9 @@ BASE_DOMAIN=""
 # Crossplane version
 CROSSPLANE_VERSION="2.2.0"
 
+# Kyverno version (Helm chart 3.7.1 = app v1.17.1)
+KYVERNO_VERSION="3.7.1"
+
 # GKE configuration
 GCP_PROJECT="demoo-ooclock"
 GKE_MACHINE_TYPE="n2-standard-4"
@@ -1761,6 +1764,64 @@ print_demo_app_diagnostics() {
 }
 
 # =============================================================================
+# Kyverno Admission Controller
+# =============================================================================
+
+# Install Kyverno using Helm.
+# Kyverno enforces admission policies at the cluster level — it is the Layer 4
+# guardrail that blocks unauthorized resource types regardless of how a request
+# arrives. ClusterPolicies are applied separately (see demo/cluster/manifests/).
+#
+# Chart version note: Helm chart 3.7.1 deploys app v1.17.1. These are independent
+# version numbers — do not confuse them. Pin --version to the chart version here.
+install_kyverno() {
+    log_info "Installing Kyverno v${KYVERNO_VERSION} (chart)..."
+
+    # Add Kyverno Helm repo
+    helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update &>/dev/null
+    helm repo update kyverno &>/dev/null
+
+    # Check if already installed (idempotency)
+    if helm list -n kyverno 2>/dev/null | grep -q kyverno; then
+        log_success "Kyverno already installed"
+        return
+    fi
+
+    helm install kyverno kyverno/kyverno \
+        --namespace kyverno \
+        --create-namespace \
+        --version "${KYVERNO_VERSION}" \
+        --wait --timeout 5m0s
+
+    log_success "Kyverno ${KYVERNO_VERSION} installed"
+
+    # Verify the admission webhook is registered — this confirms the API server
+    # is wired to Kyverno and policies will be enforced.
+    if kubectl get validatingwebhookconfigurations 2>/dev/null | grep -q kyverno; then
+        log_success "Kyverno admission webhook registered"
+    else
+        log_error "Kyverno admission webhook not found — policies will not be enforced"
+        return 1
+    fi
+}
+
+# Apply Kyverno ClusterPolicy manifests from k8s/ in the repo root.
+# Idempotent — kubectl apply is safe to re-run.
+apply_kyverno_policies() {
+    log_info "Applying Kyverno ClusterPolicy manifests..."
+
+    kubectl apply -f "${REPO_ROOT}/k8s/kyverno-allowlist.yaml"
+
+    # Verify the policy was accepted by the cluster
+    if kubectl get clusterpolicy cluster-whisperer-resource-allowlist &>/dev/null; then
+        log_success "Kyverno allowlist policy applied"
+    else
+        log_error "Kyverno allowlist policy not found after apply"
+        return 1
+    fi
+}
+
+# =============================================================================
 # k8s-vectordb-sync Controller and cluster-whisperer Serve
 # =============================================================================
 
@@ -2151,7 +2212,11 @@ main() {
     verify_observability
     verify_trace_pipeline
     deploy_demo_app
+    install_kyverno
+    apply_kyverno_policies
     deploy_cluster_whisperer_serve
+    # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
+    "${SCRIPT_DIR}/verify-kyverno-policy.sh"
     create_ingress_resources
     run_capability_inference
     verify_vector_search

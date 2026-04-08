@@ -331,16 +331,14 @@ export function registerDryrunTool(
  * (stored by kubectl_apply_dryrun) rather than accepting AI-generated YAML at
  * call time. The AI cannot inject arbitrary YAML at apply time.
  *
- * Catalog validation stays in place (removed by PRD #121 M3 when Kyverno deploys).
+ * Kyverno handles admission enforcement at the cluster level (PRD #121 M3).
  *
  * @param server - The McpServer instance to register the tool with
- * @param vectorStore - An initialized VectorStore for catalog validation
  * @param sessionStore - The shared SessionStore for session state lookup
  * @param options - Optional kubectl configuration (e.g., kubeconfig path)
  */
 export function registerApplyTool(
   server: McpServer,
-  vectorStore: VectorStore,
   sessionStore: SessionStore,
   options?: KubectlOptions
 ): void {
@@ -372,12 +370,8 @@ export function registerApplyTool(
             };
           }
 
-          // Run kubectl apply with catalog validation (catalog removed in PRD #121 M3)
-          const result = await kubectlApply(
-            vectorStore,
-            { manifest },
-            options
-          );
+          // Kyverno enforces admission policy at the cluster level (PRD #121 M3)
+          const result = await kubectlApply({ manifest }, options);
 
           // Consume session only on success — leave intact on failure so the AI can retry
           if (!result.isError) {

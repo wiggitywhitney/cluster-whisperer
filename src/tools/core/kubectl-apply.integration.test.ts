@@ -1,16 +1,15 @@
 // ABOUTME: Integration tests for kubectl-apply against a real Kind cluster.
-// ABOUTME: Uses mock VectorStore (no API tokens) + real kubectl to test actual resource creation.
+// ABOUTME: Tests actual resource creation — admission enforcement is Kyverno's job, not tested here.
 
 /**
  * kubectl-apply integration tests
  *
  * These tests run against an ephemeral Kind cluster managed by the scripts in
- * test/integration/. The VectorStore is mocked (no Chroma/Voyage needed) since
- * unit tests already cover that interaction. What we're testing here:
+ * test/integration/. What we're testing here:
  *
  * 1. kubectl apply -f - actually creates resources in a real cluster
- * 2. The full flow (parse YAML → validate catalog → apply) works end-to-end
- * 3. Resources that fail catalog validation never reach the cluster
+ * 2. The full flow (parse YAML → apply) works end-to-end
+ * 3. kubectl errors surface correctly (YAML errors, missing resources, etc.)
  *
  * Run via: src/tools/core/test/integration/run.sh
  * Or manually: KIND_CLUSTER_NAME=kubectl-apply-test npx vitest run src/tools/core/kubectl-apply.integration.test.ts
@@ -20,7 +19,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawnSync } from "child_process";
-import type { VectorStore, SearchResult } from "../../vectorstore";
 
 // ---------------------------------------------------------------------------
 // Skip check — only run when a Kind cluster is available
@@ -62,42 +60,6 @@ function kubectl(...args: string[]): { stdout: string; status: number | null } {
   return { stdout: result.stdout, status: result.status };
 }
 
-/** Create a mock VectorStore that approves specific resource types. */
-function createApprovedCatalog(
-  approved: Array<{ kind: string; apiGroup: string }>
-): VectorStore {
-  return {
-    initialize: async () => {},
-    store: async () => {},
-    search: async () => [],
-    delete: async () => {},
-    keywordSearch: async (
-      _collection: string,
-      _keyword?: string,
-      options?: { where?: Record<string, unknown> }
-    ): Promise<SearchResult[]> => {
-      const where = options?.where as
-        | { kind: string; apiGroup: string }
-        | undefined;
-      if (!where) return [];
-
-      const match = approved.find(
-        (a) => a.kind === where.kind && a.apiGroup === where.apiGroup
-      );
-      if (!match) return [];
-
-      return [
-        {
-          id: `${match.apiGroup}/${match.kind}`,
-          text: `${match.kind} resource`,
-          metadata: { kind: match.kind, apiGroup: match.apiGroup },
-          score: -1,
-        },
-      ];
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Import the tool under test (dynamic to allow skip logic to run first)
 // ---------------------------------------------------------------------------
@@ -109,15 +71,7 @@ const { kubectlApply } = await import("./kubectl-apply");
 // ---------------------------------------------------------------------------
 
 describe.skipIf(skipReason)("kubectl-apply integration", () => {
-  // The setup script installs testresources.test.cluster-whisperer.io into the
-  // Kind cluster. We approve that CRD in the catalog so the approved-resource
-  // tests can exercise a real kubectl apply with a custom apiGroup.
-  const vectorStore = createApprovedCatalog([
-    { kind: "TestResource", apiGroup: "test.cluster-whisperer.io" },
-  ]);
-
   const testResourceName = `test-res-${RUN_ID}`;
-  const unknownResourceName = `unknown-res-${RUN_ID}`;
 
   beforeAll(() => {
     // Ensure test namespace exists (setup.sh creates it, but guard against
@@ -142,7 +96,7 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
     kubectl("delete", "testresource", testResourceName, "--ignore-not-found");
   });
 
-  it("applies an approved custom resource to the cluster", async () => {
+  it("applies a custom resource to the cluster", async () => {
     const manifest = [
       "apiVersion: test.cluster-whisperer.io/v1",
       "kind: TestResource",
@@ -153,7 +107,7 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
       "  test-key: integration-test-value",
     ].join("\n");
 
-    const result = await kubectlApply(vectorStore, { manifest });
+    const result = await kubectlApply({ manifest });
 
     expect(result.isError).toBe(false);
     expect(result.output).toContain(testResourceName);
@@ -165,25 +119,6 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
       testResourceName
     );
     expect(verify.status).toBe(0);
-  }, 15000);
-
-  it("rejects a catalog-unapproved custom resource and does NOT create it", async () => {
-    // widgets.example.com is a custom apiGroup not blocked by the built-in guard
-    // and not present in the approved catalog.
-    const manifest = [
-      "apiVersion: widgets.example.com/v1beta1",
-      "kind: Widget",
-      "metadata:",
-      `  name: ${unknownResourceName}`,
-      `  namespace: ${TEST_NAMESPACE}`,
-    ].join("\n");
-
-    const result = await kubectlApply(vectorStore, { manifest });
-
-    expect(result.isError).toBe(true);
-    expect(result.output).toContain("not in the approved platform catalog");
-    expect(result.output).toContain("Widget");
-    expect(result.output).toContain("widgets.example.com");
   }, 15000);
 
   it("handles applying a resource that already exists (idempotent)", async () => {
@@ -198,7 +133,7 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
     ].join("\n");
 
     // Apply again — should succeed (kubectl apply is idempotent)
-    const result = await kubectlApply(vectorStore, { manifest });
+    const result = await kubectlApply({ manifest });
 
     expect(result.isError).toBe(false);
     expect(result.output).toContain(testResourceName);
@@ -214,7 +149,7 @@ describe.skipIf(skipReason)("kubectl-apply integration", () => {
       `  namespace: ${TEST_NAMESPACE}`,
     ].join("\n");
 
-    const result = await kubectlApply(vectorStore, { manifest });
+    const result = await kubectlApply({ manifest });
 
     // kubectl should reject empty name
     expect(result.isError).toBe(true);

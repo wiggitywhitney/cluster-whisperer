@@ -1,8 +1,7 @@
 // ABOUTME: Unit tests for kubectl-apply core tool
-// ABOUTME: Tests YAML parsing, catalog validation, and apply execution using TDD
+// ABOUTME: Tests YAML parsing, kubectl execution, and Kyverno error surfacing using TDD
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { VectorStore, SearchResult } from "../../vectorstore";
 
 // ---------------------------------------------------------------------------
 // Mock child_process — we test tool logic, not kubectl behavior
@@ -30,33 +29,6 @@ vi.mock("../../tracing", () => ({
     },
   }),
 }));
-
-// ---------------------------------------------------------------------------
-// Helper: create a mock VectorStore
-// ---------------------------------------------------------------------------
-
-function createMockVectorStore(overrides?: Partial<VectorStore>): VectorStore {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    store: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([]),
-    keywordSearch: vi.fn().mockResolvedValue([]),
-    delete: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-/**
- * Helper: create a SearchResult representing an approved resource in the catalog.
- */
-function makeCatalogEntry(kind: string, apiGroup: string): SearchResult {
-  return {
-    id: `${apiGroup}/${kind}`,
-    text: `${kind} is a Kubernetes resource in the ${apiGroup} API group.`,
-    metadata: { kind, apiGroup },
-    score: -1,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Import after mocks are set up
@@ -180,7 +152,6 @@ describe("kubectlApply", () => {
     mockSpawnSync.mockReset();
   });
 
-  // Platform CRD manifest — the only kind of resource this tool allows.
   const managedServiceManifest = [
     "apiVersion: platform.acme.io/v1alpha1",
     "kind: ManagedService",
@@ -190,33 +161,8 @@ describe("kubectlApply", () => {
     "  engine: postgresql",
   ].join("\n");
 
-  // Standard k8s manifests — kept for the built-in resource guard tests below.
-  const deploymentManifest = [
-    "apiVersion: apps/v1",
-    "kind: Deployment",
-    "metadata:",
-    "  name: nginx",
-    "spec:",
-    "  replicas: 1",
-  ].join("\n");
-
-  const configMapManifest = [
-    "apiVersion: v1",
-    "kind: ConfigMap",
-    "metadata:",
-    "  name: my-config",
-    "data:",
-    "  key: value",
-  ].join("\n");
-
-  describe("catalog validation", () => {
-    it("applies the resource when it exists in the capabilities catalog", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
+  describe("successful apply", () => {
+    it("applies the manifest and returns kubectl output", async () => {
       mockSpawnSync.mockReturnValue({
         stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
@@ -224,146 +170,76 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      const result = await kubectlApply({ manifest: managedServiceManifest });
 
       expect(result.isError).toBe(false);
       expect(result.output).toContain("youchoose-db created");
-
-      // Verify keywordSearch was called with correct filters
-      expect(vectorStore.keywordSearch).toHaveBeenCalledWith(
-        "capabilities",
-        undefined,
-        expect.objectContaining({
-          where: expect.objectContaining({ kind: "ManagedService", apiGroup: "platform.acme.io" }),
-        })
-      );
     });
 
-    it("rejects custom CRD resources not found in the capabilities catalog", async () => {
-      const unknownCrdManifest = [
-        "apiVersion: widgets.example.com/v1beta1",
-        "kind: Widget",
+    it("applies any resource type — admission enforcement is Kyverno's job", async () => {
+      const configMapManifest = [
+        "apiVersion: v1",
+        "kind: ConfigMap",
         "metadata:",
-        "  name: my-widget",
+        "  name: my-config",
+        "data:",
+        "  key: value",
       ].join("\n");
 
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([]),
+      mockSpawnSync.mockReturnValue({
+        stdout: "configmap/my-config created",
+        stderr: "",
+        status: 0,
+        error: null,
       });
 
-      const result = await kubectlApply(vectorStore, { manifest: unknownCrdManifest });
+      const result = await kubectlApply({ manifest: configMapManifest });
 
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain("not in the approved platform catalog");
-      expect(result.output).toContain("Widget");
-      expect(result.output).toContain("widgets.example.com");
-
-      // kubectl should NOT have been called
-      expect(mockSpawnSync).not.toHaveBeenCalled();
-    });
-
-    it("returns error when vectorStore query fails", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockRejectedValue(new Error("Connection refused")),
-      });
-
-      const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
-
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain("Catalog validation failed");
-      expect(result.output).toContain("Connection refused");
-      expect(mockSpawnSync).not.toHaveBeenCalled();
+      expect(result.isError).toBe(false);
+      expect(result.output).toContain("my-config created");
     });
   });
 
-  describe("built-in Kubernetes resource guard", () => {
-    it("rejects core API resources (apiGroup empty) even if somehow in catalog", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ConfigMap", ""),
-        ]),
-      });
-
-      const result = await kubectlApply(vectorStore, { manifest: configMapManifest });
-
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain("standard Kubernetes resource");
-      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
-      expect(mockSpawnSync).not.toHaveBeenCalled();
-    });
-
-    it("rejects apps/Deployment even if somehow in catalog", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Deployment", "apps"),
-        ]),
-      });
-
-      const result = await kubectlApply(vectorStore, { manifest: deploymentManifest });
-
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain("standard Kubernetes resource");
-      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
-      expect(mockSpawnSync).not.toHaveBeenCalled();
-    });
-
-    it("rejects batch/Job even if somehow in catalog", async () => {
-      const jobManifest = [
-        "apiVersion: batch/v1",
-        "kind: Job",
+  describe("Kyverno admission rejection", () => {
+    it("surfaces Kyverno rejection error from kubectl stderr", async () => {
+      // Use a manifest that Kyverno would reject (not an approved ManagedService)
+      const rejectedManifest = [
+        "apiVersion: v1",
+        "kind: ConfigMap",
         "metadata:",
-        "  name: my-job",
+        "  name: blocked-config",
       ].join("\n");
 
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("Job", "batch"),
-        ]),
-      });
-
-      const result = await kubectlApply(vectorStore, { manifest: jobManifest });
-
-      expect(result.isError).toBe(true);
-      expect(result.output).toContain("standard Kubernetes resource");
-      expect(vectorStore.keywordSearch).not.toHaveBeenCalled();
-      expect(mockSpawnSync).not.toHaveBeenCalled();
-    });
-
-    it("allows platform CRD resources (non-built-in apiGroup) when in catalog", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
+      const kyvernoError = [
+        `Error from server: admission webhook "validate.kyverno.svc" denied the request:`,
+        `[require-approved-resources] Only ManagedService resources from platform.acme.io are allowed through the cluster whisperer agent.`,
+      ].join("\n");
 
       mockSpawnSync.mockReturnValue({
-        stdout: "managedservice.platform.acme.io/youchoose-db created",
-        stderr: "",
-        status: 0,
+        stdout: "",
+        stderr: kyvernoError,
+        status: 1,
         error: null,
       });
 
-      const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      const result = await kubectlApply({ manifest: rejectedManifest });
 
-      expect(result.isError).toBe(false);
-      expect(result.output).toContain("youchoose-db created");
+      expect(result.isError).toBe(true);
+      expect(result.output).toContain("admission webhook");
+      expect(result.output).toContain("require-approved-resources");
     });
   });
 
   describe("YAML parsing errors", () => {
     it("returns error for invalid YAML", async () => {
-      const vectorStore = createMockVectorStore();
-
-      const result = await kubectlApply(vectorStore, { manifest: "not: valid: {{{" });
+      const result = await kubectlApply({ manifest: "not: valid: {{{" });
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("Failed to parse YAML manifest");
     });
 
     it("returns error when kind is missing from manifest", async () => {
-      const vectorStore = createMockVectorStore();
-
-      const result = await kubectlApply(vectorStore, {
+      const result = await kubectlApply({
         manifest: "apiVersion: v1\nmetadata:\n  name: test",
       });
 
@@ -374,12 +250,6 @@ describe("kubectlApply", () => {
 
   describe("kubectl execution", () => {
     it("pipes the manifest to kubectl apply via stdin", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
@@ -387,7 +257,7 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      await kubectlApply({ manifest: managedServiceManifest });
 
       // Verify kubectl was called with apply -f - and stdin input
       expect(mockSpawnSync).toHaveBeenCalledWith(
@@ -401,12 +271,6 @@ describe("kubectlApply", () => {
     });
 
     it("returns error when kubectl apply fails", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "",
         stderr: "error: unable to recognize STDIN",
@@ -414,19 +278,13 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      const result = await kubectlApply({ manifest: managedServiceManifest });
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("unable to recognize STDIN");
     });
 
     it("returns error when kubectl spawn fails", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "",
         stderr: "",
@@ -434,7 +292,7 @@ describe("kubectlApply", () => {
         error: new Error("ENOENT"),
       });
 
-      const result = await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      const result = await kubectlApply({ manifest: managedServiceManifest });
 
       expect(result.isError).toBe(true);
       expect(result.output).toContain("ENOENT");
@@ -442,7 +300,7 @@ describe("kubectlApply", () => {
   });
 
   describe("namespace handling", () => {
-    it("passes namespace flag when manifest specifies a namespace", async () => {
+    it("passes namespace from manifest to kubectl via stdin", async () => {
       const namespacedManifest = [
         "apiVersion: platform.acme.io/v1alpha1",
         "kind: ManagedService",
@@ -453,12 +311,6 @@ describe("kubectlApply", () => {
         "  engine: postgresql",
       ].join("\n");
 
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
@@ -466,7 +318,7 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: namespacedManifest });
+      await kubectlApply({ manifest: namespacedManifest });
 
       // kubectl apply -f - handles namespace from the manifest itself,
       // so we just pass the full manifest via stdin
@@ -480,12 +332,6 @@ describe("kubectlApply", () => {
 
   describe("kubeconfig pass-through", () => {
     it("prepends --kubeconfig to kubectl args when kubeconfig option is provided", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
@@ -493,7 +339,7 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: managedServiceManifest }, {
+      await kubectlApply({ manifest: managedServiceManifest }, {
         kubeconfig: "/home/demo/.kube/config-cluster-whisperer",
       });
 
@@ -509,12 +355,6 @@ describe("kubectlApply", () => {
     });
 
     it("does not include --kubeconfig when option is not provided", async () => {
-      const vectorStore = createMockVectorStore({
-        keywordSearch: vi.fn().mockResolvedValue([
-          makeCatalogEntry("ManagedService", "platform.acme.io"),
-        ]),
-      });
-
       mockSpawnSync.mockReturnValue({
         stdout: "managedservice.platform.acme.io/youchoose-db created",
         stderr: "",
@@ -522,7 +362,7 @@ describe("kubectlApply", () => {
         error: null,
       });
 
-      await kubectlApply(vectorStore, { manifest: managedServiceManifest });
+      await kubectlApply({ manifest: managedServiceManifest });
 
       // Verify --kubeconfig is NOT in the args
       expect(mockSpawnSync).toHaveBeenCalledWith(
