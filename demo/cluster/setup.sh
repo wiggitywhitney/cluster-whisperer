@@ -1870,6 +1870,7 @@ deploy_cluster_whisperer_serve() {
         log_success "Image loaded into Kind"
 
         kubectl apply -f "${SCRIPT_DIR}/manifests/cluster-whisperer-serve.yaml"
+        kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"
     else
         # GKE: push to Artifact Registry, patch deployment with registry image
         local tagged_image="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/cluster-whisperer:latest"
@@ -1913,6 +1914,8 @@ deploy_cluster_whisperer_serve() {
             rm -f "${kubectl_err}"
             return 1
         fi
+
+        kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"
     fi
 
     wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600

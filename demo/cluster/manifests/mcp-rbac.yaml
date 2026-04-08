@@ -1,0 +1,48 @@
+# ABOUTME: RBAC manifests for the cluster-whisperer MCP server ServiceAccount.
+# ABOUTME: Narrow-scoped permissions: read standard resources, create platform.acme.io ManagedServices only.
+
+# ServiceAccount: the MCP server runs as this identity in-cluster.
+# The MCP server pod references this SA (set in PRD #53 M4 Deployment).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-whisperer-mcp
+  namespace: cluster-whisperer
+---
+# ClusterRole: narrowly scoped read access + write only to platform.acme.io resources.
+# This is the infrastructure-layer guardrail (Layer 3) for the MCP server.
+# Even if application-layer controls fail, the cluster rejects unauthorized operations.
+# NOTE: Do NOT modify the cluster-whisperer ClusterRole in cluster-whisperer-serve.yaml —
+# that role is for the serve/CLI agent and intentionally has broad read access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-whisperer-mcp
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["platform.acme.io"]
+    resources: ["managedservices"]
+    # patch and update are required for kubectl apply on existing ManagedService resources
+    verbs: ["get", "list", "create", "patch", "update"]
+---
+# ClusterRoleBinding: bind the MCP role to the MCP ServiceAccount.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-whisperer-mcp
+subjects:
+  - kind: ServiceAccount
+    name: cluster-whisperer-mcp
+    namespace: cluster-whisperer
+roleRef:
+  kind: ClusterRole
+  name: cluster-whisperer-mcp
+  apiGroup: rbac.authorization.k8s.io

@@ -47,6 +47,14 @@ export {
   type KubectlApplyInput,
 } from "./kubectl-apply";
 
+export {
+  kubectlApplyDryrun,
+  kubectlApplyDryrunSchema,
+  kubectlApplyDryrunDescription,
+  type KubectlApplyDryrunInput,
+  type KubectlApplyDryrunResult,
+} from "./kubectl-apply-dryrun";
+
 export { formatSearchResults } from "./format-results";
 
 export { type KubectlOptions } from "../../utils/kubectl";
