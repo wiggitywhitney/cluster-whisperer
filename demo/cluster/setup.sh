@@ -22,7 +22,7 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Load .env if present (for API keys: ANTHROPIC_API_KEY, VOYAGE_API_KEY, DD_API_KEY)
