@@ -1791,14 +1791,37 @@ deploy_demo_app_gke() {
     # The base manifests use imagePullPolicy: Never (for Kind). Applying
     # unmodified on GKE creates a pod in ImagePullBackOff, then patching
     # triggers a second rollout. Piping through sed avoids this.
+    #
+    # Retry loop guards against transient TLS handshake timeouts that can occur
+    # when the API server is briefly busy right after a long cluster setup.
     log_info "Applying demo app manifests..."
-    for manifest in "${demo_app_dir}"/k8s/*.yaml; do
-        sed \
-            -e "s|image: demo-app:latest|image: ${tagged_image}|" \
-            -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
-            "${manifest}" \
-            | kubectl apply -f -
+    local max_attempts=3
+    local apply_success=false
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        local apply_failed=false
+        for manifest in "${demo_app_dir}"/k8s/*.yaml; do
+            if ! sed \
+                -e "s|image: demo-app:latest|image: ${tagged_image}|" \
+                -e "s|imagePullPolicy: Never|imagePullPolicy: IfNotPresent|" \
+                "${manifest}" \
+                | kubectl apply -f -; then
+                apply_failed=true
+                break
+            fi
+        done
+        if [[ "${apply_failed}" == "false" ]]; then
+            apply_success=true
+            break
+        fi
+        if [[ ${attempt} -lt ${max_attempts} ]]; then
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            sleep 10
+        fi
     done
+    if [[ "${apply_success}" != "true" ]]; then
+        log_error "Failed to apply demo app manifests after ${max_attempts} attempts"
+        return 1
+    fi
     log_success "Demo app deployed (GKE)"
 }
 
