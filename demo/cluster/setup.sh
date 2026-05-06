@@ -213,22 +213,45 @@ detect_gcp_zone() {
 }
 
 # Returns space-separated fallback zones for a given auto-detected primary zone.
-# Fallbacks stay within the same geographic region to preserve presenter proximity.
+# Tries same-region zones first, then cross-region fallbacks — a working cluster
+# at higher latency beats no cluster at all for a conference demo.
 # Only called when GCP_ZONE was auto-detected — user overrides bypass this entirely.
 get_gcp_zone_fallbacks() {
     local primary_zone="$1"
     case "${primary_zone}" in
-        europe-west1-b)         echo "europe-west1-c europe-west4-b europe-west2-b" ;;
-        us-central1-b)          echo "us-central1-c us-central1-f us-east1-b" ;;
-        us-east1-b)             echo "us-east1-c us-east4-b us-central1-b" ;;
-        us-west1-b)             echo "us-west1-c us-west2-b us-central1-b" ;;
-        asia-northeast1-b)      echo "asia-northeast1-c asia-northeast2-b" ;;
-        asia-east1-b)           echo "asia-east1-c asia-northeast1-b" ;;
-        asia-south1-b)          echo "asia-south1-c asia-south2-b" ;;
-        asia-southeast1-b)      echo "asia-southeast1-c asia-southeast2-b" ;;
-        australia-southeast1-b) echo "australia-southeast1-c australia-southeast2-b" ;;
-        southamerica-east1-b)   echo "southamerica-east1-c southamerica-west1-b" ;;
-        *)                      echo "" ;;
+        europe-west1-b)
+            echo "europe-west1-c europe-west4-b europe-west2-b europe-west3-b europe-west6-b europe-north1-b us-east1-b us-central1-b"
+            ;;
+        us-central1-b)
+            echo "us-central1-c us-central1-f us-east1-b us-east1-c us-east4-b us-east4-c us-east5-b us-south1-b us-west1-b us-west2-b us-west3-b us-west4-b"
+            ;;
+        us-east1-b)
+            echo "us-east1-c us-east4-b us-east4-c us-east5-b us-central1-b us-central1-c us-south1-b us-west1-b"
+            ;;
+        us-west1-b)
+            echo "us-west1-c us-west2-b us-west3-b us-west4-b us-central1-b us-central1-c us-east1-b"
+            ;;
+        asia-northeast1-b)
+            echo "asia-northeast1-c asia-northeast2-b asia-northeast3-b asia-east1-b asia-east2-b asia-southeast1-b"
+            ;;
+        asia-east1-b)
+            echo "asia-east1-c asia-east2-b asia-northeast1-b asia-northeast2-b asia-southeast1-b"
+            ;;
+        asia-south1-b)
+            echo "asia-south1-c asia-south2-b asia-southeast1-b asia-southeast2-b"
+            ;;
+        asia-southeast1-b)
+            echo "asia-southeast1-c asia-southeast2-b asia-east1-b asia-northeast1-b"
+            ;;
+        australia-southeast1-b)
+            echo "australia-southeast1-c australia-southeast2-b asia-southeast1-b asia-east1-b"
+            ;;
+        southamerica-east1-b)
+            echo "southamerica-east1-c southamerica-west1-b us-east1-b us-central1-b"
+            ;;
+        *)
+            echo "us-central1-b us-central1-c us-east1-b us-east4-b"
+            ;;
     esac
 }
 
@@ -410,12 +433,18 @@ create_gke_cluster() {
 
         local gcloud_output
         local gcloud_exit=0
-        gcloud_output=$(gcloud container clusters create "${CLUSTER_NAME}" \
+        # 12-minute timeout per zone: stockouts fail in <2 min, normal creation in 5-10 min.
+        # Zones that hang (degraded capacity, API issues) are abandoned after 12 min.
+        gcloud_output=$(timeout 720 gcloud container clusters create "${CLUSTER_NAME}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
             --machine-type "${GKE_MACHINE_TYPE}" \
             --num-nodes "${GKE_NUM_NODES}" \
             --quiet 2>&1) || gcloud_exit=$?
+        if [[ "${gcloud_exit}" -eq 124 ]]; then
+            log_warning "Zone ${zone}: timed out after 12 minutes — trying next zone"
+            continue
+        fi
 
         if [[ "${gcloud_exit}" -eq 0 ]]; then
             if [[ "${zone}" != "${primary_zone}" ]]; then
