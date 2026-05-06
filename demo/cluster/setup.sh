@@ -1087,12 +1087,13 @@ configure_provider_kubernetes() {
             local inactive_count
             inactive_count=$(kubectl get mrds 2>/dev/null | grep "kubernetes.*Inactive" | wc -l | tr -d ' ') || inactive_count=0
             if [[ $inactive_count -gt 0 ]]; then
-                log_info "  Found ${inactive_count} Inactive kubernetes MRDs — refreshing default MRAP..."
-                # Patch the default MRAP to trigger re-evaluation of all MRDs
-                kubectl patch mrap default --type=merge \
-                    -p '{"spec":{"activate":["*"]}}' 2>/dev/null || \
-                # If no default MRAP exists, create one
-                kubectl apply -f - <<'MRAP_EOF' 2>/dev/null || true
+                log_info "  Found ${inactive_count} Inactive kubernetes MRDs — applying dedicated MRAP..."
+                # Apply a named MRAP for provider-kubernetes resources. The default
+                # MRAP (activate: ["*"]) may already exist with identical spec, in
+                # which case kubectl patch returns exit 0 with "no change" — the
+                # controller sees no diff and never re-evaluates. A separately named
+                # MRAP is a genuinely new resource that forces controller processing.
+                if kubectl apply -f - <<'MRAP_EOF' 2>/dev/null; then
 apiVersion: apiextensions.crossplane.io/v1alpha1
 kind: ManagedResourceActivationPolicy
 metadata:
@@ -1102,8 +1103,11 @@ spec:
   - "*.kubernetes.crossplane.io"
   - "*.kubernetes.m.crossplane.io"
 MRAP_EOF
-                mrap_refreshed=true
-                log_info "  MRAP refreshed — waiting for activation..."
+                    mrap_refreshed=true
+                    log_info "  MRAP applied — waiting for activation..."
+                else
+                    log_warning "  Failed to apply dedicated MRAP; will retry while waiting for CRD activation..."
+                fi
             fi
         fi
 
