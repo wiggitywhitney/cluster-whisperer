@@ -350,6 +350,18 @@ create_gke_cluster() {
         --filter="name~^${CLUSTER_NAME_PREFIX}" \
         --format="value(name)" 2>/dev/null || true)
     if [[ -n "${existing}" ]]; then
+        # If the kubeconfig is already accessible, skip creation and resume setup
+        # from this point — all subsequent functions are idempotent.
+        export KUBECONFIG="${KUBECONFIG_PATH}"
+        if kubectl cluster-info &>/dev/null; then
+            log_warning "Existing cluster found: ${existing} — skipping creation, resuming setup"
+            GCP_ZONE=$(gcloud container clusters list \
+                --project "${GCP_PROJECT}" \
+                --filter="name~^${CLUSTER_NAME_PREFIX}" \
+                --format="value(location)" 2>/dev/null | head -1 || true)
+            log_info "Resuming in zone: ${GCP_ZONE}"
+            return
+        fi
         log_warning "Existing cluster-whisperer GKE cluster(s) found: ${existing}"
         log_info "Run ./demo/cluster/teardown.sh first, or use a different name"
         exit 1
@@ -1922,12 +1934,21 @@ install_kyverno() {
 
     log_success "Kyverno ${KYVERNO_VERSION} installed"
 
-    # Verify the admission webhook is registered — this confirms the API server
-    # is wired to Kyverno and policies will be enforced.
-    if kubectl get validatingwebhookconfigurations 2>/dev/null | grep -q kyverno; then
-        log_success "Kyverno admission webhook registered"
-    else
-        log_error "Kyverno admission webhook not found — policies will not be enforced"
+    # Kyverno registers its admission webhooks after the admission controller pod
+    # starts — there is a brief window after helm --wait returns where the webhook
+    # is not yet visible. Retry for up to 60s before treating it as a failure.
+    local webhook_ready=false
+    for ((attempt=1; attempt<=12; attempt++)); do
+        if kubectl get validatingwebhookconfigurations 2>/dev/null | grep -q kyverno; then
+            log_success "Kyverno admission webhook registered"
+            webhook_ready=true
+            break
+        fi
+        log_info "  [${attempt}/12] Waiting for Kyverno webhook registration (5s)..."
+        sleep 5
+    done
+    if [[ "${webhook_ready}" != "true" ]]; then
+        log_error "Kyverno admission webhook not found after 60s — policies will not be enforced"
         return 1
     fi
 }
