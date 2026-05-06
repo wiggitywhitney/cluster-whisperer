@@ -578,7 +578,7 @@ create_ingress_resources() {
     log_info "Creating Ingress resources (base domain: ${BASE_DOMAIN})..."
 
     # cluster-whisperer Ingress
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -601,11 +601,13 @@ spec:
             port:
               number: 3000
 EOF
-
+        log_error "Failed to create cluster-whisperer ingress"
+        return 1
+    fi
     log_success "Ingress created: http://cluster-whisperer.${BASE_DOMAIN}"
 
     # Jaeger UI Ingress
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -625,12 +627,14 @@ spec:
             port:
               number: 16686
 EOF
-
+        log_error "Failed to create jaeger ingress"
+        return 1
+    fi
     log_success "Ingress created: http://jaeger.${BASE_DOMAIN}"
 
     # Chroma Ingress — external access to the in-cluster Chroma instance.
     # Needed for locally-run agent to reach vector DB via ingress URL.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -654,12 +658,14 @@ spec:
             port:
               number: 8000
 EOF
-
+        log_error "Failed to create chroma ingress"
+        return 1
+    fi
     log_success "Ingress created: http://chroma.${BASE_DOMAIN}"
 
     # Qdrant Ingress — external access to the in-cluster Qdrant instance.
     # Needed for locally-run agent to reach vector DB via ingress URL.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -683,12 +689,14 @@ spec:
             port:
               number: 6333
 EOF
-
+        log_error "Failed to create qdrant ingress"
+        return 1
+    fi
     log_success "Ingress created: http://qdrant.${BASE_DOMAIN}"
 
     # OTel Collector Ingress — external access to the OTLP HTTP receiver.
     # Needed for locally-run agent to export traces into the cluster.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -708,13 +716,15 @@ spec:
             port:
               number: 4318
 EOF
-
+        log_error "Failed to create otel-collector ingress"
+        return 1
+    fi
     log_success "Ingress created: http://otel.${BASE_DOMAIN}"
 
     # Demo app Ingress — accessible to the audience once the app is running.
     # While the app is in CrashLoopBackOff, nginx returns 502 (no healthy backend).
     # The readiness probe ensures traffic only routes when the app is actually serving.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -734,7 +744,9 @@ spec:
             port:
               number: 80
 EOF
-
+        log_error "Failed to create demo-app ingress"
+        return 1
+    fi
     log_success "Ingress created: http://demo-app.${BASE_DOMAIN}"
 }
 
@@ -1040,26 +1052,41 @@ wait_for_gke_operations() {
 # Wait until the Kubernetes API server is actually responding to requests.
 # gcloud may report a resize operation as complete slightly before the API
 # server is fully back. This catches that gap.
-wait_for_api_server() {
-    log_info "Verifying API server connectivity..."
-
-    local timeout=300
+wait_for_cluster_running() {
+    # Polls gcloud cluster status until RUNNING. More reliable than kubectl-based
+    # checks because GKE exposes the control plane state directly (RUNNING,
+    # RECONCILING, PROVISIONING). RECONCILING means the control plane is mid-resize
+    # and the API server may be temporarily unreachable.
+    local name="${1:-${CLUSTER_NAME}}"
+    local zone="${2:-${GCP_ZONE}}"
+    local max_wait=600
     local elapsed=0
-    local interval=10
+    local interval=15
+    local status
 
-    while [[ $elapsed -lt $timeout ]]; do
-        if kubectl get nodes --request-timeout=5s &>/dev/null; then
-            log_success "API server is responding"
+    log_info "Waiting for cluster '${name}' to reach RUNNING state..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        status=$(gcloud container clusters describe "${name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+
+        if [[ "${status}" == "RUNNING" ]]; then
+            log_success "Cluster is RUNNING"
             return 0
         fi
-        if (( elapsed % 30 == 0 && elapsed > 0 )); then
-            log_info "  [${elapsed}s] API server not responding yet, waiting..."
+
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] Cluster status: ${status} — waiting..."
+        else
+            log_info "  Cluster status: ${status} — waiting..."
         fi
+
         sleep $interval
         elapsed=$((elapsed + interval))
     done
 
-    log_error "API server did not respond within ${timeout}s"
+    log_error "Cluster did not reach RUNNING state after ${max_wait}s (last status: ${status})"
     return 1
 }
 
@@ -1881,7 +1908,7 @@ deploy_demo_app_gke() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -1974,7 +2001,7 @@ install_kyverno() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] helm install kyverno failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] helm install kyverno failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -2017,7 +2044,7 @@ apply_kyverno_policies() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -2039,15 +2066,24 @@ setup_cli_identity() {
     log_info "Setting up cluster-whisperer-cli ServiceAccount identity..."
     local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
 
-    # Create namespace (idempotent) and apply SA + RBAC
-    kubectl create namespace cluster-whisperer --dry-run=client -o yaml | kubectl apply -f -
-    kubectl apply -f "${REPO_ROOT}/k8s/rbac-cli.yaml"
+    # Create namespace (idempotent) and apply SA + RBAC — fail explicitly on error.
+    if ! kubectl create namespace cluster-whisperer --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create cluster-whisperer namespace"
+        return 1
+    fi
+    if ! kubectl apply -f "${REPO_ROOT}/k8s/rbac-cli.yaml"; then
+        log_error "Failed to apply CLI SA RBAC (k8s/rbac-cli.yaml)"
+        return 1
+    fi
     log_success "CLI SA and RBAC applied"
 
-    # Generate SA token and write kubeconfig.
+    # Generate SA token — fail explicitly if the API cannot issue the token.
     # GKE caps token duration at 48h regardless of --duration; regenerate before each demo.
     local token cluster_server cluster_ca
-    token=$(kubectl create token cluster-whisperer-cli -n cluster-whisperer --duration=8760h)
+    if ! token=$(kubectl create token cluster-whisperer-cli -n cluster-whisperer --duration=8760h); then
+        log_error "Failed to create token for cluster-whisperer-cli SA"
+        return 1
+    fi
     cluster_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
     cluster_ca=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 
@@ -2085,7 +2121,7 @@ apply_kyverno_cli_policy() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -2505,17 +2541,30 @@ main() {
 
     run_step "install_ingress_controller" install_ingress_controller
     run_step "install_crossplane" install_crossplane
+
+    # Install Kyverno and apply all policies BEFORE Crossplane providers register
+    # 300+ CRDs. The CRD registration triggers a GKE control plane resize
+    # (RECONCILING state) that makes the API server temporarily unreachable.
+    # Kyverno must be installed while the control plane is stable.
+    # Policies reference SAs that don't exist yet — safe: Kyverno never matches
+    # until the SAs are created. Hard failures: the demo cannot run without these.
+    install_kyverno
+    apply_kyverno_policies
+    setup_cli_identity
+    apply_kyverno_cli_policy
+
     run_step "install_crossplane_providers" install_crossplane_providers
     run_step "install_platform_compositions" install_platform_compositions
     run_step "install_chroma" install_chroma
     run_step "install_qdrant" install_qdrant
 
-    # The Chroma/Qdrant installs push the cumulative object count past GKE's
-    # control plane resize threshold. The resize starts asynchronously — wait
-    # for it and verify API server connectivity before proceeding.
+    # Crossplane providers register 300+ CRDs, pushing the cumulative object count
+    # past GKE's control plane resize threshold. Wait for the cluster to return to
+    # RUNNING before proceeding — if RECONCILING, kubectl/helm calls fail with TLS
+    # handshake timeout.
     if [[ "${MODE}" == "gcp" ]]; then
         run_step "wait_for_gke_operations" wait_for_gke_operations
-        run_step "wait_for_api_server" wait_for_api_server
+        wait_for_cluster_running
     fi
 
     run_step "verify_vector_dbs" verify_vector_dbs
@@ -2524,11 +2573,11 @@ main() {
     run_step "verify_observability" verify_observability
     run_step "verify_trace_pipeline" verify_trace_pipeline
     run_step "deploy_demo_app" deploy_demo_app
-    run_step "install_kyverno" install_kyverno
-    run_step "apply_kyverno_policies" apply_kyverno_policies
-    run_step "setup_cli_identity" setup_cli_identity
-    run_step "apply_kyverno_cli_policy" apply_kyverno_cli_policy
-    run_step "deploy_cluster_whisperer_serve" deploy_cluster_whisperer_serve
+
+    # deploy_cluster_whisperer_serve is a hard failure — the agent server must
+    # exist for the demo. verify-kyverno-policy.sh runs after it because it
+    # impersonates the cluster-whisperer-mcp SA which is created by this step.
+    deploy_cluster_whisperer_serve
     # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
     run_step "verify-kyverno-policy" "${SCRIPT_DIR}/verify-kyverno-policy.sh"
     run_step "create_ingress_resources" create_ingress_resources

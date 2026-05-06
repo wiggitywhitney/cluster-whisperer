@@ -47,6 +47,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M1: Branding update — "You Choose" → "Spiders and Rainbows"
 - [x] M2: Demo app update — remove Viktor's YouTube link
 - [x] M3: Kyverno policy covering CLI agent identity
+- [ ] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
@@ -165,6 +166,71 @@ kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info
 If that fails, the cluster is still provisioning. Cluster provisioning takes 35–60 minutes and can fail on zone stockout — if it fails, prompt Whitney to retry with a different zone before continuing.
 
 **Success criteria:** Asking the CLI agent to deploy Tron (or any arbitrary resource) produces a Kyverno denial message. Asking it to deploy the platform.acme.io ManagedService succeeds. Both behaviors reproducible on a freshly provisioned cluster.
+
+---
+
+### M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
+
+Live cluster testing during M3 verification revealed that the GKE control plane enters `RECONCILING` state (API server temporarily unreachable) after Crossplane registers 300+ CRDs. Kyverno installation was consistently hitting this window. This milestone hardens setup.sh against that failure mode and fixes two silent-failure bugs discovered in the same run.
+
+**Five changes, all in `demo/cluster/setup.sh`:**
+
+**Pre-existing changes (NOT part of M3.5 — already committed to this branch):**
+- Zone CLI argument: `./demo/cluster/setup.sh gcp us-east1-b` — already works
+- Cross-region zone fallbacks (us-central1 → us-east1, us-east4, us-east5, etc.) — already committed
+- Partial cluster async-delete after zone failure — already committed
+
+**Change 1 — Reorder: install Kyverno before Crossplane providers (Decision 15)**
+
+Move `install_kyverno`, `apply_kyverno_policies`, `setup_cli_identity`, and `apply_kyverno_cli_policy` to run immediately after `install_crossplane` (controller only) and before `install_crossplane_providers`. The control plane is stable at this point. Kyverno policies reference SAs that don't exist yet — this is safe; Kyverno simply never matches until the SAs are created.
+
+`setup_cli_identity` creates the `cluster-whisperer` namespace idempotently (`kubectl create namespace ... --dry-run=client | kubectl apply -f -`), so it does not depend on `deploy_cluster_whisperer_serve`. It must come after `install_kyverno` so the Kyverno CLI policy (applied by `apply_kyverno_cli_policy` immediately after) can be validated by Kyverno's webhook.
+
+**Change 2 — Cluster status wait (Decision 16)**
+
+Replace `wait_for_api_server` (which blindly retries kubectl until it works) with a new `wait_for_cluster_running` function that polls `gcloud container clusters describe --format="value(status)"` and waits until the cluster returns `RUNNING`. The GKE `status` field (`RUNNING`, `RECONCILING`, `PROVISIONING`) directly indicates whether the control plane is mid-resize.
+
+The function skeleton:
+```bash
+wait_for_cluster_running() {
+    local name="$1" zone="$2"
+    local max_wait=600 elapsed=0 interval=15 status
+    log_info "Waiting for cluster '${name}' to reach RUNNING state..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        status=$(gcloud container clusters describe "${name}" \
+            --project "${GCP_PROJECT}" --zone "${zone}" \
+            --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+        [[ "${status}" == "RUNNING" ]] && { log_success "Cluster is RUNNING"; return 0; }
+        log_info "  [${elapsed}s] Cluster status: ${status} — waiting..."
+        sleep $interval; elapsed=$((elapsed + interval))
+    done
+    log_error "Cluster did not reach RUNNING state after ${max_wait}s"
+    return 1
+}
+```
+
+Call it in GCP mode after `install_crossplane_providers`: `wait_for_cluster_running "${CLUSTER_NAME}" "${GCP_ZONE}"`.
+
+Keep `wait_for_gke_operations` — it serves a different purpose (waits for explicit GKE operations like node upgrades). Remove `wait_for_api_server` and all its call sites. The existing call after Chroma/Qdrant should become `wait_for_cluster_running`.
+
+**Change 3 — Hard failures for critical steps (Decision 17)**
+
+Remove `install_kyverno`, `apply_kyverno_policies`, `setup_cli_identity`, `apply_kyverno_cli_policy`, and `deploy_cluster_whisperer_serve` from `run_step`. Call them directly in `main()` so any failure aborts setup immediately with a clear error. The skip-on-failure pattern (Decision 12) remains correct for verification steps and optional infrastructure.
+
+**Change 4 — Fix `setup_cli_identity` silent failures (Decision 18)**
+
+The function currently logs `[ok] CLI SA and RBAC applied` and `[ok] CLI SA kubeconfig written` even when kubectl commands fail. Fix by checking exit codes explicitly:
+- Namespace creation: `kubectl create namespace ... | kubectl apply -f -` must succeed or the function returns non-zero
+- RBAC apply: `kubectl apply -f k8s/rbac-cli.yaml` must succeed or the function returns non-zero
+- Token creation: `kubectl create token ...` must succeed; if it fails, do not write the kubeconfig and return non-zero
+
+**Change 5 — Fix `create_ingress_resources` false success (Decision 19)**
+
+The function logs `[ok] Ingress created` unconditionally. Each kubectl apply must be checked; log success only if the ingress was actually created.
+
+**Ordering constraint:** `verify-kyverno-policy.sh` must still run AFTER `deploy_cluster_whisperer_serve` because it impersonates the `cluster-whisperer-mcp` ServiceAccount, which is created by that step. Everything else in the new Kyverno block can move early.
+
+**Success criteria:** `./demo/cluster/setup.sh gcp <zone>` on a fresh cluster completes with Kyverno installed and both policies applied, cluster-whisperer serve running, and the CLI SA kubeconfig containing a valid token. The Kyverno installation step never hits a TLS handshake timeout.
 
 ---
 
@@ -299,6 +365,11 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 12 | `setup.sh` adopts skip-on-failure with end-of-run error summary | Individual step failures no longer abort the entire setup. A `run_step` helper wraps each `main()` call; failures are collected in `SETUP_ERRORS` and printed again at the end. Dependent steps cascade-fail informationally rather than silently. Rationale: a partially-set-up cluster is more useful than a half-setup one that blocks M3 progress and requires full teardown + hour-long rebuild. |
 | 13 | `create_gke_cluster` resume path implemented (status: committed, **review pending**) | If a cluster-whisperer cluster exists and its kubeconfig is accessible, setup.sh skips creation and continues. Whitney expressed skepticism — keep as complement to skip-on-failure (Decision 12) or revert if the behavior proves confusing. |
 | 14 | `cluster-whisperer-cli` SA uses **broad RBAC** (read everything + create/update/patch/delete on all resources); Kyverno is the effective guardrail | Narrow RBAC (only create for platform.acme.io) would cause RBAC to fire before Kyverno for any non-ManagedService create attempt — the Kyverno denial message would never appear, breaking the demo's guardrails moment. Broad RBAC ensures the Tron deploy attempt reaches Kyverno and produces the denial. This directly resolves Decision 11. |
+| 15 | Install Kyverno (and apply all Kyverno policies + CLI identity) **before** Crossplane provider installation | Live cluster testing showed the GKE control plane auto-scales (enters RECONCILING state) after Crossplane registers 300+ CRDs, making the API server temporarily unreachable. Kyverno installation requires a stable API server. Installing Kyverno first — while the control plane is still stable — eliminates the timing dependency entirely. The policies are scoped to specific SAs that don't exist yet; this is safe — Kyverno simply never matches until the SAs are created. |
+| 16 | Replace `wait_for_api_server` (blind kubectl check) with `gcloud container clusters describe --format="value(status)"` polling for `RUNNING` state | The existing `wait_for_api_server` re-tries kubectl until it succeeds, but gives no visibility into WHY the API is down. GKE exposes a `status` field (`RUNNING`, `RECONCILING`, `PROVISIONING`, etc.) that directly indicates whether the control plane is mid-resize. Waiting for `RUNNING` is deterministic and produces a meaningful log message. Place the wait after Crossplane CRD registration (the primary surge). |
+| 17 | Kyverno installation and all dependent steps are **hard failures** — removed from `run_step` | Decision 12 (skip-on-failure) was correct for optional/verification steps, but Kyverno, `apply_kyverno_policies`, `setup_cli_identity`, `apply_kyverno_cli_policy`, and `deploy_cluster_whisperer_serve` are load-bearing for the demo. Silently skipping them (as happened in the failed cluster run) leaves the cluster in an unusable state with no clear indication. These must be hard failures. |
+| 18 | Fix `setup_cli_identity` silent failures — add exit code checking for namespace creation, RBAC apply, and token creation | Live cluster run showed `setup_cli_identity` logs `[ok] CLI SA and RBAC applied` and `[ok] CLI SA kubeconfig written` even when all three kubectl commands failed (API down). The kubeconfig was written with an empty token. Functions must check exit codes and fail explicitly rather than logging success unconditionally. |
+| 19 | Fix `create_ingress_resources` false success logging — the cluster-whisperer ingress failed with `NotFound` but the function logged `[ok] Ingress created` | Same root issue as Decision 18: the function logs success without verifying the kubectl result. Each ingress creation should check the exit code and only log success if the resource was actually created. |
 
 ---
 
@@ -313,3 +384,5 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 - SRE Day Austin abstract: "Your Internal Developer Platform's Next Interface Is an AI Agent" / "Livin' In the Future: Your Platform's Next Interface Is an AI Agent"
 - **Branch**: `feature/prd-130-solo-talk-demo-prep` — M1 and M2 are complete on this branch.
 - `teardown.sh` already has `wait_for_cluster_operations()` (commit `9ff4337`) — handles clusters left locked by Ctrl+C during setup. No changes needed to teardown for M3.
+- **Cluster creation must be synchronous** — `--async` was tried and rejected: it fires zone creation requests in parallel, leaving dangling partial clusters in every zone attempted before Ctrl+C or failure. GKE creates a cluster object even on stockout, so after any zone failure setup.sh fires an async delete of the partial cluster before moving to the next zone.
+- **Cross-region zone fallbacks are already expanded** — `get_gcp_zone_fallbacks()` now includes inter-regional fallbacks (e.g. us-central1 → us-east1, us-east4, us-east5, us-south1, us-west1, us-west2). A zone argument can also be passed directly: `./demo/cluster/setup.sh gcp us-east1-b`.

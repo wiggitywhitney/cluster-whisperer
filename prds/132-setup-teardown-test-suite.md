@@ -60,6 +60,10 @@ Write a bats-core test suite for all deterministic, testable functions in both s
   - `wait_for_api_server`: kubectl succeeds on first call → success; kubectl always fails → failure after timeout
   - `run_step` (Decision 12 — skip-on-failure pattern): step function succeeds → SETUP_ERRORS remains empty, setup continues; step function fails → error added to SETUP_ERRORS, setup continues (does not abort)
   - `create_gke_cluster` resume path (Decision 13): cluster exists + kubeconfig accessible → skip creation, set GCP_ZONE from existing cluster, return; cluster exists + kubeconfig inaccessible → exit 1
+  - `wait_for_cluster_running` (Decision 16 — replaces `wait_for_api_server`): mock `gcloud container clusters describe` to return RECONCILING then RUNNING; verify function waits until RUNNING; mock always-RECONCILING → timeout behavior
+  - `setup_cli_identity` exit code checking (Decision 18): namespace creation failure → function exits non-zero (not silent success); token creation failure → function exits non-zero; success path → kubeconfig written and function exits 0
+  - `create_ingress_resources` per-ingress exit check (Decision 19): ingress creation failure → logged as error, function exits non-zero; success → logs `[ok] Ingress created`
+  - Step ordering: verify `install_kyverno` is invoked before `install_crossplane_providers` in main() (Decision 15) — parse main() body and assert ordering
 
   Do NOT modify `tests/setup-gcp-zone-fallback.bats`. Run the full suite after M2 to confirm no regressions.
 
