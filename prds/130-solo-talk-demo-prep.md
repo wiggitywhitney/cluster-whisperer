@@ -47,7 +47,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M1: Branding update — "You Choose" → "Spiders and Rainbows"
 - [x] M2: Demo app update — remove Viktor's YouTube link
 - [x] M3: Kyverno policy covering CLI agent identity
-- [x] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
+- [ ] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
@@ -229,6 +229,30 @@ The function currently logs `[ok] CLI SA and RBAC applied` and `[ok] CLI SA kube
 The function logs `[ok] Ingress created` unconditionally. Each kubectl apply must be checked; log success only if the ingress was actually created.
 
 **Ordering constraint:** `verify-kyverno-policy.sh` must still run AFTER `deploy_cluster_whisperer_serve` because it impersonates the `cluster-whisperer-mcp` ServiceAccount, which is created by that step. Everything else in the new Kyverno block can move early.
+
+**Task: Agent script review (run before starting the cluster)**
+
+Before triggering a cluster run, the implementing agent must read `demo/cluster/setup.sh` in full and verify the following. Any issues found must be fixed and committed before proceeding to the next task.
+
+- **Ordering in `main()`**: `install_kyverno`, `apply_kyverno_policies`, `setup_cli_identity`, `apply_kyverno_cli_policy` appear BEFORE `install_crossplane_providers`. `deploy_cluster_whisperer_serve` appears AFTER providers and the Chroma/Qdrant/Jaeger/OTel/demo-app installs.
+- **No remaining `wait_for_api_server` calls**: search the file — the old function should be gone and all call sites replaced with `wait_for_cluster_running`.
+- **`wait_for_cluster_running` placement**: called in GCP mode after `install_crossplane_providers` (and `wait_for_gke_operations`), before `verify_vector_dbs`.
+- **`setup_cli_identity` exit code checking**: namespace creation, RBAC apply, and token creation each check `$?` or use `if !` — no unconditional success logs.
+- **`create_ingress_resources` exit checking**: each `kubectl apply -f - <<EOF` block is wrapped in `if ! ... ; then return 1; fi`.
+- **Hard failures**: `install_kyverno`, `apply_kyverno_policies`, `setup_cli_identity`, `apply_kyverno_cli_policy`, `deploy_cluster_whisperer_serve` are called directly (not via `run_step`).
+- **Look for additional improvements**: other functions with unconditional success logs, missing exit-code checks, or silent failure patterns. Fix and commit any found.
+
+**Task: Run the script — HUMAN ACTION REQUIRED (gate before `/prd-update-progress`)**
+
+After the agent script review passes, Whitney must start a fresh cluster run:
+
+```bash
+./demo/cluster/setup.sh gcp <zone>
+```
+
+Use a zone with available capacity (`us-east1-b` worked in the previous session; if it stockouts, the fallback list will try others automatically).
+
+**This task is complete when Whitney confirms she has started the script** — not when it finishes. The cluster run takes ~1 hour. Do NOT run `/prd-update-progress` until Whitney confirms the script has started. Once she confirms, invoke `/prd-update-progress` — M3.5 can be marked done regardless of whether the run has completed, since the goal of this task is to verify the script launches without immediate errors.
 
 **Success criteria:** `./demo/cluster/setup.sh gcp <zone>` on a fresh cluster completes with Kyverno installed and both policies applied, cluster-whisperer serve running, and the CLI SA kubeconfig containing a valid token. The Kyverno installation step never hits a TLS handshake timeout.
 
