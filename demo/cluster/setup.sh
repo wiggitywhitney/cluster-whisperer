@@ -431,22 +431,40 @@ create_gke_cluster() {
             log_info "Retrying cluster creation in fallback zone: ${zone}"
         fi
 
-        local gcloud_output
-        local gcloud_exit=0
-        # 12-minute timeout per zone: stockouts fail in <2 min, normal creation in 5-10 min.
-        # Zones that hang (degraded capacity, API issues) are abandoned after 12 min.
-        gcloud_output=$(timeout 720 gcloud container clusters create "${CLUSTER_NAME}" \
+        # Start creation asynchronously — returns immediately with operation name.
+        # Failures (stockout, quota, etc.) surface via operations wait in seconds,
+        # not after a full synchronous timeout.
+        local op_name op_exit=0
+        op_name=$(gcloud container clusters create "${CLUSTER_NAME}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
             --machine-type "${GKE_MACHINE_TYPE}" \
             --num-nodes "${GKE_NUM_NODES}" \
-            --quiet 2>&1) || gcloud_exit=$?
-        if [[ "${gcloud_exit}" -eq 124 ]]; then
-            log_warning "Zone ${zone}: timed out after 12 minutes — trying next zone"
+            --quiet --async \
+            --format="value(name)" 2>&1) || op_exit=$?
+
+        if [[ "${op_exit}" -ne 0 ]]; then
+            log_warning "Zone ${zone}: failed to submit creation request — trying next zone"
+            [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]] && exit 1
             continue
         fi
 
-        if [[ "${gcloud_exit}" -eq 0 ]]; then
+        op_name=$(echo "${op_name}" | tail -1 | tr -d '[:space:]')
+        log_info "  Waiting for result (operation: ${op_name})..."
+
+        # Wait for the operation — returns fast on failure, 5-10 min on success.
+        # 12-min timeout catches zones that accept the request but never provision.
+        local wait_output wait_exit=0
+        wait_output=$(timeout 720 gcloud container operations wait "${op_name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" 2>&1) || wait_exit=$?
+
+        if [[ "${wait_exit}" -eq 0 ]]; then
+            # Cluster created — fetch credentials explicitly (async skips auto-merge)
+            gcloud container clusters get-credentials "${CLUSTER_NAME}" \
+                --project "${GCP_PROJECT}" \
+                --zone "${zone}" \
+                --quiet 2>/dev/null
             if [[ "${zone}" != "${primary_zone}" ]]; then
                 log_success "GKE cluster '${CLUSTER_NAME}' created in fallback zone ${zone} (primary zone ${primary_zone} had no capacity)"
             else
@@ -457,20 +475,19 @@ create_gke_cluster() {
             break
         fi
 
-        if echo "${gcloud_output}" | grep -q "GCE_STOCKOUT"; then
+        if [[ "${wait_exit}" -eq 124 ]]; then
+            log_warning "Zone ${zone}: timed out after 12 minutes — trying next zone"
+        elif echo "${wait_output}" | grep -q "GCE_STOCKOUT"; then
             log_warning "Zone ${zone}: no VM capacity available (GCE_STOCKOUT)"
-            if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
-                log_error "GCP_ZONE=${zone} was explicitly set — not retrying other zones"
-                log_info "Tip: unset GCP_ZONE to allow automatic zone fallback on stockout"
-                exit 1
-            fi
-            continue
+        else
+            log_warning "Zone ${zone}: cluster creation failed — trying next zone"
         fi
 
-        # Non-stockout failure — log and abort without retrying
-        log_error "Failed to create GKE cluster in zone ${zone}:"
-        echo "${gcloud_output}" >&2
-        exit 1
+        if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
+            log_error "GCP_ZONE=${zone} was explicitly set — not retrying other zones"
+            log_info "Tip: remove the zone argument to allow automatic fallback on failure"
+            exit 1
+        fi
     done
 
     if [[ "${created}" != "true" ]]; then
@@ -478,12 +495,11 @@ create_gke_cluster() {
         for z in "${zones_attempted[@]}"; do
             zones_list="${zones_list:+${zones_list}, }${z}"
         done
-        log_error "GCE stockout in all attempted zones: ${zones_list}"
-        log_error "All zones in this region are capacity-constrained. Try again later or set GCP_ZONE to specify a zone in a different region."
+        log_error "Cluster creation failed in all attempted zones: ${zones_list}"
+        log_error "Try a specific zone: ./demo/cluster/setup.sh gcp us-east1-b"
         exit 1
     fi
 
-    # gcloud create already fetches credentials when KUBECONFIG is set
     log_success "Credentials merged into ${KUBECONFIG_PATH}"
 
     # Verify cluster is accessible
@@ -2390,18 +2406,24 @@ print_summary() {
 # =============================================================================
 
 usage() {
-    echo "Usage: $0 <kind|gcp> [--verify-only]"
+    echo "Usage: $0 <kind|gcp> [zone] [--verify-only]"
     echo ""
     echo "Modes:"
     echo "  kind   Create a local Kind cluster (~360 CRDs)"
     echo "  gcp    Create a GKE cluster (~360 CRDs)"
     echo ""
+    echo "Arguments (gcp mode):"
+    echo "  zone   Optional GCP zone to use (e.g., us-east1-b). Skips auto-detection"
+    echo "         and zone fallback. Same as setting GCP_ZONE=<zone> in the environment."
+    echo ""
     echo "Options:"
     echo "  --verify-only   Skip cluster creation, only run verification steps"
     echo "                  against an existing cluster. Completes in ~2 minutes."
     echo ""
-    echo "Environment variables (gcp mode):"
-    echo "  GCP_ZONE    Override auto-detected zone (e.g., GCP_ZONE=europe-west1-b $0 gcp)"
+    echo "Examples:"
+    echo "  $0 gcp                   # auto-detect nearest zone, fall back on stockout"
+    echo "  $0 gcp us-east1-b        # use us-east1-b specifically"
+    echo "  $0 gcp --verify-only     # verify existing cluster only"
     exit 1
 }
 
@@ -2435,13 +2457,25 @@ main() {
         usage
     fi
 
-    # Parse optional flags
+    # Parse optional zone argument and flags
     local verify_only=false
     shift
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --verify-only)
                 verify_only=true
+                shift
+                ;;
+            *-*-*)
+                # Looks like a GCP zone (e.g. us-east1-b, europe-west1-c)
+                if [[ "${MODE}" == "gcp" ]]; then
+                    export GCP_ZONE="$1"
+                    export GCP_ZONE_IS_OVERRIDE=true
+                    log_info "Using zone from argument: ${GCP_ZONE}"
+                else
+                    log_error "Zone argument only valid in gcp mode: '$1'"
+                    usage
+                fi
                 shift
                 ;;
             *)
