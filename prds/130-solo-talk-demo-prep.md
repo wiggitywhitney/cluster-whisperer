@@ -101,49 +101,68 @@ The demo app's spider page has two clickable zones: top links to Whitney's YouTu
 
 ### M3: Kyverno policy covering CLI agent identity
 
-This is the most technically complex milestone. The guardrails demo moment — where the agent tries to deploy Tron and gets blocked — currently cannot fire because:
+This is the most technically complex milestone. The guardrails demo moment — where the agent tries to deploy Tron and gets blocked — currently cannot fire because the CLI agent has no dedicated Kubernetes identity and no Kyverno policy scoped to it.
 
-- The existing `cluster-whisperer-resource-allowlist` ClusterPolicy is scoped to the `cluster-whisperer-mcp` ServiceAccount via `subjects`.
-- The CLI agent runs kubectl using the kubeconfig file, which authenticates as a GKE user identity (not the MCP ServiceAccount).
-- Kyverno's `subjects` matching only works on live admission requests where a ServiceAccount identity is present. A kubeconfig user is a different identity entirely.
+The solution is to give the CLI agent its own ServiceAccount (`cluster-whisperer-cli`), generate a kubeconfig from its token, and scope a Kyverno policy to that SA — mirroring the existing pattern for the MCP server (`cluster-whisperer-mcp` SA + `cluster-whisperer-resource-allowlist` policy). The demo then uses the SA kubeconfig instead of the gcloud kubeconfig, so every `kubectl apply` the agent issues is subject to the allowlist.
+
+**Existing files that must be rewritten (do not use as-is):**
+
+`k8s/kyverno-cli-allowlist.yaml` and `k8s/kyverno-cli-allowlist.test.ts` already exist in the repo but are scoped to the gcloud User identity (`wiggitywhitney@gmail.com`) — an approach that was designed and then rejected. Both must be rewritten as part of this milestone before any testing occurs.
+
+**Open question to resolve before writing code:**
+
+Should the `cluster-whisperer-cli` SA have broad permissions (read everything + create any resource, with Kyverno as the effective guardrail) or narrow permissions (exactly what the agent uses: read for cluster resources, create for ManagedService only)? Decide and record as a new decision before proceeding with step 2.
 
 **What to do:**
 
-1. With the GKE cluster running, determine the identity the CLI agent uses when running kubectl. Run:
-   ```bash
-   kubectl --kubeconfig ~/.kube/config-cluster-whisperer auth whoami
-   ```
-   Note the username (e.g., `user@project.iam.gserviceaccount.com` or a GKE node identity). This is the identity to scope the new policy to.
+1. Write `k8s/rbac-cli.yaml` — ClusterRole + ClusterRoleBinding for `cluster-whisperer-cli` SA in the `cluster-whisperer` namespace. The ClusterRole must cover at minimum: `get`/`list`/`watch` on pods, deployments, services, configmaps, events, nodes, namespaces (for `kubectl_get`/`kubectl_describe`/`kubectl_logs`); `create`/`get`/`list`/`watch` on `platform.acme.io` resources (for the apply tool). Exact breadth per the open question above.
 
-2. Write a new `k8s/kyverno-cli-allowlist.yaml` ClusterPolicy that:
-   - Matches CREATE operations from the CLI kubeconfig identity (use the identity found in step 1)
-   - Denies any resource that is not `platform.acme.io/v1alpha1` + `ManagedService`
-   - Uses `validationFailureAction: Enforce` and `background: false`
-   - Has a clear message: something like "Only platform-approved ManagedService resources can be deployed through the cluster whisperer agent."
-   - Does NOT affect system SAs, Crossplane providers, or the `cluster-whisperer-mcp` SA (which already has its own policy)
+2. Rewrite `k8s/kyverno-cli-allowlist.yaml` — change the `subjects` block from `kind: User / name: wiggitywhitney@gmail.com` to `kind: ServiceAccount / name: cluster-whisperer-cli / namespace: cluster-whisperer`. Keep the deny conditions (apiVersion + kind check) unchanged.
 
-3. Apply the policy to the running cluster and verify:
-   - Try applying a ConfigMap or Deployment manifest via the CLI agent — it should be blocked with the Kyverno denial message
-   - Try applying a valid `platform.acme.io/v1alpha1 ManagedService` — it should pass
-   - The existing `cluster-whisperer-resource-allowlist` policy (MCP SA) still works correctly
+3. Rewrite `k8s/kyverno-cli-allowlist.test.ts` — update subject assertions: `kind` → `ServiceAccount`, `name` → `cluster-whisperer-cli`, `namespace` → `cluster-whisperer`. Remove the "no namespace on User subject" test; add a test that `namespace` is present and set to `cluster-whisperer`.
 
-4. Add `apply_kyverno_cli_policy()` to `demo/cluster/setup.sh` — called after `apply_kyverno_policies()` — so the policy is applied on every fresh cluster setup.
+4. Create `demo/cluster/setup-cli-identity.sh` — a standalone script (not yet integrated into setup.sh) that:
+   - Creates the `cluster-whisperer-cli` SA in `cluster-whisperer` namespace (idempotent)
+   - Applies `k8s/rbac-cli.yaml`
+   - Generates a token and writes a kubeconfig to `~/.kube/config-cluster-whisperer-cli`:
+     ```bash
+     TOKEN=$(kubectl --kubeconfig ~/.kube/config-cluster-whisperer create token cluster-whisperer-cli -n cluster-whisperer --duration=8760h)
+     CLUSTER_SERVER=$(kubectl --kubeconfig ~/.kube/config-cluster-whisperer config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+     CLUSTER_CA=$(kubectl --kubeconfig ~/.kube/config-cluster-whisperer config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+     kubectl config set-cluster cluster-whisperer --server="$CLUSTER_SERVER" --certificate-authority-data="$CLUSTER_CA" --kubeconfig=~/.kube/config-cluster-whisperer-cli
+     kubectl config set-credentials cluster-whisperer-cli --token="$TOKEN" --kubeconfig=~/.kube/config-cluster-whisperer-cli
+     kubectl config set-context default --cluster=cluster-whisperer --user=cluster-whisperer-cli --kubeconfig=~/.kube/config-cluster-whisperer-cli
+     kubectl config use-context default --kubeconfig=~/.kube/config-cluster-whisperer-cli
+     ```
+   - Applies `k8s/kyverno-cli-allowlist.yaml`
 
-5. Add a test to `k8s/kyverno-cli-allowlist.test.ts` following the same pattern as the existing `k8s/kyverno-allowlist.test.ts`. The existing test file verifies the MCP SA policy; the new one should verify the CLI identity policy (ConfigMap blocked, ManagedService passes).
+5. Once the cluster is ready (see prerequisite below), run `setup-cli-identity.sh` against the running cluster. Verify:
+   - Applying a ConfigMap or Deployment via the SA kubeconfig → Kyverno denies it with the policy message
+   - Applying a valid `platform.acme.io/v1alpha1 ManagedService` → passes
+   - The existing `cluster-whisperer-resource-allowlist` (MCP SA policy) still works correctly
+   - The SA kubeconfig supports the agent's read operations (kubectl_get, kubectl_describe, kubectl_logs)
 
-6. Check whether `demo/cluster/verify-kyverno-policy.sh` should be updated to smoke-test the new CLI policy in addition to the existing MCP SA policy. If it only tests the MCP SA policy, extend it or note that the CLI policy verification is covered by the test in step 5.
+6. Run the full demo flow (all four acts) with `CLUSTER_WHISPERER_KUBECONFIG=~/.kube/config-cluster-whisperer-cli`. Confirm the Tron deploy moment fires and the real database deploy succeeds.
 
-7. Run the full demo flow through the Tron deploy moment. Confirm: CLI agent attempts `kubectl apply` with a Tron/nginx manifest → Kyverno returns denial → agent reports it cannot deploy.
+7. Check whether `demo/cluster/verify-kyverno-policy.sh` needs updating to also smoke-test the CLI SA policy.
 
-8. **Confirm `setup.sh` applies both Kyverno policies** — MCP SA policy and CLI identity policy — on fresh cluster creation.
+8. After verification, integrate into `setup.sh`:
+   - Add a `setup_cli_identity()` function (SA creation + RBAC + kubeconfig generation)
+   - Update `apply_kyverno_cli_policy()` to also apply `k8s/rbac-cli.yaml`
+   - Call `setup_cli_identity()` before `apply_kyverno_cli_policy()` in the main orchestration
+   - Update `demo/.env` to export `CLUSTER_WHISPERER_KUBECONFIG=~/.kube/config-cluster-whisperer-cli`
 
-**Cluster startup — mandatory human step (do this before anything else in M3):**
+9. **Confirm `setup.sh` fully handles CLI identity on a fresh cluster** — new cluster must produce the SA kubeconfig, apply RBAC, and apply both Kyverno policies without manual steps.
 
-Before proceeding with any step in this milestone, prompt Whitney to start the cluster:
+**Cluster startup — mandatory prerequisite:**
 
-> "M3 requires a running GKE cluster. Please start it now with `GCP_ZONE=<working-zone> ./demo/cluster/setup.sh gcp` and confirm here when it is ready."
+M3 requires a running GKE cluster. Before running any cluster-dependent steps (step 5 onward), confirm the cluster is ready:
 
-Wait for Whitney's confirmation. Do not proceed until she confirms and `kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info` succeeds. Cluster provisioning takes 35–60 minutes and can fail on zone stockout — if it fails, prompt Whitney to retry with a different zone before continuing.
+```bash
+kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info
+```
+
+If that fails, the cluster is still provisioning. Cluster provisioning takes 35–60 minutes and can fail on zone stockout — if it fails, prompt Whitney to retry with a different zone before continuing.
 
 **Success criteria:** Asking the CLI agent to deploy Tron (or any arbitrary resource) produces a Kyverno denial message. Asking it to deploy the platform.acme.io ManagedService succeeds. Both behaviors reproducible on a freshly provisioned cluster.
 
@@ -266,7 +285,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| 1 | Kyverno policy scoped to kubeconfig user identity, not broadly to all users | Prevents unintended impact on Crossplane providers and system components |
+| 1 | Kyverno policy for CLI agent scoped to a dedicated `cluster-whisperer-cli` ServiceAccount (not the gcloud user identity) | Scoping to `wiggitywhitney@gmail.com` (User kind) was initially implemented then rejected: that identity is also used for direct cluster operations (setup, verification, troubleshooting), so the policy would block legitimate kubectl use. Namespace scoping was also considered and rejected: ManagedService XRs are cluster-scoped, so namespace-scoped Kyverno policies don't apply. SA scoping mirrors the existing `cluster-whisperer-mcp` pattern. |
 | 2 | Demo uses LangGraph, Qdrant, Datadog — no audience voting | Solo talk; Viktor's audience-choice mechanic doesn't work without a second presenter |
 | 3 | Slides are diagrams only — demo carries the talk | Matches Whitney's style; three slide sections at natural demo break points |
 | 4 | "Spiders and Rainbows" replaces "You Choose" as the developer team name | Matches Whitney's brand; removes Viktor co-presenter reference |
@@ -274,6 +293,9 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 6 | No slides for the observability section | Observability is shown live in Datadog — opening the real backend is more compelling than a diagram about it |
 | 7 | Cold open — no self-introduction at the start; Whitney introduces herself at the end | Drops the audience into the developer's problem immediately; earns the intro rather than leading with credentials |
 | 8 | M3 has a mandatory human-in-the-loop pause for cluster startup | Cluster provisioning takes 35–60 minutes and can fail on zone stockout; the implementing agent must prompt Whitney and wait for her confirmation before running any cluster-dependent steps |
+| 9 | Test-first workflow for M3: verify the SA approach manually against the running cluster before integrating into setup.sh | A failed integration requires another hour-long cluster spin. A standalone `demo/cluster/setup-cli-identity.sh` script enables full verification before setup.sh is touched. |
+| 10 | Demo narrative: the platform team issued the CLI agent a dedicated, constrained identity — the story is about the agent having limited permissions by design, not about runtime identity detection | "We check who you are" is a weaker story than "we gave the agent only what it needs." Aligns with the platform-engineer-as-responsible-party narrative of the talk. |
+| 11 | RBAC scope for `cluster-whisperer-cli` SA: **open question — resolve before starting M3 step 1** | Options: (a) broad — read everything + create any resource, relying on Kyverno as the effective guardrail; (b) narrow — exactly the permissions the agent uses (read cluster resources, create for `platform.acme.io` ManagedService only). Record the resolution as a new decision in this log before implementing `k8s/rbac-cli.yaml`. |
 
 ---
 
@@ -283,7 +305,8 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 - **Do NOT run `teardown.sh` without explicit human approval** — it deletes ALL clusters (Kind and GKE indiscriminately). Use `gcloud container clusters delete` or `kind delete cluster` directly when scoped deletion is needed.
 - M3 (Kyverno CLI policy) requires a running GKE cluster. Do not start it until `kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info` succeeds
 - The existing `demo-rehearsal-runbook.md` must not have its content modified — only renamed via `git mv`
-- The spider image (`Spider-v3.png`) lives at `demo/app/public/Spider-v3.png` — no changes needed to the image file itself
+- The demo app uses `Spider-v1.png` and `Rainbow.png` (shipped in M2) at `demo/app/public/` — no changes needed to these image files
 - Talk title: "Your Internal Developer Platform's Next Interface Is an AI Agent"
 - SRE Day Austin abstract: "Your Internal Developer Platform's Next Interface Is an AI Agent" / "Livin' In the Future: Your Platform's Next Interface Is an AI Agent"
-- **Branch note**: PRD #130 implementation should be done on `feature/prd-130-solo-talk-demo-prep` branched from `main`. At time of PRD creation, `feature/fix-mrap-activation` is open (a separate agent is diagnosing and fixing the cluster creation problem). Start PRD #130 work after that branch is merged to main.
+- **Branch**: `feature/prd-130-solo-talk-demo-prep` — M1 and M2 are complete on this branch.
+- `teardown.sh` already has `wait_for_cluster_operations()` (commit `9ff4337`) — handles clusters left locked by Ctrl+C during setup. No changes needed to teardown for M3.
