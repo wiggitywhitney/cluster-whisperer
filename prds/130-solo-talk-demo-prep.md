@@ -47,7 +47,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M1: Branding update — "You Choose" → "Spiders and Rainbows"
 - [x] M2: Demo app update — remove Viktor's YouTube link
 - [x] M3: Kyverno policy covering CLI agent identity
-- [ ] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
+- [x] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
