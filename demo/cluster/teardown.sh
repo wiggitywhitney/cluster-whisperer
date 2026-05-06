@@ -103,12 +103,10 @@ delete_kind_cluster() {
 # Wait for any in-progress GKE cluster operations to complete before deletion.
 # Ctrl+C during setup leaves the cluster locked by a server-side creation op.
 # gcloud container clusters delete returns code 400 until that op finishes.
+# Uses gcloud container operations wait (server-side long-poll, no artificial timeout).
 wait_for_cluster_operations() {
     local name=$1
     local zone=$2
-    local timeout=600
-    local elapsed=0
-    local interval=15
 
     local running_ops
     running_ops=$(gcloud container operations list \
@@ -121,29 +119,22 @@ wait_for_cluster_operations() {
         return 0
     fi
 
-    log_info "Cluster '${name}' has in-progress operations — waiting up to ${timeout}s..."
+    log_info "Cluster '${name}' has in-progress operations — waiting for completion..."
 
-    while [[ $elapsed -lt $timeout ]]; do
-        running_ops=$(gcloud container operations list \
+    while IFS= read -r op_name; do
+        [[ -z "${op_name}" ]] && continue
+        local op_type
+        op_type=$(gcloud container operations describe "${op_name}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
-            --filter="targetLink~${name} AND status=RUNNING" \
-            --format="value(name)" 2>/dev/null || true)
+            --format="value(operationType)" 2>/dev/null || echo "unknown")
+        log_info "  Waiting for: ${op_type} (${op_name})"
+        gcloud container operations wait "${op_name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" 2>/dev/null || true
+    done <<< "${running_ops}"
 
-        if [[ -z "${running_ops}" ]]; then
-            log_success "Operations complete for cluster '${name}'"
-            return 0
-        fi
-
-        if (( elapsed % 60 == 0 && elapsed > 0 )); then
-            log_info "  [${elapsed}s] Still waiting for operation to complete..."
-        fi
-
-        sleep $interval
-        elapsed=$((elapsed + interval))
-    done
-
-    log_warning "Operations still running after ${timeout}s — attempting delete anyway"
+    log_success "Operations complete for cluster '${name}'"
 }
 
 find_gke_clusters() {
