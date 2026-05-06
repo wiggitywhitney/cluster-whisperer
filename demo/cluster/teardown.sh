@@ -16,6 +16,9 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 CLUSTER_NAME_PREFIX="cluster-whisperer"
 KUBECONFIG_PATH="${HOME}/.kube/config-cluster-whisperer"
 
