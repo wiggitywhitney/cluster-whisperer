@@ -133,7 +133,7 @@ vals exec -i -f .vals.yaml -- node dist/index.js --vector-backend qdrant "What d
 
 # Multi-turn conversation (same thread ID resumes prior context)
 vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "What database should I deploy?"
-vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "I'm on the You Choose team"
+vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "I'm on the Spiders and Rainbows team"
 vals exec -i -f .vals.yaml -- node dist/index.js --thread demo "Go ahead and deploy it"
 
 # With the Vercel AI SDK agent (same tools, same output, different framework)

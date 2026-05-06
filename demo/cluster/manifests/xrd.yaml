@@ -6,7 +6,7 @@
 # can only find the right one by searching the vector DB with the correct
 # organizational context (team name, app name, person).
 #
-# This one is for Whitney and Viktor's "You Choose" demo app.
+# This one is for the Spiders and Rainbows team's demo app.
 # The 19 decoys in decoy-xrds/ are for fake teams.
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
@@ -29,11 +29,11 @@ spec:
           spec:
             type: object
             description: >-
-              Platform-approved PostgreSQL database for Whitney and Viktor's
-              You Choose demo application. Managed by the Platform team for the
-              You Choose project. Application developers request this resource
-              to get a fully managed PostgreSQL instance without needing to
-              understand provider-specific details.
+              Platform-approved PostgreSQL database for Whitney's
+              Spiders and Rainbows demo application. Managed by the Platform
+              team for the Spiders and Rainbows project. Application developers
+              request this resource to get a fully managed PostgreSQL instance
+              without needing to understand provider-specific details.
             properties:
               engine:
                 type: string

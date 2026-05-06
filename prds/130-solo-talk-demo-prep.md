@@ -44,8 +44,8 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 
 ## Milestones
 
-- [ ] M1: Branding update — "You Choose" → "Spiders and Rainbows"
-- [ ] M2: Demo app update — remove Viktor's YouTube link
+- [x] M1: Branding update — "You Choose" → "Spiders and Rainbows"
+- [x] M2: Demo app update — remove Viktor's YouTube link
 - [ ] M3: Kyverno policy covering CLI agent identity
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
@@ -270,7 +270,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 2 | Demo uses LangGraph, Qdrant, Datadog — no audience voting | Solo talk; Viktor's audience-choice mechanic doesn't work without a second presenter |
 | 3 | Slides are diagrams only — demo carries the talk | Matches Whitney's style; three slide sections at natural demo break points |
 | 4 | "Spiders and Rainbows" replaces "You Choose" as the developer team name | Matches Whitney's brand; removes Viktor co-presenter reference |
-| 5 | Spider image unchanged — only the linked URL changes | Spider is already Whitney-branded; only the bottom clickable zone needs updating |
+| 5 | Demo page redesigned: rainbow background + Spider-v1.png foreground, single link to Whitney's YouTube | Spider-v3.png contained Viktor's likeness; the whole page is rebranded with new images from the spider-rainbows repo. No split click zones — the whole image is one CTA. |
 | 6 | No slides for the observability section | Observability is shown live in Datadog — opening the real backend is more compelling than a diagram about it |
 | 7 | Cold open — no self-introduction at the start; Whitney introduces herself at the end | Drops the audience into the developer's problem immediately; earns the intro rather than leading with credentials |
 | 8 | M3 has a mandatory human-in-the-loop pause for cluster startup | Cluster provisioning takes 35–60 minutes and can fail on zone stockout; the implementing agent must prompt Whitney and wait for her confirmation before running any cluster-dependent steps |

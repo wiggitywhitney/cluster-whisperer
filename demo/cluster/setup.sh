@@ -1166,7 +1166,7 @@ MRAP_EOF
 }
 
 # Apply 20 ManagedService XRDs and Compositions — one real (platform.acme.io
-# for Whitney/Viktor's You Choose app) and 19 decoys for fake teams. All 20
+# for the Spiders and Rainbows team's app) and 19 decoys for fake teams. All 20
 # look identical from `kubectl get crd`, forcing the agent to use vector search
 # with organizational context to find the right one.
 install_platform_compositions() {
