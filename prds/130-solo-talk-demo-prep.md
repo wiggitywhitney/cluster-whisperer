@@ -133,7 +133,13 @@ This is the most technically complex milestone. The guardrails demo moment — w
 
 6. **Confirm `setup.sh` applies both Kyverno policies** — MCP SA policy and CLI identity policy — on fresh cluster creation.
 
-**Note:** This milestone requires a running GKE cluster. If the cluster is not ready, start here only after `kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info` succeeds.
+**Cluster startup — mandatory human step (do this before anything else in M3):**
+
+Before proceeding with any step in this milestone, prompt Whitney to start the cluster:
+
+> "M3 requires a running GKE cluster. Please start it now with `GCP_ZONE=<working-zone> ./demo/cluster/setup.sh gcp` and confirm here when it is ready."
+
+Wait for Whitney's confirmation. Do not proceed until she confirms and `kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info` succeeds. Cluster provisioning takes 35–60 minutes and can fail on zone stockout — if it fails, prompt Whitney to retry with a different zone before continuing.
 
 **Success criteria:** Asking the CLI agent to deploy Tron (or any arbitrary resource) produces a Kyverno denial message. Asking it to deploy the platform.acme.io ManagedService succeeds. Both behaviors reproducible on a freshly provisioned cluster.
 
@@ -258,6 +264,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 5 | Spider image unchanged — only the linked URL changes | Spider is already Whitney-branded; only the bottom clickable zone needs updating |
 | 6 | No slides for the observability section | Observability is shown live in Datadog — opening the real backend is more compelling than a diagram about it |
 | 7 | Cold open — no self-introduction at the start; Whitney introduces herself at the end | Drops the audience into the developer's problem immediately; earns the intro rather than leading with credentials |
+| 8 | M3 has a mandatory human-in-the-loop pause for cluster startup | Cluster provisioning takes 35–60 minutes and can fail on zone stockout; the implementing agent must prompt Whitney and wait for her confirmation before running any cluster-dependent steps |
 
 ---
 
@@ -270,3 +277,4 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 - The spider image (`Spider-v3.png`) lives at `demo/cluster/manifests/Spider-v3.png` and `demo/app/public/Spider-v3.png` — no changes needed to the image file itself
 - Talk title: "Your Internal Developer Platform's Next Interface Is an AI Agent"
 - SRE Day Austin abstract: "Your Internal Developer Platform's Next Interface Is an AI Agent" / "Livin' In the Future: Your Platform's Next Interface Is an AI Agent"
+- **Branch note**: PRD #130 implementation should be done on `feature/prd-130-solo-talk-demo-prep` branched from `main`. At time of PRD creation, `feature/fix-mrap-activation` is open (a separate agent is diagnosing and fixing the cluster creation problem). Start PRD #130 work after that branch is merged to main.
