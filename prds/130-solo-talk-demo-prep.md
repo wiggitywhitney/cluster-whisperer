@@ -359,6 +359,8 @@ A simple diagram showing:
 
 The framing: "The platform team gave me the apply tool, but they're not naive. Every apply goes through Kyverno." Speaker notes should explain Kyverno admission control in one sentence and what the allowlist policy does.
 
+**Context for speaker notes (Decision 10):** The story is that the platform team issued the CLI agent a dedicated, constrained identity (`cluster-whisperer-cli` ServiceAccount) — not "we check what you're deploying at runtime." The SA identity is the mechanism, but the audience story is about the platform engineer being responsible and intentional, not about admission control mechanics.
+
 **There is NO observability slides section.** The observability part of the talk is live only — Whitney opens Datadog and talks over it. Do not add a fourth slide section for observability.
 
 **File:** `docs/talk/slides-your-platform-next-interface.qmd`
