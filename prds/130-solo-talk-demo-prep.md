@@ -382,7 +382,8 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 - The demo app uses `Spider-v1.png` and `Rainbow.png` (shipped in M2) at `demo/app/public/` — no changes needed to these image files
 - Talk title: "Your Internal Developer Platform's Next Interface Is an AI Agent"
 - SRE Day Austin abstract: "Your Internal Developer Platform's Next Interface Is an AI Agent" / "Livin' In the Future: Your Platform's Next Interface Is an AI Agent"
-- **Branch**: `feature/prd-130-solo-talk-demo-prep` — M1 and M2 are complete on this branch.
+- **Branch**: `feature/prd-130-solo-talk-demo-prep` — M1, M2, M3, M3.5 are complete on this branch.
+- **Pre-conference validation required**: Before SRE Day Austin (May 11), run a full teardown + fresh `./demo/cluster/setup.sh gcp` to validate the complete new setup.sh flow end-to-end. The M3.5 changes have only been tested as code — they have not yet been validated against a live cluster provisioned from scratch with the new ordering.
 - `teardown.sh` already has `wait_for_cluster_operations()` (commit `9ff4337`) — handles clusters left locked by Ctrl+C during setup. No changes needed to teardown for M3.
 - **Cluster creation must be synchronous** — `--async` was tried and rejected: it fires zone creation requests in parallel, leaving dangling partial clusters in every zone attempted before Ctrl+C or failure. GKE creates a cluster object even on stockout, so after any zone failure setup.sh fires an async delete of the partial cluster before moving to the next zone.
 - **Cross-region zone fallbacks are already expanded** — `get_gcp_zone_fallbacks()` now includes inter-regional fallbacks (e.g. us-central1 → us-east1, us-east4, us-east5, us-south1, us-west1, us-west2). A zone argument can also be passed directly: `./demo/cluster/setup.sh gcp us-east1-b`.
