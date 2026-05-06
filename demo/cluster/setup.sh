@@ -100,6 +100,39 @@ run_step() {
     fi
 }
 
+# Like run_step, but for Helm installs in GCP mode.
+# After any failure: checks if the cluster is mid-resize or Kyverno is down.
+# If so: waits for full recovery, then retries the step once before giving up.
+run_helm_step() {
+    local name="$1"; shift
+    if ! "$@"; then
+        if [[ "${MODE}" == "gcp" ]]; then
+            local cluster_status
+            cluster_status=$(gcloud container clusters describe "${CLUSTER_NAME}" \
+                --project "${GCP_PROJECT}" \
+                --zone "${GCP_ZONE}" \
+                --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+
+            # If the cluster is not RUNNING, a control plane resize is in progress.
+            # During a resize the API server is briefly unreachable, which causes
+            # the Kyverno admission webhook call to fail even though Kyverno's pods
+            # are fine — the control plane can't reach them over the network.
+            if [[ "${cluster_status}" != "RUNNING" ]]; then
+                log_warning "Step '${name}' failed — cluster is ${cluster_status} (control plane resize)"
+                log_info "  Waiting for cluster recovery before retrying..."
+                wait_for_gke_operations
+                wait_for_cluster_running
+                log_info "  Retrying '${name}'..."
+                if "$@"; then
+                    return 0
+                fi
+            fi
+        fi
+        log_warning "Step '${name}' failed — continuing setup"
+        SETUP_ERRORS+=("${name}")
+    fi
+}
+
 # Wait for pods to exist and become ready.
 # Checks for pod existence first — kubectl wait fails immediately if no pods match.
 wait_for_pods() {
@@ -525,8 +558,11 @@ install_kind_ingress() {
 install_gcp_ingress() {
     log_info "Installing NGINX Ingress Controller for GKE..."
 
-    kubectl apply -f \
-        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"
+    if ! kubectl apply -f \
+        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"; then
+        log_error "Failed to apply NGINX Ingress Controller manifests"
+        return 1
+    fi
 
     wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
 
@@ -877,14 +913,15 @@ install_crossplane() {
         return
     fi
 
-    helm install crossplane crossplane-stable/crossplane \
-        \
+    if ! helm install crossplane crossplane-stable/crossplane \
         --namespace crossplane-system \
         --create-namespace \
         --version "${CROSSPLANE_VERSION}" \
         --values "${SCRIPT_DIR}/helm-values/crossplane.yaml" \
-        --wait --timeout 120s
-
+        --wait --timeout 120s; then
+        log_error "Failed to install Crossplane"
+        return 1
+    fi
     log_success "Crossplane v${CROSSPLANE_VERSION} installed"
 
     # Wait for Crossplane pods to be ready
@@ -920,7 +957,10 @@ install_crossplane_providers() {
         count=$(grep -c 'kind: Provider' "${batch_file}" || true)
         log_info "Batch $((batch_num + 1))/${total_batches}: applying ${count} providers..."
 
-        kubectl apply -f "${batch_file}"
+        if ! kubectl apply -f "${batch_file}"; then
+            log_error "Failed to apply provider batch $((batch_num + 1))"
+            return 1
+        fi
         log_success "Batch $((batch_num + 1)) applied (${count} providers)"
 
         # Give the API server time to settle between batches.
@@ -1107,7 +1147,7 @@ install_composition_function() {
         return
     fi
 
-    kubectl apply -f - <<'EOF'
+    if ! kubectl apply -f - <<'EOF'; then
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function
 metadata:
@@ -1115,7 +1155,9 @@ metadata:
 spec:
   package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.1
 EOF
-
+        log_error "Failed to apply function-patch-and-transform"
+        return 1
+    fi
     log_success "function-patch-and-transform installed"
 }
 
@@ -1238,7 +1280,10 @@ MRAP_EOF
     fi
 
     # Apply ClusterProviderConfig for in-cluster identity
-    kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"
+    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"; then
+        log_error "Failed to apply ClusterProviderConfig"
+        return 1
+    fi
     log_success "ClusterProviderConfig kubernetes-in-cluster applied"
 
     # Restart the provider-kubernetes pod so it picks up the new
@@ -1322,19 +1367,22 @@ install_chroma() {
 
     helm repo add chroma https://amikos-tech.github.io/chromadb-chart/ --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n chroma 2>/dev/null | grep -q chroma; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    # grep for "deployed" — a FAILED release must be cleaned up and reinstalled.
+    if helm list -n chroma 2>/dev/null | grep -q "deployed"; then
         log_success "Chroma already installed"
         return
     fi
+    helm uninstall chroma -n chroma &>/dev/null || true
 
-    helm install chroma chroma/chromadb \
-        \
+    if ! helm install chroma chroma/chromadb \
         --namespace chroma \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/chroma.yaml" \
-        --wait --timeout 180s
-
+        --wait --timeout 180s; then
+        log_error "Failed to install Chroma"
+        return 1
+    fi
     log_success "Chroma installed"
 
     # The chromadb chart uses app.kubernetes.io/instance=chroma as pod label
@@ -1349,19 +1397,21 @@ install_qdrant() {
 
     helm repo add qdrant https://qdrant.github.io/qdrant-helm --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n qdrant 2>/dev/null | grep -q qdrant; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    if helm list -n qdrant 2>/dev/null | grep -q "deployed"; then
         log_success "Qdrant already installed"
         return
     fi
+    helm uninstall qdrant -n qdrant &>/dev/null || true
 
-    helm install qdrant qdrant/qdrant \
-        \
+    if ! helm install qdrant qdrant/qdrant \
         --namespace qdrant \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/qdrant.yaml" \
-        --wait --timeout 300s
-
+        --wait --timeout 300s; then
+        log_error "Failed to install Qdrant"
+        return 1
+    fi
     log_success "Qdrant installed"
 
     # The qdrant chart uses app.kubernetes.io/instance=qdrant as pod label
@@ -1476,19 +1526,21 @@ install_jaeger() {
 
     helm repo add jaegertracing https://jaegertracing.github.io/helm-charts --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n jaeger 2>/dev/null | grep -q jaeger; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    if helm list -n jaeger 2>/dev/null | grep -q "deployed"; then
         log_success "Jaeger already installed"
         return
     fi
+    helm uninstall jaeger -n jaeger &>/dev/null || true
 
-    helm install jaeger jaegertracing/jaeger \
-        \
+    if ! helm install jaeger jaegertracing/jaeger \
         --namespace jaeger \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/jaeger.yaml" \
-        --wait --timeout 300s
-
+        --wait --timeout 300s; then
+        log_error "Failed to install Jaeger"
+        return 1
+    fi
     log_success "Jaeger installed"
 
     # For Kind: patch the service to NodePort with specific port for Jaeger UI.
@@ -1520,10 +1572,11 @@ install_otel_collector() {
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list -n otel-collector 2>/dev/null | grep -q otel-collector; then
+    if helm list -n otel-collector 2>/dev/null | grep -q "deployed"; then
         log_success "OTel Collector already installed"
         return
     fi
+    helm uninstall otel-collector -n otel-collector &>/dev/null || true
 
     # Create K8s secret with DD_API_KEY from the environment.
     # The collector config references it as ${env:DD_API_KEY}.
@@ -1533,20 +1586,27 @@ install_otel_collector() {
         return
     fi
 
-    kubectl create namespace otel-collector \
-        --dry-run=client -o yaml | kubectl apply -f -
+    if ! kubectl create namespace otel-collector \
+            --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create otel-collector namespace"
+        return 1
+    fi
 
-    kubectl create secret generic otel-collector-datadog \
-        --namespace otel-collector \
-        --from-literal=api-key="${DD_API_KEY}" \
-        --dry-run=client -o yaml | kubectl apply -f -
+    if ! kubectl create secret generic otel-collector-datadog \
+            --namespace otel-collector \
+            --from-literal=api-key="${DD_API_KEY}" \
+            --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create otel-collector-datadog secret"
+        return 1
+    fi
 
-    helm install otel-collector open-telemetry/opentelemetry-collector \
-        \
+    if ! helm install otel-collector open-telemetry/opentelemetry-collector \
         --namespace otel-collector \
         --values "${SCRIPT_DIR}/helm-values/otel-collector.yaml" \
-        --wait --timeout 180s
-
+        --wait --timeout 180s; then
+        log_error "Failed to install OTel Collector"
+        return 1
+    fi
     log_success "OTel Collector installed"
 
     # For Kind: patch the service to NodePort with specific ports for OTLP.
@@ -2242,7 +2302,10 @@ deploy_cluster_whisperer_serve() {
             return 1
         fi
 
-        kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"
+        if ! kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"; then
+            log_error "Failed to apply MCP RBAC manifests"
+            return 1
+        fi
     fi
 
     wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600
@@ -2293,13 +2356,14 @@ deploy_vectordb_sync() {
         fi
     fi
 
-    helm install k8s-vectordb-sync "${chart_source}" \
-        \
+    if ! helm install k8s-vectordb-sync "${chart_source}" \
         --namespace k8s-vectordb-sync \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/k8s-vectordb-sync.yaml" \
-        --wait --timeout 120s
-
+        --wait --timeout 120s; then
+        log_error "Failed to install k8s-vectordb-sync"
+        return 1
+    fi
     log_success "k8s-vectordb-sync controller deployed"
 }
 
@@ -2565,8 +2629,8 @@ main() {
 
     run_step "install_crossplane_providers" install_crossplane_providers
     run_step "install_platform_compositions" install_platform_compositions
-    run_step "install_chroma" install_chroma
-    run_step "install_qdrant" install_qdrant
+    run_helm_step "install_chroma" install_chroma
+    run_helm_step "install_qdrant" install_qdrant
 
     # Crossplane providers register 300+ CRDs, pushing the cumulative object count
     # past GKE's control plane resize threshold. Wait for the cluster to return to
@@ -2578,8 +2642,8 @@ main() {
     fi
 
     run_step "verify_vector_dbs" verify_vector_dbs
-    run_step "install_jaeger" install_jaeger
-    run_step "install_otel_collector" install_otel_collector
+    run_helm_step "install_jaeger" install_jaeger
+    run_helm_step "install_otel_collector" install_otel_collector
     run_step "verify_observability" verify_observability
     run_step "verify_trace_pipeline" verify_trace_pipeline
     run_step "deploy_demo_app" deploy_demo_app

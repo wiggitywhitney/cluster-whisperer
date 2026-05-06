@@ -49,6 +49,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M3: Kyverno policy covering CLI agent identity
 - [x] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
 - [x] M3.6: teardown.sh review and hardening
+- [x] M3.7: Helm install hardening — run_helm_step retry on resize, fix unconditional log_success
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
@@ -283,6 +284,43 @@ After all `gcloud container operations wait` calls, the function logs `[ok] Oper
 
 ---
 
+### M3.7: Helm install hardening — run_helm_step retry on resize, fix unconditional log_success
+
+**Revised understanding (Decision 21 updated):** Kyverno pods run on worker nodes and survive control plane resizes. The `"No agent available"` webhook errors were caused by a brief network connectivity gap between the newly-resized control plane and the Kyverno service endpoint — not by Kyverno pods being down. `wait_for_kyverno` (pod readiness check) was the wrong fix.
+
+**What to do:**
+
+1. Add `run_helm_step` — like `run_step` but after failure checks `gcloud container clusters describe` status. If cluster is not RUNNING (mid-resize), waits for recovery and retries once:
+
+```bash
+run_helm_step() {
+    local name="$1"; shift
+    if ! "$@"; then
+        if [[ "${MODE}" == "gcp" ]]; then
+            local cluster_status
+            cluster_status=$(gcloud container clusters describe "${CLUSTER_NAME}" \
+                --project "${GCP_PROJECT}" --zone "${GCP_ZONE}" \
+                --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+            if [[ "${cluster_status}" != "RUNNING" ]]; then
+                log_warning "Step '${name}' failed — cluster is ${cluster_status} (control plane resize)"
+                wait_for_gke_operations && wait_for_cluster_running
+                "$@" && return 0
+            fi
+        fi
+        log_warning "Step '${name}' failed — continuing setup"
+        SETUP_ERRORS+=("${name}")
+    fi
+}
+```
+
+2. Replace `run_step` with `run_helm_step` for all Helm install calls that run after `install_crossplane_providers` (where the resize is triggered): `install_chroma`, `install_qdrant`, `install_jaeger`, `install_otel_collector`.
+
+3. Fix unconditional `log_success` in ALL install functions — `log_success "X installed"` after an unchecked `helm install` logs success even when Helm returns non-zero. Wrap each `helm install` and `kubectl apply` with `if !; then log_error; return 1; fi`.
+
+**Success criteria:** A cluster run where the control plane resize happens mid-install retries the affected install automatically and succeeds without manual intervention.
+
+---
+
 ### M4: Quarto/Mermaid slides for the solo talk
 
 The talk uses sparse slides — diagrams only, labeled. The demo carries the presentation. Three slide sections are needed, each introduced at the natural break point in the demo flow.
@@ -420,6 +458,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 18 | Fix `setup_cli_identity` silent failures — add exit code checking for namespace creation, RBAC apply, and token creation | Live cluster run showed `setup_cli_identity` logs `[ok] CLI SA and RBAC applied` and `[ok] CLI SA kubeconfig written` even when all three kubectl commands failed (API down). The kubeconfig was written with an empty token. Functions must check exit codes and fail explicitly rather than logging success unconditionally. |
 | 19 | Fix `create_ingress_resources` false success logging — the cluster-whisperer ingress failed with `NotFound` but the function logged `[ok] Ingress created` | Same root issue as Decision 18: the function logs success without verifying the kubectl result. Each ingress creation should check the exit code and only log success if the resource was actually created. |
 | 20 | `teardown.sh` receives the same agent-driven review and hardening as `setup.sh` | The setup.sh review found silent failure bugs that would have been hard to debug during a conference. The same pattern — agent reads the full script, checks exit codes, looks for missing cleanup and misleading success logs — should be applied to teardown.sh before SRE Day. |
+| 21 | After any Helm install failure in GCP mode, check cluster status and retry if RECONCILING (Decision revised) | Live run showed Qdrant/Jaeger/OTel failing with "No agent available" from Kyverno webhook. Kyverno pods run on worker nodes and survive a control plane resize — the failure is a temporary network gap between the newly-resized control plane and the Kyverno webhook service endpoint. Fix: run_helm_step wrapper — after any Helm install failure, checks gcloud cluster status; if not RUNNING, waits for the resize to finish and retries once. Also fixed unconditional log_success in all install functions — they logged success even when helm install returned non-zero. |
 
 ---
 
