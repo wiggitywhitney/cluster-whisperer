@@ -100,6 +100,52 @@ delete_kind_cluster() {
     fi
 }
 
+# Wait for any in-progress GKE cluster operations to complete before deletion.
+# Ctrl+C during setup leaves the cluster locked by a server-side creation op.
+# gcloud container clusters delete returns code 400 until that op finishes.
+wait_for_cluster_operations() {
+    local name=$1
+    local zone=$2
+    local timeout=600
+    local elapsed=0
+    local interval=15
+
+    local running_ops
+    running_ops=$(gcloud container operations list \
+        --project "${GCP_PROJECT}" \
+        --zone "${zone}" \
+        --filter="targetLink~${name} AND status=RUNNING" \
+        --format="value(name)" 2>/dev/null || true)
+
+    if [[ -z "${running_ops}" ]]; then
+        return 0
+    fi
+
+    log_info "Cluster '${name}' has in-progress operations — waiting up to ${timeout}s..."
+
+    while [[ $elapsed -lt $timeout ]]; do
+        running_ops=$(gcloud container operations list \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --filter="targetLink~${name} AND status=RUNNING" \
+            --format="value(name)" 2>/dev/null || true)
+
+        if [[ -z "${running_ops}" ]]; then
+            log_success "Operations complete for cluster '${name}'"
+            return 0
+        fi
+
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] Still waiting for operation to complete..."
+        fi
+
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_warning "Operations still running after ${timeout}s — attempting delete anyway"
+}
+
 find_gke_clusters() {
     if ! command -v gcloud &>/dev/null; then
         return
@@ -113,6 +159,7 @@ find_gke_clusters() {
 delete_gke_cluster() {
     local name=$1
     local zone=$2
+    wait_for_cluster_operations "${name}" "${zone}"
     log_info "Deleting GKE cluster '${name}' in ${zone}..."
     log_warning "This will take several minutes. The cluster incurs billing until fully deleted."
     if gcloud container clusters delete "${name}" \
