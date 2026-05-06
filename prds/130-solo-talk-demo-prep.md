@@ -155,6 +155,8 @@ The talk uses sparse slides — diagrams only, labeled. The demo carries the pre
 
 **Work through each section with Whitney one at a time before writing the next.** Do not write all three sections upfront.
 
+**Demo flow reference:** Read `docs/talk/demo-design.md` before writing any slides. It documents the expected agent behavior for all four acts — exact tool calls, log output, what the agent finds at each step, and the Kyverno guardrails moment. Speaker notes must reflect what actually happens in the demo.
+
 **Section A — Agent explainer** (shown AFTER the developer has attempted `kubectl get pods` and it has failed — this is the first slide break point, bridging into the actual CLI agent demo. The talk opens cold with no slides at all):
 
 Build up a Mermaid flowchart progressively showing the agentic loop:
@@ -194,6 +196,8 @@ The framing: "The platform team gave me the apply tool, but they're not naive. E
 ### M5: New demo rehearsal runbook
 
 Create a step-by-step runbook for the solo talk demo flow, and rename the existing runbook so both are clearly identified.
+
+**Demo flow reference:** Read `docs/talk/demo-design.md` before writing the runbook. It documents the expected agent behavior for all four acts — exact tool calls, log output, timing details, and what to watch for at each step. The runbook's "Watch for" notes should align with what's documented there.
 
 **What to do:**
 
