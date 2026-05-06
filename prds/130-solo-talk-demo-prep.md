@@ -115,7 +115,7 @@ Should the `cluster-whisperer-cli` SA have broad permissions (read everything + 
 
 **What to do:**
 
-1. Write `k8s/rbac-cli.yaml` — ClusterRole + ClusterRoleBinding for `cluster-whisperer-cli` SA in the `cluster-whisperer` namespace. The ClusterRole must cover at minimum: `get`/`list`/`watch` on pods, deployments, services, configmaps, events, nodes, namespaces (for `kubectl_get`/`kubectl_describe`/`kubectl_logs`); `create`/`get`/`list`/`watch` on `platform.acme.io` resources (for the apply tool). Exact breadth per the open question above.
+1. Write `k8s/rbac-cli.yaml` — ClusterRole + ClusterRoleBinding for `cluster-whisperer-cli` SA in the `cluster-whisperer` namespace. Per Decision 14: broad RBAC — `get`/`list`/`watch`/`create`/`update`/`patch`/`delete` on all resources (`*`) in all API groups (`*`). Narrow RBAC would cause RBAC to fire before Kyverno for non-ManagedService creates, preventing the Kyverno denial message from appearing in the demo.
 
 2. Rewrite `k8s/kyverno-cli-allowlist.yaml` — change the `subjects` block from `kind: User / name: wiggitywhitney@gmail.com` to `kind: ServiceAccount / name: cluster-whisperer-cli / namespace: cluster-whisperer`. Keep the deny conditions (apiVersion + kind check) unchanged.
 
@@ -298,6 +298,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 11 | RBAC scope for `cluster-whisperer-cli` SA: **open question — resolve before starting M3 step 1** | Options: (a) broad — read everything + create any resource, relying on Kyverno as the effective guardrail; (b) narrow — exactly the permissions the agent uses (read cluster resources, create for `platform.acme.io` ManagedService only). Record the resolution as a new decision in this log before implementing `k8s/rbac-cli.yaml`. |
 | 12 | `setup.sh` adopts skip-on-failure with end-of-run error summary | Individual step failures no longer abort the entire setup. A `run_step` helper wraps each `main()` call; failures are collected in `SETUP_ERRORS` and printed again at the end. Dependent steps cascade-fail informationally rather than silently. Rationale: a partially-set-up cluster is more useful than a half-setup one that blocks M3 progress and requires full teardown + hour-long rebuild. |
 | 13 | `create_gke_cluster` resume path implemented (status: committed, **review pending**) | If a cluster-whisperer cluster exists and its kubeconfig is accessible, setup.sh skips creation and continues. Whitney expressed skepticism — keep as complement to skip-on-failure (Decision 12) or revert if the behavior proves confusing. |
+| 14 | `cluster-whisperer-cli` SA uses **broad RBAC** (read everything + create/update/patch/delete on all resources); Kyverno is the effective guardrail | Narrow RBAC (only create for platform.acme.io) would cause RBAC to fire before Kyverno for any non-ManagedService create attempt — the Kyverno denial message would never appear, breaking the demo's guardrails moment. Broad RBAC ensures the Tron deploy attempt reaches Kyverno and produces the denial. This directly resolves Decision 11. |
 
 ---
 
