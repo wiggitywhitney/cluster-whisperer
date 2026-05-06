@@ -64,7 +64,7 @@ The demo cluster seeds a vector database with Crossplane resources. The resource
 
 2. Search `demo/cluster/setup.sh` for any hardcoded "You Choose" or "Viktor" references (there is at least one comment around line 1165). Update to match the new branding.
 
-3. Verify that the vector DB seed data will reflect the new names on next cluster startup. The controller syncs resources into the vector DB automatically — confirm this covers the XRD description text.
+3. Verify that the vector DB seed data will reflect the new names on next cluster startup. The controller syncs resources into the vector DB on every reconcile loop — applying the updated XRD to a running cluster should trigger a re-embed automatically. If not, restart the controller pod: `kubectl --kubeconfig ~/.kube/config-cluster-whisperer rollout restart deployment -n cluster-whisperer`. Confirm the vector DB reflects the new description before proceeding to step 4.
 
 4. Run the reset script (`./demo/cluster/reset-demo.sh`) on the running cluster and verify the agent correctly narrows to a "Spiders and Rainbows" ManagedService when asked about databases.
 
@@ -129,9 +129,13 @@ This is the most technically complex milestone. The guardrails demo moment — w
 
 4. Add `apply_kyverno_cli_policy()` to `demo/cluster/setup.sh` — called after `apply_kyverno_policies()` — so the policy is applied on every fresh cluster setup.
 
-5. Run the full demo flow through the Tron deploy moment. Confirm: CLI agent attempts `kubectl apply` with a Tron/nginx manifest → Kyverno returns denial → agent reports it cannot deploy.
+5. Add a test to `k8s/kyverno-cli-allowlist.test.ts` following the same pattern as the existing `k8s/kyverno-allowlist.test.ts`. The existing test file verifies the MCP SA policy; the new one should verify the CLI identity policy (ConfigMap blocked, ManagedService passes).
 
-6. **Confirm `setup.sh` applies both Kyverno policies** — MCP SA policy and CLI identity policy — on fresh cluster creation.
+6. Check whether `demo/cluster/verify-kyverno-policy.sh` should be updated to smoke-test the new CLI policy in addition to the existing MCP SA policy. If it only tests the MCP SA policy, extend it or note that the CLI policy verification is covered by the test in step 5.
+
+7. Run the full demo flow through the Tron deploy moment. Confirm: CLI agent attempts `kubectl apply` with a Tron/nginx manifest → Kyverno returns denial → agent reports it cannot deploy.
+
+8. **Confirm `setup.sh` applies both Kyverno policies** — MCP SA policy and CLI identity policy — on fresh cluster creation.
 
 **Cluster startup — mandatory human step (do this before anything else in M3):**
 
@@ -235,6 +239,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
    - `tools kubectl,vector,apply`
    - **This is the story moment where the ticket gets resolved.** Frame it on stage: "So I filed that ticket, and the platform team came back with an updated agent configuration — now I have the apply tool." Then launch the Tron deploy and immediately go to slides while it runs.
    - `plz "Go ahead and deploy a Tron game so I have something to do while I wait for my database ticket"`
+   - **Do not wait for the agent response.** Switch to Section C (Kyverno) slides immediately after hitting enter. The Kyverno denial fires quickly — come back to the terminal after the slides to reveal the result.
    - Walk through Section C (Kyverno) slides while the Tron deploy is in flight
 
    **Step 8 — Come back to Tron result + deploy real database**:
@@ -278,7 +283,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 - **Do NOT run `teardown.sh` without explicit human approval** — it deletes ALL clusters (Kind and GKE indiscriminately). Use `gcloud container clusters delete` or `kind delete cluster` directly when scoped deletion is needed.
 - M3 (Kyverno CLI policy) requires a running GKE cluster. Do not start it until `kubectl --kubeconfig ~/.kube/config-cluster-whisperer cluster-info` succeeds
 - The existing `demo-rehearsal-runbook.md` must not have its content modified — only renamed via `git mv`
-- The spider image (`Spider-v3.png`) lives at `demo/cluster/manifests/Spider-v3.png` and `demo/app/public/Spider-v3.png` — no changes needed to the image file itself
+- The spider image (`Spider-v3.png`) lives at `demo/app/public/Spider-v3.png` — no changes needed to the image file itself
 - Talk title: "Your Internal Developer Platform's Next Interface Is an AI Agent"
 - SRE Day Austin abstract: "Your Internal Developer Platform's Next Interface Is an AI Agent" / "Livin' In the Future: Your Platform's Next Interface Is an AI Agent"
 - **Branch note**: PRD #130 implementation should be done on `feature/prd-130-solo-talk-demo-prep` branched from `main`. At time of PRD creation, `feature/fix-mrap-activation` is open (a separate agent is diagnosing and fixing the cluster creation problem). Start PRD #130 work after that branch is merged to main.
