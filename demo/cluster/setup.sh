@@ -1891,11 +1891,30 @@ install_kyverno() {
         return
     fi
 
-    helm install kyverno kyverno/kyverno \
-        --namespace kyverno \
-        --create-namespace \
-        --version "${KYVERNO_VERSION}" \
-        --wait --timeout 5m0s
+    local max_attempts=3
+    local install_success=false
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        # Clean up any failed release from a prior attempt before retrying.
+        if helm list -n kyverno --all 2>/dev/null | grep -q kyverno; then
+            helm uninstall kyverno -n kyverno &>/dev/null || true
+        fi
+        if helm install kyverno kyverno/kyverno \
+            --namespace kyverno \
+            --create-namespace \
+            --version "${KYVERNO_VERSION}" \
+            --wait --timeout 5m0s; then
+            install_success=true
+            break
+        fi
+        if [[ ${attempt} -lt ${max_attempts} ]]; then
+            log_warning "  [attempt ${attempt}/${max_attempts}] helm install kyverno failed (transient API server issue), retrying in 10s..."
+            sleep 10
+        fi
+    done
+    if [[ "${install_success}" != "true" ]]; then
+        log_error "Failed to install Kyverno after ${max_attempts} attempts"
+        return 1
+    fi
 
     log_success "Kyverno ${KYVERNO_VERSION} installed"
 
@@ -1914,7 +1933,22 @@ install_kyverno() {
 apply_kyverno_policies() {
     log_info "Applying Kyverno ClusterPolicy manifests..."
 
-    kubectl apply -f "${REPO_ROOT}/k8s/kyverno-allowlist.yaml"
+    local max_attempts=3
+    local apply_success=false
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        if kubectl apply -f "${REPO_ROOT}/k8s/kyverno-allowlist.yaml"; then
+            apply_success=true
+            break
+        fi
+        if [[ ${attempt} -lt ${max_attempts} ]]; then
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            sleep 10
+        fi
+    done
+    if [[ "${apply_success}" != "true" ]]; then
+        log_error "Failed to apply Kyverno ClusterPolicy after ${max_attempts} attempts"
+        return 1
+    fi
 
     # Verify the policy was accepted by the cluster
     if kubectl get clusterpolicy cluster-whisperer-resource-allowlist &>/dev/null; then
