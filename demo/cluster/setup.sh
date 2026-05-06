@@ -431,40 +431,20 @@ create_gke_cluster() {
             log_info "Retrying cluster creation in fallback zone: ${zone}"
         fi
 
-        # Start creation asynchronously — returns immediately with operation name.
-        # Failures (stockout, quota, etc.) surface via operations wait in seconds,
-        # not after a full synchronous timeout.
-        local op_name op_exit=0
-        op_name=$(gcloud container clusters create "${CLUSTER_NAME}" \
+        # Synchronous creation: blocks until success or failure, one zone at a time.
+        # Async was tried and rejected — it submits multiple simultaneous requests,
+        # leaving dangling clusters in every zone that was attempted before Ctrl+C.
+        # Stockouts return in <2 min; successful creation in 5-10 min;
+        # hung zones are killed by the 12-min timeout.
+        local gcloud_output gcloud_exit=0
+        gcloud_output=$(timeout 720 gcloud container clusters create "${CLUSTER_NAME}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
             --machine-type "${GKE_MACHINE_TYPE}" \
             --num-nodes "${GKE_NUM_NODES}" \
-            --quiet --async \
-            --format="value(name)" 2>&1) || op_exit=$?
+            --quiet 2>&1) || gcloud_exit=$?
 
-        if [[ "${op_exit}" -ne 0 ]]; then
-            log_warning "Zone ${zone}: failed to submit creation request — trying next zone"
-            [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]] && exit 1
-            continue
-        fi
-
-        op_name=$(echo "${op_name}" | tail -1 | tr -d '[:space:]')
-        log_info "  Waiting for result (operation: ${op_name})..."
-
-        # Wait for the operation — returns fast on failure, 5-10 min on success.
-        # 12-min timeout catches zones that accept the request but never provision.
-        local wait_output wait_exit=0
-        wait_output=$(timeout 720 gcloud container operations wait "${op_name}" \
-            --project "${GCP_PROJECT}" \
-            --zone "${zone}" 2>&1) || wait_exit=$?
-
-        if [[ "${wait_exit}" -eq 0 ]]; then
-            # Cluster created — fetch credentials explicitly (async skips auto-merge)
-            gcloud container clusters get-credentials "${CLUSTER_NAME}" \
-                --project "${GCP_PROJECT}" \
-                --zone "${zone}" \
-                --quiet 2>/dev/null
+        if [[ "${gcloud_exit}" -eq 0 ]]; then
             if [[ "${zone}" != "${primary_zone}" ]]; then
                 log_success "GKE cluster '${CLUSTER_NAME}' created in fallback zone ${zone} (primary zone ${primary_zone} had no capacity)"
             else
@@ -475,12 +455,13 @@ create_gke_cluster() {
             break
         fi
 
-        if [[ "${wait_exit}" -eq 124 ]]; then
+        if [[ "${gcloud_exit}" -eq 124 ]]; then
             log_warning "Zone ${zone}: timed out after 12 minutes — trying next zone"
-        elif echo "${wait_output}" | grep -q "GCE_STOCKOUT"; then
+        elif echo "${gcloud_output}" | grep -q "GCE_STOCKOUT"; then
             log_warning "Zone ${zone}: no VM capacity available (GCE_STOCKOUT)"
         else
             log_warning "Zone ${zone}: cluster creation failed — trying next zone"
+            log_info "  Error: $(echo "${gcloud_output}" | tail -3)"
         fi
 
         if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
