@@ -58,6 +58,8 @@ Write a bats-core test suite for all deterministic, testable functions in both s
   - `wait_for_crds`: mock `kubectl get crds` to increment count each call; target reached → success and correct log; timeout with count ≥ `min_acceptable` → warning + success; timeout with count < `min_acceptable` → failure
   - `wait_for_gke_operations`: no running ops → immediate return; ops present → polls until empty
   - `wait_for_api_server`: kubectl succeeds on first call → success; kubectl always fails → failure after timeout
+  - `run_step` (Decision 12 — skip-on-failure pattern): step function succeeds → SETUP_ERRORS remains empty, setup continues; step function fails → error added to SETUP_ERRORS, setup continues (does not abort)
+  - `create_gke_cluster` resume path (Decision 13): cluster exists + kubeconfig accessible → skip creation, set GCP_ZONE from existing cluster, return; cluster exists + kubeconfig inaccessible → exit 1
 
   Do NOT modify `tests/setup-gcp-zone-fallback.bats`. Run the full suite after M2 to confirm no regressions.
 

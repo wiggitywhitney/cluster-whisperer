@@ -86,6 +86,20 @@ log_error() {
     echo -e "${RED}[error]${NC} $1"
 }
 
+# Tracks steps that failed but were skipped so setup could continue.
+# Populated by run_step; printed again by print_summary at the end.
+SETUP_ERRORS=()
+
+# Run a setup step. On failure: log a warning, record the step name in
+# SETUP_ERRORS, and return 0 so the caller (main) continues.
+run_step() {
+    local name="$1"; shift
+    if ! "$@"; then
+        log_warning "Step '${name}' failed — continuing setup"
+        SETUP_ERRORS+=("${name}")
+    fi
+}
+
 # Wait for pods to exist and become ready.
 # Checks for pod existence first — kubectl wait fails immediately if no pods match.
 wait_for_pods() {
@@ -2285,6 +2299,19 @@ print_summary() {
     log_info "To tear down:"
     echo "  ./demo/cluster/teardown.sh"
     echo ""
+
+    if [[ ${#SETUP_ERRORS[@]} -gt 0 ]]; then
+        echo ""
+        log_warning "=============================================="
+        log_warning "Setup completed with ${#SETUP_ERRORS[@]} failed step(s):"
+        log_warning "=============================================="
+        for step in "${SETUP_ERRORS[@]}"; do
+            log_error "  FAILED: ${step}"
+        done
+        echo ""
+        log_info "Re-run setup.sh to retry failed steps (cluster creation is skipped when a cluster already exists)."
+        echo ""
+    fi
 }
 
 # =============================================================================
@@ -2382,38 +2409,38 @@ main() {
         create_gke_cluster
     fi
 
-    install_ingress_controller
-    install_crossplane
-    install_crossplane_providers
-    install_platform_compositions
-    install_chroma
-    install_qdrant
+    run_step "install_ingress_controller" install_ingress_controller
+    run_step "install_crossplane" install_crossplane
+    run_step "install_crossplane_providers" install_crossplane_providers
+    run_step "install_platform_compositions" install_platform_compositions
+    run_step "install_chroma" install_chroma
+    run_step "install_qdrant" install_qdrant
 
     # The Chroma/Qdrant installs push the cumulative object count past GKE's
     # control plane resize threshold. The resize starts asynchronously — wait
     # for it and verify API server connectivity before proceeding.
     if [[ "${MODE}" == "gcp" ]]; then
-        wait_for_gke_operations
-        wait_for_api_server
+        run_step "wait_for_gke_operations" wait_for_gke_operations
+        run_step "wait_for_api_server" wait_for_api_server
     fi
 
-    verify_vector_dbs
-    install_jaeger
-    install_otel_collector
-    verify_observability
-    verify_trace_pipeline
-    deploy_demo_app
-    install_kyverno
-    apply_kyverno_policies
-    deploy_cluster_whisperer_serve
+    run_step "verify_vector_dbs" verify_vector_dbs
+    run_step "install_jaeger" install_jaeger
+    run_step "install_otel_collector" install_otel_collector
+    run_step "verify_observability" verify_observability
+    run_step "verify_trace_pipeline" verify_trace_pipeline
+    run_step "deploy_demo_app" deploy_demo_app
+    run_step "install_kyverno" install_kyverno
+    run_step "apply_kyverno_policies" apply_kyverno_policies
+    run_step "deploy_cluster_whisperer_serve" deploy_cluster_whisperer_serve
     # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
-    "${SCRIPT_DIR}/verify-kyverno-policy.sh"
-    create_ingress_resources
-    run_capability_inference
-    verify_vector_search
-    run_instance_sync
-    generate_demo_env
-    deploy_vectordb_sync
+    run_step "verify-kyverno-policy" "${SCRIPT_DIR}/verify-kyverno-policy.sh"
+    run_step "create_ingress_resources" create_ingress_resources
+    run_step "run_capability_inference" run_capability_inference
+    run_step "verify_vector_search" verify_vector_search
+    run_step "run_instance_sync" run_instance_sync
+    run_step "generate_demo_env" generate_demo_env
+    run_step "deploy_vectordb_sync" deploy_vectordb_sync
     print_summary
 }
 

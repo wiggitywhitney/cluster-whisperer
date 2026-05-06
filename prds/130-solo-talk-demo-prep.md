@@ -149,7 +149,7 @@ Should the `cluster-whisperer-cli` SA have broad permissions (read everything + 
 8. After verification, integrate into `setup.sh`:
    - Add a `setup_cli_identity()` function (SA creation + RBAC + kubeconfig generation)
    - Update `apply_kyverno_cli_policy()` to also apply `k8s/rbac-cli.yaml`
-   - Call `setup_cli_identity()` before `apply_kyverno_cli_policy()` in the main orchestration
+   - Wire both into `main()` using `run_step` wrappers — setup.sh now uses skip-on-failure pattern (Decision 12): `run_step "setup_cli_identity" setup_cli_identity` and `run_step "apply_kyverno_cli_policy" apply_kyverno_cli_policy`
    - Update `demo/.env` to export `CLUSTER_WHISPERER_KUBECONFIG=~/.kube/config-cluster-whisperer-cli`
 
 9. **Confirm `setup.sh` fully handles CLI identity on a fresh cluster** — new cluster must produce the SA kubeconfig, apply RBAC, and apply both Kyverno policies without manual steps.
@@ -296,6 +296,8 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 9 | Test-first workflow for M3: verify the SA approach manually against the running cluster before integrating into setup.sh | A failed integration requires another hour-long cluster spin. A standalone `demo/cluster/setup-cli-identity.sh` script enables full verification before setup.sh is touched. |
 | 10 | Demo narrative: the platform team issued the CLI agent a dedicated, constrained identity — the story is about the agent having limited permissions by design, not about runtime identity detection | "We check who you are" is a weaker story than "we gave the agent only what it needs." Aligns with the platform-engineer-as-responsible-party narrative of the talk. |
 | 11 | RBAC scope for `cluster-whisperer-cli` SA: **open question — resolve before starting M3 step 1** | Options: (a) broad — read everything + create any resource, relying on Kyverno as the effective guardrail; (b) narrow — exactly the permissions the agent uses (read cluster resources, create for `platform.acme.io` ManagedService only). Record the resolution as a new decision in this log before implementing `k8s/rbac-cli.yaml`. |
+| 12 | `setup.sh` adopts skip-on-failure with end-of-run error summary | Individual step failures no longer abort the entire setup. A `run_step` helper wraps each `main()` call; failures are collected in `SETUP_ERRORS` and printed again at the end. Dependent steps cascade-fail informationally rather than silently. Rationale: a partially-set-up cluster is more useful than a half-setup one that blocks M3 progress and requires full teardown + hour-long rebuild. |
+| 13 | `create_gke_cluster` resume path implemented (status: committed, **review pending**) | If a cluster-whisperer cluster exists and its kubeconfig is accessible, setup.sh skips creation and continues. Whitney expressed skepticism — keep as complement to skip-on-failure (Decision 12) or revert if the behavior proves confusing. |
 
 ---
 
