@@ -2565,18 +2565,18 @@ main() {
 
     run_step "install_crossplane_providers" install_crossplane_providers
     run_step "install_platform_compositions" install_platform_compositions
+    run_step "install_chroma" install_chroma
+    run_step "install_qdrant" install_qdrant
 
-    # Crossplane providers register 300+ CRDs, triggering a GKE control plane resize.
-    # Wait HERE — before Chroma/Qdrant/Jaeger — so no installs run while Kyverno's
-    # admission webhook is unreachable. The webhook intercepts all admission requests
-    # (not just our policy's SAs), so any Helm install during a resize will fail.
+    # Crossplane providers register 300+ CRDs, pushing the cumulative object count
+    # past GKE's control plane resize threshold. Wait for the cluster to return to
+    # RUNNING before proceeding — if RECONCILING, kubectl/helm calls fail with TLS
+    # handshake timeout.
     if [[ "${MODE}" == "gcp" ]]; then
         run_step "wait_for_gke_operations" wait_for_gke_operations
         wait_for_cluster_running
     fi
 
-    run_step "install_chroma" install_chroma
-    run_step "install_qdrant" install_qdrant
     run_step "verify_vector_dbs" verify_vector_dbs
     run_step "install_jaeger" install_jaeger
     run_step "install_otel_collector" install_otel_collector
