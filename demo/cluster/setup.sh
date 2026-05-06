@@ -122,6 +122,7 @@ run_helm_step() {
                 log_info "  Waiting for cluster recovery before retrying..."
                 wait_for_gke_operations
                 wait_for_cluster_running
+                wait_for_kyverno_webhook
                 log_info "  Retrying '${name}'..."
                 if "$@"; then
                     return 0
@@ -2038,6 +2039,38 @@ print_demo_app_diagnostics() {
 #
 # Chart version note: Helm chart 3.7.1 deploys app v1.17.1. These are independent
 # version numbers — do not confuse them. Pin --version to the chart version here.
+wait_for_kyverno_webhook() {
+    # After a GKE control plane resize, the cluster returns to RUNNING but the
+    # webhook connection from the control plane to Kyverno's service endpoint
+    # may not yet be re-established. Test by making a server-side dry-run admission
+    # request — this hits Kyverno's webhook directly. Any response (allow or deny)
+    # means the path is live. "No agent available" / "context deadline exceeded"
+    # means it isn't yet.
+    log_info "Verifying Kyverno admission webhook connectivity..."
+    local timeout=120
+    local elapsed=0
+    local interval=10
+
+    while [[ $elapsed -lt $timeout ]]; do
+        local result
+        result=$(kubectl create configmap kyverno-webhook-probe \
+            --dry-run=server -n default 2>&1 || true)
+
+        if ! echo "${result}" | grep -qiE "context deadline exceeded|No agent available|failed to call webhook|timed out"; then
+            log_success "Kyverno webhook is reachable"
+            return 0
+        fi
+
+        if [[ $elapsed -gt 0 ]]; then
+            log_info "  [${elapsed}s] Webhook not yet reachable, retrying in ${interval}s..."
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_warning "Kyverno webhook unreachable after ${timeout}s — proceeding with retry anyway"
+}
+
 install_kyverno() {
     log_info "Installing Kyverno v${KYVERNO_VERSION} (chart)..."
 
