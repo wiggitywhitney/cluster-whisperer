@@ -18,6 +18,7 @@ Development progress log for cluster-whisperer. Tracks implementation milestones
 - (2026-04-06) Kyverno resource allowlist policy (PRD #55 M2): `k8s/kyverno-allowlist.yaml` ClusterPolicy scoped to `cluster-whisperer-mcp` SA with `background: false` and `kinds: ["*"]`. Policy applied to GKE cluster. Verified: ConfigMap blocked with Kyverno error, ManagedService passes, Crossplane SA and system SAs unaffected. `apply_kyverno_policies()` added to setup.sh. Smoke test script at `demo/cluster/verify-kyverno-policy.sh`. 16 unit tests. Gotcha documented: `kinds: ["*"]` required in resources block even when subject-scoping.
 
 ### Fixed
+- (2026-05-06) `teardown.sh` now removes `demo/.env` after cluster deletion — the file contained cluster-specific ingress URLs and API keys that became stale and could confuse the next demo session if accidentally sourced. Also fixed a fragile context-count check (`wc -l` → `grep -q .`) and a misleading "Operations complete" log that printed even when individual operation waits returned errors.
 - (2026-05-06) Two silent failure bugs found during script review: `setup.sh` was applying the core ManagedService XRD and Composition manifests without checking exit codes — a failure there would leave the cluster without the demo's central resource type with no error. `teardown.sh` was leaving a stale CLI SA kubeconfig (`~/.kube/config-cluster-whisperer-cli`) on disk after deleting the cluster. Both fixed.
 
 ### Changed

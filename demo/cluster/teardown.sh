@@ -68,10 +68,9 @@ cleanup_kubeconfig_entries() {
     kubectl config delete-user "${context_name}" &>/dev/null && \
         log_success "Removed kubeconfig user: ${context_name}" || true
 
-    # If no contexts remain, delete the file
-    local remaining
-    remaining=$(kubectl config get-contexts -o name 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "${remaining}" -eq 0 ]]; then
+    # If no contexts remain, delete the file.
+    # grep -q . is more reliable than wc -l (some kubectl versions emit blank lines).
+    if ! kubectl config get-contexts -o name 2>/dev/null | grep -q .; then
         rm -f "${KUBECONFIG_PATH}"
         log_success "No contexts remain — removed ${KUBECONFIG_PATH}"
     fi
@@ -134,7 +133,7 @@ wait_for_cluster_operations() {
             --zone "${zone}" 2>/dev/null || true
     done <<< "${running_ops}"
 
-    log_success "Operations complete for cluster '${name}'"
+    log_success "Done waiting for operations on cluster '${name}'"
 }
 
 find_gke_clusters() {
@@ -231,6 +230,14 @@ main() {
     if [[ -f "${cli_kubeconfig}" ]]; then
         rm -f "${cli_kubeconfig}"
         log_success "Removed CLI SA kubeconfig: ${cli_kubeconfig}"
+    fi
+
+    # Clean up demo/.env — contains cluster-specific ingress URLs and kubeconfig
+    # paths that become stale after the cluster is deleted.
+    local demo_env="${REPO_ROOT}/demo/.env"
+    if [[ -f "${demo_env}" ]]; then
+        rm -f "${demo_env}"
+        log_success "Removed demo environment file: ${demo_env}"
     fi
 
     echo ""

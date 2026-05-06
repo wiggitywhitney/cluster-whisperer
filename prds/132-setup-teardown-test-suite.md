@@ -46,6 +46,7 @@ Write a bats-core test suite for all deterministic, testable functions in both s
   - `find_gke_clusters`: returns cluster name+zone lines for matching clusters; returns empty when no clusters match
   - `find_kind_clusters`: returns cluster names for matching clusters; returns empty when kind is absent
   - `cleanup_kubeconfig_entries`: use a real temp kubeconfig (no mock needed); verify context/cluster/user removed; verify file deleted when no contexts remain
+  - CLI SA kubeconfig cleanup (Decision 20 — PRD #130): `main()` now removes `~/.kube/config-cluster-whisperer-cli` after cluster deletion. Test: file exists before teardown → file removed; file absent → no error
 
   Do NOT write test stubs that pass without asserting real behavior. Do NOT call real `gcloud`, `kubectl`, or `kind` binaries.
 

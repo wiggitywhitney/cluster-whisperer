@@ -48,6 +48,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M2: Demo app update — remove Viktor's YouTube link
 - [x] M3: Kyverno policy covering CLI agent identity
 - [x] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
+- [x] M3.6: teardown.sh review and hardening
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
@@ -258,6 +259,30 @@ Use a zone with available capacity (`us-east1-b` worked in the previous session;
 
 ---
 
+### M3.6: teardown.sh review and hardening
+
+Agent-driven review of `demo/cluster/teardown.sh` (same pattern as M3.5 for setup.sh). Three genuine issues found and fixed (Decision 20):
+
+**Fix 1 — Robust kubeconfig-empty check**
+
+`cleanup_kubeconfig_entries` uses `wc -l` to check if any contexts remain. The `grep -q .` approach is more reliable (some kubectl versions may output empty lines that confuse wc -l):
+
+Replace: `remaining=$(kubectl config get-contexts -o name 2>/dev/null | wc -l | tr -d ' ')`  
+Check: `if [[ "${remaining}" -eq 0 ]]`  
+With: `if ! kubectl config get-contexts -o name 2>/dev/null | grep -q .`
+
+**Fix 2 — Clean up demo/.env on teardown**
+
+`setup.sh` generates `demo/.env` with cluster-specific ingress URLs, kubeconfig paths, and API keys. Teardown did not remove it, leaving stale environment on disk after the cluster is deleted. Added cleanup to `main()` after cluster deletion (same location as the CLI SA kubeconfig cleanup added in M3.5).
+
+**Fix 3 — Correct success log in wait_for_cluster_operations**
+
+After all `gcloud container operations wait` calls, the function logs `[ok] Operations complete` unconditionally even if individual waits returned non-zero (network timeout, stale op). Changed to log `[ok] Done waiting for operations` which is accurate regardless of individual wait outcomes.
+
+**Success criteria:** `./demo/cluster/teardown.sh` removes the cluster, cleans up `demo/.env`, removes the CLI SA kubeconfig, and logs accurately.
+
+---
+
 ### M4: Quarto/Mermaid slides for the solo talk
 
 The talk uses sparse slides — diagrams only, labeled. The demo carries the presentation. Three slide sections are needed, each introduced at the natural break point in the demo flow.
@@ -394,6 +419,7 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 17 | Kyverno installation and all dependent steps are **hard failures** — removed from `run_step` | Decision 12 (skip-on-failure) was correct for optional/verification steps, but Kyverno, `apply_kyverno_policies`, `setup_cli_identity`, `apply_kyverno_cli_policy`, and `deploy_cluster_whisperer_serve` are load-bearing for the demo. Silently skipping them (as happened in the failed cluster run) leaves the cluster in an unusable state with no clear indication. These must be hard failures. |
 | 18 | Fix `setup_cli_identity` silent failures — add exit code checking for namespace creation, RBAC apply, and token creation | Live cluster run showed `setup_cli_identity` logs `[ok] CLI SA and RBAC applied` and `[ok] CLI SA kubeconfig written` even when all three kubectl commands failed (API down). The kubeconfig was written with an empty token. Functions must check exit codes and fail explicitly rather than logging success unconditionally. |
 | 19 | Fix `create_ingress_resources` false success logging — the cluster-whisperer ingress failed with `NotFound` but the function logged `[ok] Ingress created` | Same root issue as Decision 18: the function logs success without verifying the kubectl result. Each ingress creation should check the exit code and only log success if the resource was actually created. |
+| 20 | `teardown.sh` receives the same agent-driven review and hardening as `setup.sh` | The setup.sh review found silent failure bugs that would have been hard to debug during a conference. The same pattern — agent reads the full script, checks exit codes, looks for missing cleanup and misleading success logs — should be applied to teardown.sh before SRE Day. |
 
 ---
 
