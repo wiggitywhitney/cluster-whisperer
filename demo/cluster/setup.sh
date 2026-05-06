@@ -1093,7 +1093,7 @@ configure_provider_kubernetes() {
                 # which case kubectl patch returns exit 0 with "no change" — the
                 # controller sees no diff and never re-evaluates. A separately named
                 # MRAP is a genuinely new resource that forces controller processing.
-                kubectl apply -f - <<'MRAP_EOF' 2>/dev/null || true
+                if kubectl apply -f - <<'MRAP_EOF' 2>/dev/null; then
 apiVersion: apiextensions.crossplane.io/v1alpha1
 kind: ManagedResourceActivationPolicy
 metadata:
@@ -1103,8 +1103,11 @@ spec:
   - "*.kubernetes.crossplane.io"
   - "*.kubernetes.m.crossplane.io"
 MRAP_EOF
-                mrap_refreshed=true
-                log_info "  MRAP applied — waiting for activation..."
+                    mrap_refreshed=true
+                    log_info "  MRAP applied — waiting for activation..."
+                else
+                    log_warning "  Failed to apply dedicated MRAP; will retry while waiting for CRD activation..."
+                fi
             fi
         fi
 
