@@ -464,6 +464,14 @@ create_gke_cluster() {
             log_info "  Error: $(echo "${gcloud_output}" | tail -3)"
         fi
 
+        # GKE creates a cluster object even on stockout/failure — clean it up
+        # asynchronously before moving to the next zone (fire and forget).
+        log_info "  Cleaning up partial cluster in zone ${zone}..."
+        gcloud container clusters delete "${CLUSTER_NAME}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --quiet --async 2>/dev/null || true
+
         if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
             log_error "GCP_ZONE=${zone} was explicitly set — not retrying other zones"
             log_info "Tip: remove the zone argument to allow automatic fallback on failure"
