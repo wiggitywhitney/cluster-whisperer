@@ -2092,6 +2092,10 @@ setup_cli_identity() {
     fi
     cluster_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
     cluster_ca=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+    if [[ -z "${cluster_server}" || -z "${cluster_ca}" ]]; then
+        log_error "Failed to extract cluster server or CA — run: kubectl config view --minify to debug"
+        return 1
+    fi
 
     cat > "${cli_kubeconfig}" <<EOF
 apiVersion: v1
