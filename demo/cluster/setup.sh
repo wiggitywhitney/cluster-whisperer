@@ -1963,6 +1963,34 @@ apply_kyverno_policies() {
     fi
 }
 
+apply_kyverno_cli_policy() {
+    log_info "Applying Kyverno CLI identity ClusterPolicy..."
+
+    local max_attempts=3
+    local apply_success=false
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        if kubectl apply -f "${REPO_ROOT}/k8s/kyverno-cli-allowlist.yaml"; then
+            apply_success=true
+            break
+        fi
+        if [[ ${attempt} -lt ${max_attempts} ]]; then
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            sleep 10
+        fi
+    done
+    if [[ "${apply_success}" != "true" ]]; then
+        log_error "Failed to apply Kyverno CLI identity ClusterPolicy after ${max_attempts} attempts"
+        return 1
+    fi
+
+    if kubectl get clusterpolicy cluster-whisperer-cli-resource-allowlist &>/dev/null; then
+        log_success "Kyverno CLI identity policy applied"
+    else
+        log_error "Kyverno CLI identity policy not found after apply"
+        return 1
+    fi
+}
+
 # =============================================================================
 # k8s-vectordb-sync Controller and cluster-whisperer Serve
 # =============================================================================
