@@ -65,6 +65,12 @@ Write a bats-core test suite for all deterministic, testable functions in both s
   - `setup_cli_identity` exit code checking (Decision 18): namespace creation failure → function exits non-zero (not silent success); token creation failure → function exits non-zero; success path → kubeconfig written and function exits 0
   - `create_ingress_resources` per-ingress exit check (Decision 19): ingress creation failure → logged as error, function exits non-zero; success → logs `[ok] Ingress created`
   - Step ordering: verify `install_kyverno` is invoked before `install_crossplane_providers` in main() (Decision 15) — parse main() body and assert ordering
+  - `run_helm_step` (Decision 21): step succeeds → SETUP_ERRORS empty; step fails + cluster RUNNING → no retry, error recorded; step fails + cluster RECONCILING → waits for RUNNING, retries; step fails + cluster RECONCILING, retry also fails → error recorded
+  - `run_helm_step` idempotency: failing install leaves FAILED release → next call uninstalls and retries (not mistaken for deployed)
+
+  **Do NOT write tests for Kind-mode code paths** (Decision 25 — cluster-whisperer is GKE-only; Kind mode paths are not maintained).
+
+  **Pending**: when the webhook connectivity probe question (Decision 24) is resolved, add tests for that behavior.
 
   Do NOT modify `tests/setup-gcp-zone-fallback.bats`. Run the full suite after M2 to confirm no regressions.
 
