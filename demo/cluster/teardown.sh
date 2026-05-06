@@ -225,6 +225,14 @@ main() {
         log_warning "No clusters found matching prefix '${CLUSTER_NAME_PREFIX}'"
     fi
 
+    # Clean up the CLI SA kubeconfig created by setup_cli_identity.
+    # The cluster is gone so the token is invalid — remove the stale file.
+    local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
+    if [[ -f "${cli_kubeconfig}" ]]; then
+        rm -f "${cli_kubeconfig}"
+        log_success "Removed CLI SA kubeconfig: ${cli_kubeconfig}"
+    fi
+
     echo ""
     log_success "Teardown complete!"
 }

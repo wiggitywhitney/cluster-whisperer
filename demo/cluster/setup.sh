@@ -1265,9 +1265,15 @@ install_platform_compositions() {
     install_composition_function
     configure_provider_kubernetes
 
-    # Apply the real XRD + Composition first
-    kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
-    kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
+    # Apply the real XRD + Composition first — hard failure: demo cannot work without these
+    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"; then
+        log_error "Failed to apply real XRD (manifests/xrd.yaml)"
+        return 1
+    fi
+    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"; then
+        log_error "Failed to apply real Composition (manifests/composition.yaml)"
+        return 1
+    fi
     log_success "Real XRD + Composition applied (platform.acme.io)"
 
     # Apply all 19 decoy XRDs + Compositions
