@@ -1280,6 +1280,24 @@ MRAP_EOF
         log_warning "provider-kubernetes service account not found — RBAC skipped"
     fi
 
+    # Wait for the ClusterProviderConfig CRD before applying.
+    # Kyverno (installed before providers) validates all admission requests. If the
+    # CRD for clusterproviderconfigs.kubernetes.m.crossplane.io isn't registered yet,
+    # Kyverno denies the apply with "resource not found". Wait for it first.
+    local cp_crd="clusterproviderconfigs.kubernetes.m.crossplane.io"
+    local elapsed=0 interval=10 timeout=120
+    log_info "Waiting for ${cp_crd} CRD..."
+    while [[ $elapsed -lt $timeout ]]; do
+        if kubectl get crd "${cp_crd}" &>/dev/null; then
+            log_success "CRD ${cp_crd} registered"
+            break
+        fi
+        sleep $interval; elapsed=$((elapsed + interval))
+    done
+    if ! kubectl get crd "${cp_crd}" &>/dev/null; then
+        log_warning "CRD ${cp_crd} not registered after ${timeout}s — attempting apply anyway"
+    fi
+
     # Apply ClusterProviderConfig for in-cluster identity
     if ! kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"; then
         log_error "Failed to apply ClusterProviderConfig"
@@ -2672,6 +2690,10 @@ main() {
     if [[ "${MODE}" == "gcp" ]]; then
         run_step "wait_for_gke_operations" wait_for_gke_operations
         wait_for_cluster_running
+        # After resize, the cluster returns to RUNNING but the webhook network path
+        # from the control plane to Kyverno may not yet be re-established.
+        # Probe the webhook before proceeding with any further installs.
+        wait_for_kyverno_webhook
     fi
 
     run_step "verify_vector_dbs" verify_vector_dbs
