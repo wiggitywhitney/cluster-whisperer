@@ -1,0 +1,409 @@
+---
+format: revealjs
+---
+
+## {.center}
+<!--- SECTION A: agent explainer — shown after kubectl get pods fails --->
+<!--- White-out technique: full diagram on every slide; hidden elements colored to match background --->
+<!--- Link indices: 0=DUMMY→U  1=U→A(question)  2=A→U(answer)  3=A↔T(calls)  4=T-T1  5=T-T2  6=T-T3 --->
+
+```{mermaid}
+flowchart LR
+  DUMMY[" "] --> U["Developer"]
+  U -->|"question"| A
+  A -->|"answer"| U
+  A <-->|"calls"| T["Tools"]
+  T --- T1["kubectl_get"]
+  T --- T2["kubectl_describe"]
+  T --- T3["kubectl_logs"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style DUMMY fill:none,stroke:none,color:none
+  style U fill:none,stroke:#E91E63,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#e8f5f3,color:#e8f5f3
+  style T fill:white,stroke:white,color:white
+  style T1 fill:white,stroke:white,color:white
+  style T2 fill:white,stroke:white,color:white
+  style T3 fill:white,stroke:white,color:white
+  linkStyle 0 stroke:none,fill:none
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white
+  linkStyle 5 stroke:white,color:white
+  linkStyle 6 stroke:white,color:white
+```
+
+::: {.notes}
+So what is this agent? At the highest level, you give it a goal — in plain English.
+:::
+
+## {.center}
+
+```{mermaid}
+flowchart LR
+  DUMMY[" "] --> U["Developer"]
+  U -->|"question"| A
+  A -->|"answer"| U
+  A <-->|"calls"| T["Tools"]
+  T --- T1["kubectl_get"]
+  T --- T2["kubectl_describe"]
+  T --- T3["kubectl_logs"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style DUMMY fill:none,stroke:none,color:none
+  style U fill:none,stroke:#E91E63,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style T fill:white,stroke:white,color:white
+  style T1 fill:white,stroke:white,color:white
+  style T2 fill:white,stroke:white,color:white
+  style T3 fill:white,stroke:white,color:white
+  linkStyle 0 stroke:none,fill:none
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white
+  linkStyle 5 stroke:white,color:white
+  linkStyle 6 stroke:white,color:white
+```
+
+::: {.notes}
+The agent has a brain — an LLM. It reasons about what to do next. It decides which tool to call, in what order, based on what it observes.
+:::
+
+## {.center}
+
+```{mermaid}
+flowchart LR
+  DUMMY[" "] --> U["Developer"]
+  U -->|"question"| A
+  A -->|"answer"| U
+  A <-->|"calls"| T["Tools"]
+  T --- T1["kubectl_get"]
+  T --- T2["kubectl_describe"]
+  T --- T3["kubectl_logs"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style DUMMY fill:none,stroke:none,color:none
+  style U fill:none,stroke:#E91E63,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style T fill:none,stroke:#9C27B0,stroke-width:2px
+  style T1 fill:white,stroke:white,color:white
+  style T2 fill:white,stroke:white,color:white
+  style T3 fill:white,stroke:white,color:white
+  linkStyle 0 stroke:none,fill:none
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white
+  linkStyle 5 stroke:white,color:white
+  linkStyle 6 stroke:white,color:white
+```
+
+::: {.notes}
+The agent has tools — ways of interacting with the outside world. The LLM decides which tool to call. The agent executes it.
+:::
+
+## {.center}
+
+```{mermaid}
+flowchart LR
+  DUMMY[" "] --> U["Developer"]
+  U -->|"question"| A
+  A -->|"answer"| U
+  A <-->|"calls"| T["Tools"]
+  T --- T1["kubectl_get"]
+  T --- T2["kubectl_describe"]
+  T --- T3["kubectl_logs"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style DUMMY fill:none,stroke:none,color:none
+  style U fill:none,stroke:#E91E63,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style T fill:none,stroke:#9C27B0,stroke-width:2px
+  style T1 fill:none,stroke:#9C27B0
+  style T2 fill:none,stroke:#9C27B0
+  style T3 fill:none,stroke:#9C27B0
+  linkStyle 0 stroke:none,fill:none
+  linkStyle 2 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Right now, three kubectl tools: get, describe, and logs. The loop repeats — call a tool, observe the result, decide what to do next — until there's enough information to answer.
+
+kubectl_get: list resources — pods, services, deployments, anything
+kubectl_describe: deep dive on a specific resource — events, config, status
+kubectl_logs: read what the application itself said — the real error message
+:::
+
+## {.center}
+
+```{mermaid}
+flowchart LR
+  DUMMY[" "] --> U["Developer"]
+  U -->|"question"| A
+  A -->|"answer"| U
+  A <-->|"calls"| T["Tools"]
+  T --- T1["kubectl_get"]
+  T --- T2["kubectl_describe"]
+  T --- T3["kubectl_logs"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style DUMMY fill:none,stroke:none,color:none
+  style U fill:none,stroke:#E91E63,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style T fill:none,stroke:#9C27B0,stroke-width:2px
+  style T1 fill:none,stroke:#9C27B0
+  style T2 fill:none,stroke:#9C27B0
+  style T3 fill:none,stroke:#9C27B0
+  linkStyle 0 stroke:none,fill:none
+```
+
+::: {.notes}
+The agent returns its answer to the developer — a diagnosis, a recommendation, an explanation. In plain English. No kubectl required on your end.
+
+Let's watch it work.
+:::
+
+<!--- SECTION B: vector search — shown after agent hits the CRD wall --->
+<!--- Layout: C+A on left (col 0), K+E+EQ in middle (col 1), V on right (col 2) — mirrors Viktor --->
+<!--- Controller is the active watcher — C→K, C→E. Cycle: A→EQ→V→A (back-edge on V→A) --->
+<!--- White-out: all 6 nodes + 6 edges present on every slide --->
+<!--- Link indices: 0=C→K(watches)  1=C→E(descriptions)  2=E→V(stores)  3=A→EQ(query)  4=EQ→V(search)  5=V→A(results) --->
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:white,stroke:white,color:white
+  style V fill:white,stroke:white,color:white
+  style A fill:white,stroke:white,color:white
+  style L fill:white,stroke:white,color:white
+  style EQ fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white,fill:white
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The agent just hit the CRD wall — 360 CRDs and no way to know which one to look at. This is why vector search beats kubectl tools alone:
+
+Scale: To find the right resource with kubectl, the agent would need to call kubectl explain on potentially hundreds of CRDs — hundreds of tool calls, thousands of lines of YAML in the context window. One vector search returns the 3-5 most relevant results. Context stays clean.
+
+Semantic matching: String matching fails silently here. "What database should I use?" shares no words with "platform.acme.io/v1alpha1 ManagedService." Vector similarity succeeds because "database" and "managed PostgreSQL service" are close in embedding space even though they share no words.
+
+Richer descriptions: The LLM-generated capability descriptions capture meaning that raw kubectl output doesn't. "Managed database for the Spiders and Rainbows team, low complexity, supports PostgreSQL" is far more searchable than 200 lines of OpenAPI schema.
+
+[The controller watches all Kubernetes resources — resource type definitions (what can be deployed) and running instances (what is deployed). Skips high-churn infrastructure bookkeeping: events, endpoints, endpointslices, leases, componentstatuses.]
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style V fill:white,stroke:white,color:white
+  style A fill:white,stroke:white,color:white
+  style L fill:white,stroke:white,color:white
+  style EQ fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white,fill:white
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+For each resource type, the controller runs kubectl explain --recursive to get the schema, then sends it to an LLM which generates a semantic description: capabilities, providers, complexity, use case, example YAML. For running instances it embeds name, namespace, labels, and description annotations. These descriptions go to the embedding model — Voyage AI voyage-4, producing 1024-dimensional vectors.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style V fill:none,stroke:#F57C00,stroke-width:2px
+  style A fill:white,stroke:white,color:white
+  style L fill:white,stroke:white,color:white
+  style EQ fill:white,stroke:white,color:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white,fill:white
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Vectors stored in Qdrant. Each entry is a point in 1024-dimensional space. Similar meanings cluster together — "managed database for the Spiders and Rainbows team" is near "PostgreSQL" is near "database."
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style V fill:none,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style EQ fill:white,stroke:white,color:white
+  linkStyle 3 stroke:white,color:white,fill:white
+  linkStyle 4 stroke:white,color:white,fill:white
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The developer asks a question in plain English. The agent calls the vector_search tool.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style V fill:none,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style EQ fill:none,stroke:#9C27B0,stroke-width:2px
+  linkStyle 4 stroke:white,color:white,fill:white
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The question gets embedded using the same Voyage AI model — now it's a vector that can be compared by proximity to everything stored. When the agent calls vector_search, the tool handles this embedding step internally before querying Qdrant.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style V fill:none,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style EQ fill:none,stroke:#9C27B0,stroke-width:2px
+```
+
+::: {.notes}
+Cosine similarity search finds the closest embeddings. "Database for the Spiders and Rainbows team" lands near the platform.acme.io ManagedService for that team. Out of ~360 resource types, the agent narrows to exactly one. That's the database. Now — will the agent deploy it?
+:::
+
+<!--- SECTION C: Kyverno guardrails — shown while Tron deploy is running --->
+
+## {.center}
+
+```{mermaid}
+flowchart LR
+  A["Agent"] -->|"kubectl apply"| K["Kyverno\nadmission webhook"]
+  K -->|"allow"| MS["platform.acme.io\nManagedService ✓"]
+  K -->|"deny"| X["everything else ✗"]
+
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style MS fill:none,stroke:#4CAF50,stroke-width:2px
+  style X fill:none,stroke:#E91E63,stroke-width:2px
+```
+
+::: {.notes}
+The platform team gave the developer the apply tool — but they're not naive. Every kubectl apply the agent makes goes through Kyverno, an admission controller. Kyverno has a policy: only platform-approved ManagedService resources from platform.acme.io can be deployed through this agent. Anything else — denied.
+
+The agent has a dedicated identity, a ServiceAccount. Kyverno's policy is scoped to that ServiceAccount. The platform team made a deliberate choice: give the agent exactly what it needs, and nothing more.
+:::

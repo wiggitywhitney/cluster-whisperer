@@ -1,0 +1,12 @@
+project:
+  type: default
+  output-dir: _output
+
+format:
+  revealjs:
+    theme: [default, custom.scss]
+    slide-number: true
+    transition: none
+    mermaid-format: svg
+    mermaid:
+      theme: neutral
