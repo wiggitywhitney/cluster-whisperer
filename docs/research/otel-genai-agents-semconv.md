@@ -8,9 +8,7 @@
 |------|---------|
 | 2026-05-07 | Initial research — current spec status, new operation names, events vs attributes, Datadog support |
 
-## Findings
-
-### Summary
+## Summary
 
 `gen_ai.input.messages` / `gen_ai.output.messages` with the `parts` schema are still the correct attribute names and format — confirmed by both the OTel spec and Datadog docs as the primary mechanism for LLM content. The GenAI semconv has moved to a dedicated GitHub repo (`open-telemetry/semantic-conventions-genai`). OTel Events (`gen_ai.client.inference.operation.details`) are now formally defined as a *complementary* fallback — not a replacement for span attributes. New operation name `invoke_workflow` was added in v1.40.0 and is relevant for our root investigation span.
 
@@ -18,7 +16,7 @@
 
 **🟢 Spec moved to a dedicated repo** — `https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai/gen-ai-spans.md` now redirects with a notice: "GenAI semantic conventions have moved to the [OpenTelemetry GenAI semantic conventions repository](https://github.com/open-telemetry/semantic-conventions-genai). This page has moved and is no longer maintained in this repository." Any links to the old location are stale. The new repo is at `open-telemetry/semantic-conventions-genai`, current schema version 1.42.0 (no releases published yet — active development).
 
-**🟢 `invoke_workflow` is a new operation name** — Added in v1.40.0. Maps to "workflow" span kind in Datadog (same as the default for missing operation name). Our root investigation span currently uses `gen_ai.operation.name: "chat"` which makes it show as "llm" in Datadog — incorrect. Changing to `invoke_workflow` would make it correctly appear as "workflow". This is a pending fix identified in PRD #49 M7 research but not yet implemented.
+**🟡 `invoke_workflow` is a new operation name, but Datadog hasn't documented it explicitly** — Added in OTel semconv v1.40.0. Datadog's mapping table does NOT list it — it falls through to the default "workflow" span kind (same as `rerank`, `unknown`, or missing). So it would work in practice, but is not a Datadog-documented value. Our root investigation span currently uses `gen_ai.operation.name: "chat"` which makes it show as "llm" in Datadog — incorrect. Changing to `invoke_workflow` would make it show as "workflow", but treat this as relying on undocumented fallback behavior until Datadog explicitly adds it to their mapping table. This is a pending fix identified in PRD #49 M7 research but not yet implemented.
 
 **🟢 OTel Events are a fallback, not a replacement** — Datadog checks sources in priority order: (1) direct span attributes (`gen_ai.input.messages`), (2) span events (`gen_ai.client.inference.operation.details`). Our approach of setting span attributes directly is the highest-priority path and remains correct.
 
@@ -61,7 +59,7 @@ The event `gen_ai.client.inference.operation.details` is now formally defined in
 | `embeddings`, `embedding` | **embedding** | |
 | `execute_tool` | **tool** | |
 | `invoke_agent`, `create_agent` | **agent** | |
-| `invoke_workflow` | **workflow** | **New in v1.40.0** |
+| `invoke_workflow` | **workflow** (default fallback) | New in OTel v1.40.0 — not yet in Datadog docs |
 | `rerank`, `unknown`, missing | **workflow** | Default |
 
 **`invoke_workflow`** is the semantically correct value for our root investigation span — it coordinates multiple agent steps and tool calls. Currently we use `chat` (which misclassifies it as "llm"). Fixing this is the change identified but not yet landed from PRD #49 M7.
