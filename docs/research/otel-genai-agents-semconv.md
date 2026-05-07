@@ -4,6 +4,7 @@
 **Last Updated:** 2026-05-07
 
 ## Update Log
+
 | Date | Summary |
 |------|---------|
 | 2026-05-07 | Initial research — current spec status, new operation names, events vs attributes, Datadog support |
