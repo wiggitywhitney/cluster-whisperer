@@ -3,6 +3,12 @@
 **PRD**: #21 - Fix LLM Observability CONTENT Column
 **Date**: 2026-02-07
 
+## Update Log
+| Date | Summary |
+|------|---------|
+| 2026-02-07 | Initial research |
+| 2026-05-07 | Added current spec status: spec moved to dedicated repo, events are complementary fallback, invoke_workflow is new operation name |
+
 ---
 
 ## Summary
@@ -261,6 +267,22 @@ Set `gen_ai.input.messages` and `gen_ai.output.messages` as JSON-stringified spa
 Option 1 is simplest and should be tried first. If Datadog doesn't parse them from workflow-type spans, escalate to option 2.
 
 ---
+
+---
+
+## Current Spec Status (May 2026)
+
+See full details in [Research: OTel GenAI Semantic Conventions for Agents](./otel-genai-agents-semconv.md). Key updates since this research was written:
+
+**`gen_ai.input.messages` / `gen_ai.output.messages` are still correct.** The parts format is unchanged. Datadog confirms these as its primary (highest-priority) content source.
+
+**OTel Events are now formally defined as a complementary fallback.** The event `gen_ai.client.inference.operation.details` is now in the spec. Datadog supports it *after* direct span attributes. Our approach of setting span attributes directly remains the right call.
+
+**The spec moved to a dedicated GitHub repo.** `open-telemetry/semantic-conventions-genai` (schema v1.42.0) is now the canonical source. Links to the main `open-telemetry/semantic-conventions` repo for GenAI pages will show a redirect notice.
+
+**`invoke_workflow` is a new `gen_ai.operation.name` value** (added in semconv v1.40.0). Maps to "workflow" in Datadog. The root investigation span should use this instead of `chat` — using `chat` incorrectly classifies the root span as "llm" layer in Datadog. One-line fix in `src/tracing/context-bridge.ts`.
+
+**`gen_ai.conversation.id` is now Datadog-recognized.** Maps to `metadata.conversation_id`. Not yet implemented in cluster-whisperer.
 
 ## Sources
 
