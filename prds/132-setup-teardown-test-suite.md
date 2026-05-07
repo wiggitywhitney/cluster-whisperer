@@ -67,10 +67,12 @@ Write a bats-core test suite for all deterministic, testable functions in both s
   - Step ordering: verify `install_kyverno` is invoked before `install_crossplane_providers` in main() (Decision 15) — parse main() body and assert ordering
   - `run_helm_step` (Decision 21): step succeeds → SETUP_ERRORS empty; step fails + cluster RUNNING → no retry, error recorded; step fails + cluster RECONCILING → waits for RUNNING, retries; step fails + cluster RECONCILING, retry also fails → error recorded
   - `run_helm_step` idempotency: failing install leaves FAILED release → next call uninstalls and retries (not mistaken for deployed)
+  - `run_helm_step` unconditional recovery path (PRD #130 M3.8, Decision 28): step fails → always calls `wait_for_gke_operations`, `wait_for_cluster_running`, `wait_for_api_server`, `wait_for_kyverno_webhook` before retrying — regardless of cluster status. Verify all four are called on any failure in GCP mode.
+  - `patch_kyverno_webhooks` (PRD #130 M3.8, Decision 26): mock `kubectl patch` to capture calls; verify all five webhook config names are patched (`kyverno-policy-validating-webhook-cfg`, `kyverno-cel-exception-validating-webhook-cfg`, `kyverno-exception-validating-webhook-cfg`, `kyverno-global-context-validating-webhook-cfg`, `kyverno-cleanup-validating-webhook-cfg`); verify `|| true` means a single patch failure does not abort
+  - `curl_exit_description` (PRD #130 M3.8): known exit codes (6, 7, 22, 28, 35, 52, 56, 60) return their documented descriptions; unknown code returns `curl error N`
+  - `wait_for_api_server` (PRD #130 M3.8, Decision 28): kubectl succeeds on first call → immediate return with success; kubectl always fails → failure after max_wait; kubectl fails twice then succeeds → succeeds on third attempt
 
   **Do NOT write tests for Kind-mode code paths** (Decision 25 — cluster-whisperer is GKE-only; Kind mode paths are not maintained).
-
-  **Pending**: when the webhook connectivity probe question (Decision 24) is resolved, add tests for that behavior.
 
   Do NOT modify `tests/setup-gcp-zone-fallback.bats`. Run the full suite after M2 to confirm no regressions.
 

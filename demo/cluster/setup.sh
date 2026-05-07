@@ -86,6 +86,20 @@ log_error() {
     echo -e "${RED}[error]${NC} $1"
 }
 
+curl_exit_description() {
+    case "$1" in
+        6)  echo "Could not resolve host" ;;
+        7)  echo "Failed to connect to host" ;;
+        22) echo "HTTP error response" ;;
+        28) echo "Operation timed out" ;;
+        35) echo "SSL connect error" ;;
+        52) echo "Empty reply from server" ;;
+        56) echo "Failure in receiving network data" ;;
+        60) echo "SSL certificate problem" ;;
+        *)  echo "curl error $1" ;;
+    esac
+}
+
 # Tracks steps that failed but were skipped so setup could continue.
 # Populated by run_step; printed again by print_summary at the end.
 SETUP_ERRORS=()
@@ -101,37 +115,66 @@ run_step() {
 }
 
 # Like run_step, but for Helm installs in GCP mode.
-# After any failure: checks if the cluster is mid-resize or Kyverno is down.
-# If so: waits for full recovery, then retries the step once before giving up.
+# Captures output via tee so the full log is available on failure.
+# On any failure: checks GKE operation logs for an in-progress resize
+# (unconditionally — cluster status alone has a race window where a
+# just-started resize still shows RUNNING), waits for full recovery,
+# probes the Kyverno webhook, then retries once.
 run_helm_step() {
     local name="$1"; shift
-    if ! "$@"; then
-        if [[ "${MODE}" == "gcp" ]]; then
-            local cluster_status
-            cluster_status=$(gcloud container clusters describe "${CLUSTER_NAME}" \
-                --project "${GCP_PROJECT}" \
-                --zone "${GCP_ZONE}" \
-                --format="value(status)" 2>/dev/null || echo "UNKNOWN")
 
-            # If the cluster is not RUNNING, a control plane resize is in progress.
-            # During a resize the API server is briefly unreachable, which causes
-            # the Kyverno admission webhook call to fail even though Kyverno's pods
-            # are fine — the control plane can't reach them over the network.
-            if [[ "${cluster_status}" != "RUNNING" ]]; then
-                log_warning "Step '${name}' failed — cluster is ${cluster_status} (control plane resize)"
-                log_info "  Waiting for cluster recovery before retrying..."
-                wait_for_gke_operations
-                wait_for_cluster_running
-                wait_for_kyverno_webhook
-                log_info "  Retrying '${name}'..."
-                if "$@"; then
-                    return 0
-                fi
-            fi
-        fi
-        log_warning "Step '${name}' failed — continuing setup"
-        SETUP_ERRORS+=("${name}")
+    local step_log
+    step_log=$(mktemp "/tmp/cluster-whisperer-${name}-XXXXXX.log")
+
+    # Run with tee: output streams to terminal live AND is captured to log file.
+    # Temporarily disable pipefail so PIPESTATUS captures the command exit code
+    # rather than the pipeline exiting immediately on failure.
+    set +o pipefail
+    "$@" 2>&1 | tee "${step_log}"
+    local step_exit=${PIPESTATUS[0]}
+    set -o pipefail
+
+    if [[ $step_exit -eq 0 ]]; then
+        rm -f "${step_log}"
+        return 0
     fi
+
+    log_error "Step '${name}' failed:"
+    tail -5 "${step_log}" | sed 's/^/    /'
+    rm -f "${step_log}"
+
+    if [[ "${MODE}" == "gcp" ]]; then
+        # Always check GKE operation logs first — a resize that just started
+        # may not yet be reflected in cluster status, so checking status alone
+        # has a race window. wait_for_gke_operations surfaces any in-progress
+        # operation and waits for it to complete.
+        log_info "  Checking for in-progress GKE operations..."
+        wait_for_gke_operations
+        wait_for_cluster_running
+        wait_for_api_server
+        wait_for_kyverno_webhook
+
+        log_info "  Retrying '${name}'..."
+        local retry_log
+        retry_log=$(mktemp "/tmp/cluster-whisperer-${name}-retry-XXXXXX.log")
+
+        set +o pipefail
+        "$@" 2>&1 | tee "${retry_log}"
+        local retry_exit=${PIPESTATUS[0]}
+        set -o pipefail
+
+        if [[ $retry_exit -eq 0 ]]; then
+            rm -f "${retry_log}"
+            return 0
+        fi
+
+        log_error "Retry of '${name}' also failed:"
+        tail -5 "${retry_log}" | sed 's/^/    /'
+        rm -f "${retry_log}"
+    fi
+
+    log_warning "Step '${name}' failed — continuing setup"
+    SETUP_ERRORS+=("${name}")
 }
 
 # Wait for pods to exist and become ready.
@@ -421,15 +464,21 @@ create_gke_cluster() {
         --filter="name~^${CLUSTER_NAME_PREFIX}" \
         --format="value(name)" 2>/dev/null || true)
     if [[ -n "${existing}" ]]; then
-        # If the kubeconfig is already accessible, skip creation and resume setup
-        # from this point — all subsequent functions are idempotent.
+        # Cluster exists — regenerate credentials then resume. The kubeconfig may
+        # be missing (first run on a new machine) or stale (context was deleted).
+        # Always re-fetch so subsequent kubectl/helm calls work regardless.
+        CLUSTER_NAME="${existing}"
+        GCP_ZONE=$(gcloud container clusters list \
+            --project "${GCP_PROJECT}" \
+            --filter="name~^${CLUSTER_NAME_PREFIX}" \
+            --format="value(location)" 2>/dev/null | head -1 || true)
         export KUBECONFIG="${KUBECONFIG_PATH}"
+        gcloud container clusters get-credentials "${CLUSTER_NAME}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${GCP_ZONE}" \
+            --quiet 2>/dev/null || true
         if kubectl cluster-info &>/dev/null; then
             log_warning "Existing cluster found: ${existing} — skipping creation, resuming setup"
-            GCP_ZONE=$(gcloud container clusters list \
-                --project "${GCP_PROJECT}" \
-                --filter="name~^${CLUSTER_NAME_PREFIX}" \
-                --format="value(location)" 2>/dev/null | head -1 || true)
             log_info "Resuming in zone: ${GCP_ZONE}"
             return
         fi
@@ -1105,12 +1154,19 @@ wait_for_cluster_running() {
     local interval=15
     local status
 
-    log_info "Waiting for cluster '${name}' to reach RUNNING state..."
+    log_info "Polling cluster '${name}' status via gcloud..."
     while [[ $elapsed -lt $max_wait ]]; do
-        status=$(gcloud container clusters describe "${name}" \
+        local gcloud_out gcloud_exit=0
+        gcloud_out=$(gcloud container clusters describe "${name}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
-            --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+            --format="value(status)" 2>&1) || gcloud_exit=$?
+
+        if [[ $gcloud_exit -eq 0 ]]; then
+            status="${gcloud_out}"
+        else
+            status="gcloud error: ${gcloud_out}"
+        fi
 
         if [[ "${status}" == "RUNNING" ]]; then
             log_success "Cluster is RUNNING"
@@ -1118,9 +1174,9 @@ wait_for_cluster_running() {
         fi
 
         if (( elapsed % 60 == 0 && elapsed > 0 )); then
-            log_info "  [${elapsed}s] Cluster status: ${status} — waiting..."
+            log_info "  [${elapsed}s] ${status} — waiting..."
         else
-            log_info "  Cluster status: ${status} — waiting..."
+            log_info "  ${status} — waiting..."
         fi
 
         sleep $interval
@@ -1128,6 +1184,35 @@ wait_for_cluster_running() {
     done
 
     log_error "Cluster did not reach RUNNING state after ${max_wait}s (last status: ${status})"
+    return 1
+}
+
+# Wait until the Kubernetes API server actually responds to requests.
+# GKE's managed control plane can be OOM-killed by the memory pressure of
+# registering 300+ CRDs (~4 MiB each). GKE silently restarts the API server;
+# this does not appear in 'gcloud container operations list' and the cluster
+# status may still read RUNNING throughout. The only reliable ground truth is
+# whether kubectl can complete a request. Polls until it can, with a 10-minute
+# outer timeout to cover the typical 3–10 minute restart window.
+wait_for_api_server() {
+    local max_wait=600
+    local elapsed=0
+    local interval=10
+
+    log_info "Waiting for API server to respond (GKE control plane may be restarting)..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl version --request-timeout=5s &>/dev/null 2>&1; then
+            log_success "API server is responding"
+            return 0
+        fi
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] API server not responding yet..."
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_error "API server did not respond after ${max_wait}s"
     return 1
 }
 
@@ -1281,9 +1366,6 @@ MRAP_EOF
     fi
 
     # Wait for the ClusterProviderConfig CRD before applying.
-    # Kyverno (installed before providers) validates all admission requests. If the
-    # CRD for clusterproviderconfigs.kubernetes.m.crossplane.io isn't registered yet,
-    # Kyverno denies the apply with "resource not found". Wait for it first.
     local cp_crd="clusterproviderconfigs.kubernetes.m.crossplane.io"
     local elapsed=0 interval=10 timeout=120
     log_info "Waiting for ${cp_crd} CRD..."
@@ -1298,9 +1380,19 @@ MRAP_EOF
         log_warning "CRD ${cp_crd} not registered after ${timeout}s — attempting apply anyway"
     fi
 
-    # Apply ClusterProviderConfig for in-cluster identity
-    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"; then
-        log_error "Failed to apply ClusterProviderConfig"
+    # Kyverno only discovers API resources at startup — CRDs registered after Kyverno
+    # starts are invisible to it until it restarts. Crossplane registers ~300 CRDs after
+    # Kyverno is installed, so ClusterProviderConfig is always unknown to Kyverno on the
+    # first attempt. Restart the admission controller to force re-discovery before apply.
+    log_info "Restarting Kyverno admission controller to pick up new CRDs from Crossplane..."
+    kubectl rollout restart deployment/kyverno-admission-controller -n kyverno 2>&1
+    kubectl rollout status deployment/kyverno-admission-controller -n kyverno --timeout=120s 2>&1
+
+    # Apply ClusterProviderConfig for in-cluster identity.
+    local cp_result
+    cp_result=$(kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml" 2>&1)
+    if [[ $? -ne 0 ]]; then
+        log_error "Failed to apply ClusterProviderConfig: ${cp_result}"
         return 1
     fi
     log_success "ClusterProviderConfig kubernetes-in-cluster applied"
@@ -1461,7 +1553,7 @@ verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
     local failures=0
-    local retries=12
+    local retries=30
     local retry_interval=10
 
     # Chroma health check with retries: GET /api/v2/heartbeat (Chroma 1.x uses v2 API)
@@ -1472,24 +1564,20 @@ verify_vector_dbs() {
     _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
-        local chroma_health
-        chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
-        if [[ -n "${chroma_health}" ]]; then
+        local chroma_result chroma_exit=0
+        chroma_result=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>&1) || chroma_exit=$?
+        if [[ $chroma_exit -eq 0 ]] && [[ -n "${chroma_result}" ]]; then
             log_success "Chroma is responding (heartbeat ok)"
             chroma_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Chroma not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Chroma not ready: ${chroma_result:-no output} ($(curl_exit_description "${chroma_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${chroma_ok}" != "true" ]]; then
-        # Diagnostic: verbose curl while port-forward is still alive
-        local diag
-        diag=$(curl -sv http://localhost:18000/api/v2/heartbeat 2>&1 || true)
         log_warning "Chroma health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $chroma_pf_pid 2>/dev/null || true
@@ -1502,23 +1590,20 @@ verify_vector_dbs() {
     _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
-        local qdrant_health
-        qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
-        if [[ -n "${qdrant_health}" ]]; then
+        local qdrant_result qdrant_exit=0
+        qdrant_result=$(curl -sf http://localhost:16333/healthz 2>&1) || qdrant_exit=$?
+        if [[ $qdrant_exit -eq 0 ]] && [[ -n "${qdrant_result}" ]]; then
             log_success "Qdrant is responding (healthz ok)"
             qdrant_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Qdrant not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Qdrant not ready: ${qdrant_result:-no output} ($(curl_exit_description "${qdrant_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${qdrant_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:16333/healthz 2>&1 || true)
         log_warning "Qdrant health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $qdrant_pf_pid 2>/dev/null || true
@@ -1649,7 +1734,7 @@ verify_observability() {
     log_info "Verifying observability backends..."
 
     local failures=0
-    local retries=12
+    local retries=30
     local retry_interval=10
 
     # Jaeger health check with retries via the v2 healthcheck extension
@@ -1660,23 +1745,20 @@ verify_observability() {
     _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
-        local jaeger_health
-        jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
-        if [[ -n "${jaeger_health}" ]]; then
+        local jaeger_result jaeger_exit=0
+        jaeger_result=$(curl -sf http://localhost:13133/status 2>&1) || jaeger_exit=$?
+        if [[ $jaeger_exit -eq 0 ]] && [[ -n "${jaeger_result}" ]]; then
             log_success "Jaeger is responding (health check ok)"
             jaeger_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Jaeger not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Jaeger not ready: ${jaeger_result:-no output} ($(curl_exit_description "${jaeger_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${jaeger_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:13133/status 2>&1 || true)
         log_warning "Jaeger health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $jaeger_pf_pid 2>/dev/null || true
@@ -1689,23 +1771,20 @@ verify_observability() {
     _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
-        local otel_health
-        otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
-        if [[ -n "${otel_health}" ]]; then
+        local otel_result otel_exit=0
+        otel_result=$(curl -sf http://localhost:13134 2>&1) || otel_exit=$?
+        if [[ $otel_exit -eq 0 ]] && [[ -n "${otel_result}" ]]; then
             log_success "OTel Collector is responding (health check ok)"
             otel_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} OTel Collector not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] OTel Collector not ready: ${otel_result:-no output} ($(curl_exit_description "${otel_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${otel_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:13134 2>&1 || true)
         log_warning "OTel Collector health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $otel_pf_pid 2>/dev/null || true
@@ -1737,7 +1816,6 @@ verify_trace_pipeline() {
     kubectl port-forward -n otel-collector \
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
-    trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
     sleep 4
 
     log_info "Sending test trace via agent query..."
@@ -1748,7 +1826,6 @@ verify_trace_pipeline() {
 
     kill "${otlp_pf_pid}" 2>/dev/null || true
     wait "${otlp_pf_pid}" 2>/dev/null || true
-    trap - EXIT
 
     # Wait for trace propagation
     log_info "Waiting for trace propagation (10s)..."
@@ -1758,7 +1835,6 @@ verify_trace_pipeline() {
     kubectl port-forward -n jaeger \
         deploy/jaeger 16686:16686 &>/dev/null &
     local jaeger_pf_pid=$!
-    trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
     sleep 4
 
     local jaeger_services
@@ -1780,7 +1856,6 @@ verify_trace_pipeline() {
 
     kill "${jaeger_pf_pid}" 2>/dev/null || true
     wait "${jaeger_pf_pid}" 2>/dev/null || true
-    trap - EXIT
 
     if [[ "${trace_verified}" != "true" ]]; then
         log_error "Trace pipeline verification failed: cluster-whisperer not found in Jaeger after 30s"
@@ -2096,9 +2171,12 @@ install_kyverno() {
     helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update &>/dev/null
     helm repo update kyverno &>/dev/null
 
-    # Check if already installed (idempotency)
+    # Check if already installed (idempotency). Still probe the webhook —
+    # on a resume the pods may be running but the webhook unreachable.
     if helm list -n kyverno 2>/dev/null | grep -q kyverno; then
         log_success "Kyverno already installed"
+        wait_for_kyverno_webhook
+        patch_kyverno_webhooks
         return
     fi
 
@@ -2113,6 +2191,13 @@ install_kyverno() {
             --namespace kyverno \
             --create-namespace \
             --version "${KYVERNO_VERSION}" \
+            --set features.forceFailurePolicyIgnore.enabled=true \
+            --set-json 'config.resourceFiltersInclude=["[CustomResourceDefinition,*,*]"]' \
+            --set admissionController.container.extraArgs.clientRateLimitQPS=100 \
+            --set admissionController.container.extraArgs.clientRateLimitBurst=100 \
+            --set backgroundController.container.extraArgs.clientRateLimitQPS=100 \
+            --set backgroundController.container.extraArgs.clientRateLimitBurst=100 \
+            --set-json 'config.webhooks.matchConditions=[{"name":"exclude-crd-resources","expression":"!(request.resource.group == \"apiextensions.k8s.io\")"}]' \
             --wait --timeout 5m0s; then
             install_success=true
             break
@@ -2131,21 +2216,57 @@ install_kyverno() {
 
     # Kyverno registers its admission webhooks after the admission controller pod
     # starts — there is a brief window after helm --wait returns where the webhook
-    # is not yet visible. Retry for up to 60s before treating it as a failure.
+    # is not yet reachable. On GKE, the API server can also be transiently
+    # unreachable right after install. Using `kubectl get 2>/dev/null` would
+    # silently swallow connection errors and look identical to "webhook not found."
+    # Use the functional dry-run probe instead: it captures errors via 2>&1 and
+    # correctly distinguishes connectivity failures from a missing webhook. Wait up
+    # to 5 minutes — Kyverno is a hard dependency and worth waiting for.
     local webhook_ready=false
-    for ((attempt=1; attempt<=12; attempt++)); do
-        if kubectl get validatingwebhookconfigurations 2>/dev/null | grep -q kyverno; then
-            log_success "Kyverno admission webhook registered"
+    local webhook_timeout=300
+    local webhook_interval=10
+    local webhook_elapsed=0
+    while [[ $webhook_elapsed -lt $webhook_timeout ]]; do
+        local probe_result
+        probe_result=$(kubectl create configmap kyverno-webhook-probe \
+            --dry-run=server -n default 2>&1 || true)
+        if ! echo "${probe_result}" | grep -qiE "context deadline exceeded|No agent available|failed to call webhook|timed out|connection refused|unable to connect"; then
+            log_success "Kyverno admission webhook registered and reachable"
             webhook_ready=true
             break
         fi
-        log_info "  [${attempt}/12] Waiting for Kyverno webhook registration (5s)..."
-        sleep 5
+        if [[ $webhook_elapsed -gt 0 ]]; then
+            log_info "  [${webhook_elapsed}s/${webhook_timeout}s] Webhook not yet reachable, retrying in ${webhook_interval}s..."
+        fi
+        sleep $webhook_interval
+        webhook_elapsed=$((webhook_elapsed + webhook_interval))
     done
     if [[ "${webhook_ready}" != "true" ]]; then
-        log_error "Kyverno admission webhook not found after 60s — policies will not be enforced"
+        log_error "Kyverno admission webhook not reachable after ${webhook_timeout}s — policies will not be enforced"
         return 1
     fi
+
+    patch_kyverno_webhooks
+}
+
+# forceFailurePolicyIgnore only affects the primary resource validating webhook.
+# The policy, exception, cleanup, and global-context webhooks remain Fail by default,
+# which causes timeouts to block operations during Kyverno restarts.
+# Patch all of them to Ignore. Called on both fresh install and already-installed paths.
+patch_kyverno_webhooks() {
+    log_info "Setting failurePolicy=Ignore on all Kyverno webhooks..."
+    for cfg in \
+        kyverno-cel-exception-validating-webhook-cfg \
+        kyverno-exception-validating-webhook-cfg \
+        kyverno-global-context-validating-webhook-cfg \
+        kyverno-policy-validating-webhook-cfg \
+        kyverno-cleanup-validating-webhook-cfg; do
+        kubectl patch validatingwebhookconfiguration "${cfg}" \
+            --type=json \
+            -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]' \
+            2>/dev/null || true
+    done
+    log_success "All Kyverno webhooks set to failurePolicy=Ignore"
 }
 
 # Apply Kyverno ClusterPolicy manifests from k8s/ in the repo root.
@@ -2683,11 +2804,13 @@ main() {
     run_helm_step "install_chroma" install_chroma
     run_helm_step "install_qdrant" install_qdrant
 
-    # Crossplane providers register 300+ CRDs, pushing the cumulative object count
-    # past GKE's control plane resize threshold. Wait for the cluster to return to
-    # RUNNING before proceeding — if RECONCILING, kubectl/helm calls fail with TLS
-    # handshake timeout.
+    # Registering 300+ Crossplane CRDs pushes GKE past its control plane resize
+    # threshold, triggering a RECONCILING state. During RECONCILING the API server
+    # is briefly unreachable — kubectl and helm calls fail. We poll via gcloud
+    # (which talks to the GKE control plane API directly, not the API server) until
+    # the cluster returns to RUNNING.
     if [[ "${MODE}" == "gcp" ]]; then
+        log_info "Waiting for GKE control plane resize to complete (triggered by 300+ CRD registration)..."
         run_step "wait_for_gke_operations" wait_for_gke_operations
         wait_for_cluster_running
         # After resize, the cluster returns to RUNNING but the webhook network path

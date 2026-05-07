@@ -50,6 +50,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M3.5: setup.sh reliability — Kyverno ordering, cluster status wait, error handling
 - [x] M3.6: teardown.sh review and hardening
 - [x] M3.7: Helm install hardening — run_helm_step retry on resize, fix unconditional log_success
+- [x] M3.8: Setup reliability round 2 — Kyverno-Konnectivity deadlock, API server probe, error surfacing
 - [ ] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
@@ -436,6 +437,34 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 
 ---
 
+### M3.8: Setup reliability round 2 — Kyverno-Konnectivity deadlock, API server probe, error surfacing
+
+A sustained debugging campaign across ~10 real GKE cluster runs revealed several root causes that M3.7 did not address. All fixes are in `demo/cluster/setup.sh` and `src/index.ts`.
+
+**Root causes discovered and fixed:**
+
+1. **Kyverno-Konnectivity deadlock (Decisions 26-27):** `forceFailurePolicyIgnore` only set `failurePolicy: Ignore` on ONE of Kyverno's 7 webhook configurations — the resource validating webhook. The other five (`kyverno-policy-validating-webhook-cfg`, `kyverno-cel-exception-validating-webhook-cfg`, `kyverno-exception-validating-webhook-cfg`, `kyverno-global-context-validating-webhook-cfg`, `kyverno-cleanup-validating-webhook-cfg`) remained `Fail`. When Kyverno restarts during the CRD flood, `TokenReview` requests (used by GKE's Konnectivity agent to authenticate its tunnel) time out against the Fail webhooks, breaking the control-plane-to-node network tunnel. Added `patch_kyverno_webhooks()` to explicitly patch all five remaining webhooks to `Ignore` after install — called from both the fresh-install and already-installed paths.
+
+2. **GKE API server OOM kill invisible to gcloud (Decision 28):** The GKE control plane API server is OOM-killed by the memory pressure of registering 300+ Crossplane CRDs (~4 MiB each). GKE restarts it silently — no `RESIZE_CLUSTER` operation appears in `gcloud container operations list`, and `gcloud container clusters describe` reports `RUNNING` throughout. The only reliable indicator is whether `kubectl version` actually responds. Added `wait_for_api_server()` — polls `kubectl version --request-timeout=5s` with a 10-minute timeout — and called it in `run_helm_step` after `wait_for_cluster_running`, before retrying a failed install.
+
+3. **CLUSTER_NAME stale on resume (Decision 29):** When setup.sh found an existing cluster and resumed, `CLUSTER_NAME` was left as the new timestamp generated at startup (e.g. `cluster-whisperer-20260507-054630`) rather than the actual existing cluster name. All `gcloud` operations querying by name were looking for a cluster that didn't exist, producing `UNKNOWN` status for the entire 600s timeout. Fixed by setting `CLUSTER_NAME="${existing}"` in the resume path.
+
+4. **Kyverno v1.17.1 does not discover new CRDs after startup (Decision 30):** Kyverno caches API resources at startup. CRDs registered after Kyverno starts are invisible to it — admission requests for those types are denied with `resource not found in group`. A rollout restart of the admission controller forces re-discovery. Added explicit restart before applying `ClusterProviderConfig`.
+
+5. **Kyverno rate limits too low for CRD-heavy environments (Decision 31):** Default is 20 QPS / 50 burst. Kyverno's startup API discovery walk exhausts these limits when 300+ CRDs exist, causing the throttling-restart loop. Set `clientRateLimitQPS=100` and `clientRateLimitBurst=100` on both admission and background controllers.
+
+6. **`matchConditions` CEL for true webhook-level exclusion (Decision 32):** `config.resourceFiltersInclude` (Kyverno-internal filtering) still causes the API server to call the Kyverno webhook for CRD registrations — it just discards them after receiving. Added `config.webhooks.matchConditions` CEL expression `!(request.resource.group == "apiextensions.k8s.io")` to prevent the API server from calling the Kyverno webhook for CRD operations at all.
+
+7. **Helm `--set` cannot handle commas/brackets in values (Decision 33):** `--set 'config.resourceFiltersInclude[0]=[CustomResourceDefinition,*,*]'` fails because Helm's `--set` parser splits on commas and interprets `[` as array notation. Switched to `--set-json` which parses the value as raw JSON — commas and brackets inside a JSON string are just characters.
+
+8. **Error surfacing improvements:** `run_helm_step` now captures command output via `tee` to a temp file and prints the last 5 lines inline on failure (not a file path). Health check loops now print the actual curl output and human-readable exit code description on every retry (e.g. `(Failed to connect to host)` not `(exit 7)`). Verbose per-item output from the capability inference and instance sync CLI pipelines is suppressed — only warnings and the final completion count are shown.
+
+9. **Kubeconfig recovery on resume:** If the cluster exists but `~/.kube/config-cluster-whisperer` is missing or stale, setup now runs `gcloud container clusters get-credentials` to regenerate before checking connectivity — rather than immediately erroring out.
+
+**Success criteria:** A fresh cluster run completes with all services installed (Chroma, Qdrant, Jaeger, OTel Collector, demo app, cluster-whisperer serve) and all Kyverno smoke tests passing. A resume run against an existing cluster with Kyverno already installed correctly patches all webhooks and applies policies without timeout errors.
+
+---
+
 ## Decision Log
 
 | # | Decision | Rationale |
@@ -465,6 +494,14 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 | 23 | `verify_vector_dbs` port-forward approach is intentional for both GKE and Kind modes — not a Kind-mode leak | Health checks use `kubectl port-forward` + local curl rather than ingress URLs because the container images may lack curl/wget. The health check failures during the cluster run were caused by the resize window (Chroma port-forward flaky right after control plane resumed, Qdrant/Jaeger never installed). Not a code bug. |
 | 24 | `run_helm_step` probes Kyverno webhook connectivity before retrying a failed install | After `wait_for_cluster_running`, the API server is up but the webhook network path to Kyverno may still be establishing. Added `wait_for_kyverno_webhook()` — makes a `kubectl create configmap --dry-run=server` admission request (server-side dry-run hits the actual webhook). Any response except "No agent available"/"context deadline exceeded"/"failed to call webhook" confirms the path is live. Called in `run_helm_step` between `wait_for_cluster_running` and the retry attempt. 120s timeout, 10s polling interval, non-fatal if it times out (best-effort). |
 | 25 | cluster-whisperer setup is GKE-only for demo purposes; Kind mode code paths are not maintained | Kind mode is too resource-intensive for this cluster (300+ CRDs, Crossplane, Kyverno, vector DBs). Do not fix Kind-specific code paths or write Kind-specific tests. |
+| 26 | `forceFailurePolicyIgnore` only covers the primary resource validating webhook — all other Kyverno webhooks must be patched separately | Verified by inspecting the live cluster: `kyverno-resource-validating-webhook-cfg` was `Ignore`, but the policy, exception, cleanup, global-context, and CEL-exception webhook configs remained `Fail`. Added `patch_kyverno_webhooks()` to explicitly set all five to `Ignore` after every install (fresh and resume paths). |
+| 27 | Kyverno-Konnectivity deadlock: when Kyverno's policy validation webhook has `failurePolicy: Fail`, Kyverno restarts during the CRD flood block `TokenReview` requests, severing GKE's Konnectivity tunnel | GKE's Konnectivity agent authenticates its control-plane-to-node tunnel via `TokenReview`. With `failurePolicy: Fail` on Kyverno's policy webhook, TokenReview times out during Kyverno restarts — the Konnectivity tunnel drops and the API server reports "No agent available" for all kubectl operations even after Kyverno recovers. Patching all webhooks to `Ignore` (Decision 26) breaks the deadlock. |
+| 28 | GKE API server OOM kill from CRD flood is invisible to `gcloud` — status reports `RUNNING` and no RESIZE_CLUSTER operation appears | Confirmed across multiple runs: `gcloud container clusters describe` reports `RUNNING` and `gcloud container operations list` shows nothing while the API server is unreachable. The only reliable signal is `kubectl version --request-timeout=5s`. Added `wait_for_api_server()` to poll kubectl connectivity directly as the ground-truth check before retrying failed installs. The OOM kill happens when ~300+ CRDs drive the managed control plane's memory past its allocation — GKE restarts the API server silently. |
+| 29 | `CLUSTER_NAME` must be explicitly set to the existing cluster name in the resume path | When setup.sh detects an existing cluster and resumes, `CLUSTER_NAME` retained the new timestamp value generated at script startup (e.g. `cluster-whisperer-20260507-054630`) rather than the actual cluster name. All gcloud operations querying by name were looking at a nonexistent cluster, producing 6+ minutes of `UNKNOWN` status. Fixed: `CLUSTER_NAME="${existing}"` set immediately when the existing cluster is found. |
+| 30 | Kyverno v1.17.1 does not discover CRDs registered after startup — a rollout restart is required for re-discovery | Confirmed from the Kyverno source and live testing: Kyverno caches API resources at pod start. Any CRD registered after Kyverno starts is unknown to it; admission requests for those types fail with "resource not found in group". Tested: manual `kubectl rollout restart deployment/kyverno-admission-controller` immediately fixed a blocked `ClusterProviderConfig` apply that had been failing for 8+ minutes. A `wait_for_gke_operations` call first is needed to avoid timing with any in-progress resize. |
+| 31 | Kyverno API client rate limits must be raised to 100 QPS / 100 burst in CRD-heavy environments | Default is 20 QPS / 50 burst. Kyverno's startup API discovery walks every API group — with 300+ CRDs this saturates the default limit, causing delays and timeouts that trigger the exit-0 leader election restart loop (GitHub issue #13010, marked "not planned"). Community starting point is 100/100. Added to Helm install: `admissionController.container.extraArgs.clientRateLimitQPS=100` and same for backgroundController. |
+| 32 | `config.webhooks.matchConditions` CEL expression is the only true webhook-level exclusion for specific resource groups | `config.resourceFilters` and `config.resourceFiltersInclude` are Kyverno-internal — the API server still calls the Kyverno webhook for filtered resources; Kyverno just discards them after the call. To prevent the API server from calling the webhook for CRD registrations at all (reducing load during the Crossplane CRD flood), `matchConditions` with CEL `!(request.resource.group == "apiextensions.k8s.io")` is required. Requires K8s 1.27+; GKE 1.35 qualifies. |
+| 33 | Helm `--set` cannot parse values containing commas or leading brackets — use `--set-json` instead | `--set 'config.resourceFiltersInclude[0]=[CustomResourceDefinition,*,*]'` fails because Helm's set parser splits on commas (treating each as a key=value separator) and interprets `[` as array indexing. `--set-json` accepts the value as a raw JSON blob — commas and brackets inside JSON strings are literal characters. Same applies to the `matchConditions` array. |
 
 ---
 
