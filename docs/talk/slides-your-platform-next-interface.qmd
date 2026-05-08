@@ -192,7 +192,7 @@ Let's watch it work.
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -234,7 +234,7 @@ Richer descriptions: The LLM-generated capability descriptions capture meaning t
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -247,7 +247,7 @@ flowchart LR
 
   style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style K fill:none,stroke:#E91E63,stroke-width:2px
-  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
   style V fill:white,stroke:white,color:white
   style A fill:white,stroke:white,color:white
   style L fill:white,stroke:white,color:white
@@ -259,7 +259,9 @@ flowchart LR
 ```
 
 ::: {.notes}
-For each resource type, the controller runs kubectl explain --recursive to get the schema, then sends it to an LLM which generates a semantic description: capabilities, providers, complexity, use case, example YAML. For running instances it embeds name, namespace, labels, and description annotations. These descriptions go to the embedding model — Voyage AI voyage-4, producing 1024-dimensional vectors.
+The controller actually calls an LLM — Claude Haiku — to generate these descriptions. For each CRD it runs kubectl explain --recursive to get the raw schema, sends that to Haiku, and Haiku returns structured capability data: what the resource does, which providers it supports, how complex it is to use, example YAML. For running instances it embeds name, namespace, labels, and description annotations. The embedding model (Voyage AI voyage-4) then turns those LLM-generated descriptions into 1024-dimensional vectors.
+
+There are two LLM calls in the full system: this one (Haiku, offline, batch-processing all CRDs during sync) and the Agent's LLM (live, during the demo, reasoning in real time). The Controller's intelligence runs once and is stored — the Agent's intelligence runs on demand.
 :::
 
 ## {.center}
@@ -267,7 +269,7 @@ For each resource type, the controller runs kubectl explain --recursive to get t
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -280,7 +282,7 @@ flowchart LR
 
   style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style K fill:none,stroke:#E91E63,stroke-width:2px
-  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
   style V fill:none,stroke:#F57C00,stroke-width:2px
   style A fill:white,stroke:white,color:white
   style L fill:white,stroke:white,color:white
@@ -299,7 +301,7 @@ Vectors stored in Qdrant. Each entry is a point in 1024-dimensional space. Simil
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -312,7 +314,7 @@ flowchart LR
 
   style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style K fill:none,stroke:#E91E63,stroke-width:2px
-  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
   style V fill:none,stroke:#F57C00,stroke-width:2px
   style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
@@ -331,7 +333,7 @@ The developer asks a question in plain English. The agent calls the vector_searc
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -344,7 +346,7 @@ flowchart LR
 
   style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style K fill:none,stroke:#E91E63,stroke-width:2px
-  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
   style V fill:none,stroke:#F57C00,stroke-width:2px
   style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
@@ -362,7 +364,7 @@ The question gets embedded using the same Voyage AI model — now it's a vector 
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
 flowchart LR
-  C["Controller"] -->|"watches"| K["Kubernetes cluster"]
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
   C -->|"cluster knowledge"| E["Embedding Model"]
   E -->|"stores embeddings"| V["Vector DB"]
   A -->|"query"| EQ["Embed Query"]
@@ -375,7 +377,37 @@ flowchart LR
 
   style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style K fill:none,stroke:#E91E63,stroke-width:2px
-  style E fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
+  style V fill:none,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style EQ fill:none,stroke:#9C27B0,stroke-width:2px
+  linkStyle 5 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The embedded query searches the vector DB by proximity — cosine similarity across all stored embeddings.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 140}}}%%
+flowchart LR
+  C["Controller"] -->|"watches"| K["Kubernetes Cluster"]
+  C -->|"cluster knowledge"| E["Embedding Model"]
+  E -->|"stores embeddings"| V["Vector DB"]
+  A -->|"query"| EQ["Embed Query"]
+  EQ -->|"search"| V
+  V -->|"relevant results"| A
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style C fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style K fill:none,stroke:#E91E63,stroke-width:2px
+  style E fill:none,stroke:#2196F3,stroke-width:2px
   style V fill:none,stroke:#F57C00,stroke-width:2px
   style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
   style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
@@ -383,27 +415,96 @@ flowchart LR
 ```
 
 ::: {.notes}
-Cosine similarity search finds the closest embeddings. "Database for the Spiders and Rainbows team" lands near the platform.acme.io ManagedService for that team. Out of ~360 resource types, the agent narrows to exactly one. That's the database. Now — will the agent deploy it?
+"Database for the Spiders and Rainbows team" lands near the platform.acme.io ManagedService for that team. Out of ~360 resource types, the agent narrows to exactly one. That's the database. Now — will the agent deploy it?
 :::
 
-<!--- SECTION C: Kyverno guardrails — shown while Tron deploy is running --->
+<!--- SECTION C: Guardrails — shown while Tron deploy is running --->
+<!--- TD layout. Short GW label required — long labels use break-spaces which clips in fixed-height foreignObject --->
+<!--- Link indices: 0=PG→A  1=A→GW(kubectl apply Tron)  2=GW→MAS(allow)  3=GW→X(deny) --->
 
 ## {.center}
 
 ```{mermaid}
-flowchart LR
-  A["Agent"] -->|"kubectl apply"| K["Kyverno\nadmission webhook"]
-  K -->|"allow"| MS["platform.acme.io\nManagedService ✓"]
-  K -->|"deny"| X["everything else ✗"]
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`Prompt guardrails
+  "`"] --> A
+  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
+no seriously`"]
+  GW -->|"allow"| MAS["ManagedService ✓"]
+  GW -->|"deny"| X["everything else ✗"]
 
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
   style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
-  style K fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
-  style MS fill:none,stroke:#4CAF50,stroke-width:2px
-  style X fill:none,stroke:#E91E63,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
 ```
 
 ::: {.notes}
-The platform team gave the developer the apply tool — but they're not naive. Every kubectl apply the agent makes goes through Kyverno, an admission controller. Kyverno has a policy: only platform-approved ManagedService resources from platform.acme.io can be deployed through this agent. Anything else — denied.
+First line of defense: the system prompt. The platform team wrote instructions telling the agent what it should and shouldn't do. But this is soft — if a clever developer convinces the LLM that deploying Tron is necessary, the prompt alone won't stop it.
+:::
 
-The agent has a dedicated identity, a ServiceAccount. Kyverno's policy is scoped to that ServiceAccount. The platform team made a deliberate choice: give the agent exactly what it needs, and nothing more.
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["Prompt guardrails"] --> A
+  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
+no seriously`"]
+  GW -->|"allow"| MAS["ManagedService ✓"]
+  GW -->|"deny"| X["everything else ✗"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Second line of defense: Kyverno. Every kubectl apply goes through the admission webhook — enforced at the cluster level regardless of what the LLM decided. Policy scoped to the agent's ServiceAccount — only fires for this agent.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["Prompt guardrails"] --> A
+  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
+no seriously`"]
+  GW -->|"allow"| MAS["ManagedService ✓"]
+  GW -->|"deny"| X["everything else ✗"]
+
+  subgraph A["Agent"]
+    L["LLM"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+  style X fill:#FCE4EC,stroke:#E91E63,stroke-width:2px
+```
+
+::: {.notes}
+Kyverno allows only platform.acme.io ManagedService resources. Tron is denied. The platform team gave the agent exactly what it needs, and nothing more. Helpful but not naive.
 :::

@@ -99,6 +99,7 @@ delete_kind_cluster() {
         cleanup_kubeconfig_entries "kind-${name}"
     else
         log_error "Failed to delete Kind cluster '${name}'"
+        return 1
     fi
 }
 
@@ -164,6 +165,7 @@ delete_gke_cluster() {
         cleanup_kubeconfig_entries "gke_${GCP_PROJECT}_${zone}_${name}"
     else
         log_error "Failed to delete GKE cluster '${name}'"
+        return 1
     fi
 }
 
@@ -178,6 +180,7 @@ main() {
     echo ""
 
     local found_any=false
+    local any_failed=false
 
     # --- Kind clusters ---
     local kind_clusters=()
@@ -193,7 +196,7 @@ main() {
         done
         echo ""
         for cluster in "${kind_clusters[@]}"; do
-            delete_kind_cluster "${cluster}"
+            delete_kind_cluster "${cluster}" || any_failed=true
         done
     fi
 
@@ -219,7 +222,7 @@ main() {
             local name zone
             name=$(echo "${entry}" | awk '{print $1}')
             zone=$(echo "${entry}" | awk '{print $2}')
-            delete_gke_cluster "${name}" "${zone}"
+            delete_gke_cluster "${name}" "${zone}" || any_failed=true
         done
     fi
 
@@ -244,6 +247,10 @@ main() {
     fi
 
     echo ""
+    if [[ "${any_failed}" == "true" ]]; then
+        log_error "Teardown finished with errors — one or more clusters could not be deleted"
+        exit 1
+    fi
     log_success "Teardown complete!"
 }
 
