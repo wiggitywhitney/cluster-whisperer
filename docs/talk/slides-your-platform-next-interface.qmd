@@ -15,6 +15,10 @@ Cover slide — shown while the audience settles in.
 :::
 
 ## {.center}
+
+[Agent Tools]{style="font-size: 3em; color: #00897B; font-weight: bold;"}
+
+## {.center}
 <!--- SECTION A: agent explainer — shown after kubectl get pods fails --->
 <!--- White-out technique: full diagram on every slide; hidden elements colored to match background --->
 <!--- Link indices: 0=DUMMY→U  1=U→A(question)  2=A→U(answer)  3=A↔T(calls)  4=T-T1  5=T-T2  6=T-T3 --->
@@ -192,6 +196,10 @@ The agent returns its answer to the developer — a diagnosis, a recommendation,
 
 Let's watch it work.
 :::
+
+## {.center}
+
+[Vector Search]{style="font-size: 3em; color: #00897B; font-weight: bold;"}
 
 <!--- SECTION B: vector search — shown after agent hits the CRD wall --->
 <!--- Layout: C+A on left (col 0), K+E+EQ in middle (col 1), V on right (col 2) — mirrors Viktor --->
@@ -429,6 +437,10 @@ flowchart LR
 ::: {.notes}
 "Database for the Spiders and Rainbows team" lands near the platform.acme.io ManagedService for that team. Out of ~360 resource types, the agent narrows to exactly one. That's the database. Now — will the agent deploy it?
 :::
+
+## {.center}
+
+[Guardrails]{style="font-size: 3em; color: #00897B; font-weight: bold;"}
 
 <!--- SECTION C sad path: Tron gets blocked --->
 <!--- 8-slide unroll + deny reveal --->
@@ -962,6 +974,10 @@ is company approved!*`"]
 Allowed. The right resource, from the right agent. Platform team: helpful and not naive.
 :::
 
+
+## {.center}
+
+[Observability]{style="font-size: 3em; color: #00897B; font-weight: bold;"}
 
 ## {.center}
 
