@@ -52,7 +52,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M3.7: Helm install hardening — run_helm_step retry on resize, fix unconditional log_success
 - [x] M3.8: Setup reliability round 2 — Kyverno-Konnectivity deadlock, API server probe, error surfacing
 - [x] M4: Quarto/Mermaid slides for the solo talk
-- [ ] M5: New demo rehearsal runbook
+- [x] M5: New demo rehearsal runbook
 
 ---
 

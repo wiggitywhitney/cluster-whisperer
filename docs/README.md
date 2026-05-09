@@ -33,7 +33,8 @@ Materials from the KubeCon "Choose Your Own Adventure" presentation.
 - [abstract.md](talk/abstract.md) — Conference abstract
 - [choose-your-adventure-demo.md](talk/choose-your-adventure-demo.md) — Full demo flow, act by act
 - [demo-design.md](talk/demo-design.md) — Expected agent investigation behavior and why the demo app is structured the way it is
-- [demo-rehearsal-runbook.md](talk/demo-rehearsal-runbook.md) — Step-by-step commands for running the demo
+- [choose-your-adventure-demo-rehearsal-runbook.md](talk/choose-your-adventure-demo-rehearsal-runbook.md) — Step-by-step commands for running the Choose Your Adventure (KubeCon EU 2026) demo
+- [your-platform-next-interface-demo-rehearsal-runbook.md](talk/your-platform-next-interface-demo-rehearsal-runbook.md) — Step-by-step commands for running the solo talk (SRE Day Austin / KCD Texas) demo
 
 ## Research
 

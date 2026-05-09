@@ -400,10 +400,21 @@ check_prerequisites_gcp() {
         exit 1
     fi
 
-    # Verify Docker is running (needed to build and push demo app image)
-    if ! docker info &>/dev/null; then
-        log_error "Docker is not running (needed to build demo app image)"
-        exit 1
+    # Verify Docker is running (needed to build and push demo app image).
+    # On this machine Docker runs via Colima — start it automatically if needed.
+    if ! docker info &>/dev/null 2>&1; then
+        if command -v colima &>/dev/null; then
+            log_info "Docker not running — starting Colima..."
+            colima start
+            if ! docker info &>/dev/null 2>&1; then
+                log_error "Colima started but Docker is still not responding"
+                exit 1
+            fi
+            log_success "Colima started"
+        else
+            log_error "Docker is not running (needed to build demo app image)"
+            exit 1
+        fi
     fi
 
     log_success "All prerequisites met (GCP mode)"
