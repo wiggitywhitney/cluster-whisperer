@@ -149,7 +149,7 @@ stale_vars=()
 
 if [[ ${#stale_vars[@]} -gt 0 ]]; then
     echo ""
-    log_warning "Stale tool state detected in your shell:"
+    log_warn "Stale tool state detected in your shell:"
     for v in "${stale_vars[@]}"; do
         echo "    ${v}"
     done

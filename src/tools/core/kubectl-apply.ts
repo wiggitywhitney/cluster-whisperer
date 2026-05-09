@@ -53,7 +53,7 @@ export type KubectlApplyInput = z.infer<typeof kubectlApplySchema>;
  */
 export const kubectlApplyDescription = `Deploy a Kubernetes resource by applying a YAML manifest.
 
-The manifest must be complete, valid YAML with at least apiVersion, kind, and metadata.name.
+The manifest must be complete, valid YAML with at least apiVersion and kind.
 Any cluster-level errors will be returned in the result.`;
 
 /**
