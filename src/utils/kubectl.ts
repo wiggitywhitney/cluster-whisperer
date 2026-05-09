@@ -227,6 +227,7 @@ export function executeKubectl(args: string[], options?: KubectlOptions): Kubect
         const result = spawnSync("kubectl", args, {
           encoding: "utf-8", // Return strings instead of Buffers
           timeout: 30000, // 30 second timeout to avoid hanging
+          maxBuffer: 50 * 1024 * 1024, // 50MB — large lists (CRDs, configmaps) exceed the 1MB default
         });
 
         // Handle spawn errors (e.g., kubectl not found)

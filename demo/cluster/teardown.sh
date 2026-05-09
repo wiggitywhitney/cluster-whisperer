@@ -246,6 +246,19 @@ main() {
         log_success "Removed demo environment file: ${demo_env}"
     fi
 
+    # Clear thread memory — the demo thread accumulates all conversation history
+    # across demo runs. Leaving it after teardown contaminates future runs with
+    # stale context (old branding, prior deployments, repeated namespace queries).
+    local threads_dir="${REPO_ROOT}/data/threads"
+    if [[ -d "${threads_dir}" ]]; then
+        local thread_count
+        thread_count=$(find "${threads_dir}" -name "*.json" | wc -l | tr -d ' ')
+        if [[ "${thread_count}" -gt 0 ]]; then
+            rm -f "${threads_dir}"/*.json
+            log_success "Removed ${thread_count} thread checkpoint file(s) from ${threads_dir}"
+        fi
+    fi
+
     echo ""
     if [[ "${any_failed}" == "true" ]]; then
         log_error "Teardown finished with errors — one or more clusters could not be deleted"

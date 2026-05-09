@@ -537,12 +537,8 @@ describe("discoverResources", () => {
     ],
   ]);
 
-  /** Fixture: kubectl get crd -o json output */
-  const crdListOutput = JSON.stringify({
-    apiVersion: "apiextensions.k8s.io/v1",
-    kind: "CustomResourceDefinitionList",
-    items: [{ metadata: { name: "sqls.devopstoolkit.live" } }],
-  });
+  /** Fixture: kubectl get crd jsonpath output (newline-separated names) */
+  const crdListOutput = "sqls.devopstoolkit.live\n";
 
   /** Fixture: kubectl explain output (simplified) */
   const explainOutput =
@@ -650,10 +646,7 @@ describe("discoverResources", () => {
         return { output: apiResourcesOutput, isError: false };
       }
       if (args[0] === "get" && args[1] === "crd") {
-        return {
-          output: JSON.stringify({ items: [] }),
-          isError: false,
-        };
+        return { output: "", isError: false };
       }
       if (args[0] === "explain") {
         return { output: explainOutput, isError: false };

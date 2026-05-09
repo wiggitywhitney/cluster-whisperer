@@ -363,6 +363,10 @@ async function main() {
           console.log("Answer:");
           console.log(finalAnswer);
           console.log();
+          console.log("─".repeat(60));
+          console.log("─".repeat(60));
+          console.log("─".repeat(60));
+          console.log();
         } else {
           console.log("─".repeat(60)); // eslint-disable-line no-console
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console

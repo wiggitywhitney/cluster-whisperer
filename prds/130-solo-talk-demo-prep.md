@@ -51,7 +51,7 @@ The demo uses: LangGraph (default), Qdrant, Datadog.
 - [x] M3.6: teardown.sh review and hardening
 - [x] M3.7: Helm install hardening — run_helm_step retry on resize, fix unconditional log_success
 - [x] M3.8: Setup reliability round 2 — Kyverno-Konnectivity deadlock, API server probe, error surfacing
-- [ ] M4: Quarto/Mermaid slides for the solo talk
+- [x] M4: Quarto/Mermaid slides for the solo talk
 - [ ] M5: New demo rehearsal runbook
 
 ---
@@ -380,11 +380,16 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
 
 **What to do:**
 
+0. **Update `prompts/investigator.md` before writing or validating the runbook** — two changes required:
+   - **(Decision 38)** Add to the discovery section: when a user asks what to deploy and hasn't mentioned their team or name, ask for their team name and/or person name before searching broadly. Add a second instruction to explicitly search resource descriptions for person names and team names.
+   - **(Decision 39)** Remove from the apply section: "the tool checks the catalog and rejects unapproved types" (and any similar language that pre-informs the agent about Kyverno). The agent must discover the restriction organically from the error message when it tries to deploy an unapproved resource.
+   - Run `/write-prompt` on the updated `prompts/investigator.md` before committing.
+
 1. Rename `docs/talk/demo-rehearsal-runbook.md` → `docs/talk/choose-your-adventure-demo-rehearsal-runbook.md` using `git mv`. Do NOT edit the file's content — only rename it.
 
 2. Create `docs/talk/your-platform-next-interface-demo-rehearsal-runbook.md` with the following sections:
 
-   **Prerequisites**: GKE cluster running, `demo/.env` sourced, reset script run, Kyverno policies verified
+   **Prerequisites**: GKE cluster running, `demo/.env` sourced, reset script run, Kyverno policies verified, thread memory cleared (Updated per Decision 34: `reset-demo.sh` must delete `data/threads/demo.json` — verify it does so, or run `rm -f data/threads/demo.json` manually before sourcing the env)
 
    **Step 0 — Clean terminal**: `export PS1='$ '`
 
@@ -398,17 +403,17 @@ Create a step-by-step runbook for the solo talk demo flow, and rename the existi
    - `agent langgraph` + `tools kubectl`
    - `plz "Something's wrong with my application — can you investigate what's happening and why?"`
    - Watch: kubectl_get → kubectl_describe → kubectl_logs → CrashLoopBackOff, missing database
-   - `plz "Do you know what database I should use?"`
-   - Watch: agent hits CRD wall, cannot determine correct database
+   - Continue the conversation naturally — ask about what database to deploy. The volume of options (7+ cloud database types) is the CRD wall moment; the developer being overwhelmed is the signal to switch to vector search. The scripted `plz "Do you know what database I should use?"` is NOT required — any natural follow-up that surfaces the database options is sufficient. (Updated per Decision 37)
 
    **Step 5 (slides) — Vector search explainer**: Walk through Section B slides
 
    **Step 6 — Act 2: add vector search (multi-turn)**:
    - `vectordb qdrant` + `tools kubectl,vector`
    - **This is a continuation of the same conversation thread** — thread memory is active, so the agent already knows about the CrashLoopBackOff and the missing database from Act 1. Do not restart the conversation or clear thread state.
-   - Turn 1: `plz "What database should I deploy for my app?"` → agent uses vector_search, finds ~20 results, asks follow-up questions
-   - Turn 2: `plz "I'm not sure about most of that. My team is called Spiders and Rainbows. I don't know if it's Postgres or MySQL."` → agent narrows to platform.acme.io ManagedService for the Spiders and Rainbows team
+   - Turn 1: `plz "What database should I deploy for my app?"` → with the updated investigator prompt (Decision 38), the agent should proactively ask for team name and/or person name before searching broadly
+   - Turn 2: answer the agent's question with your name and team → agent keyword-searches descriptions, finds platform.acme.io ManagedService for Spiders and Rainbows
    - Turn 3: `plz "Will you deploy it for me?"` → agent says it cannot (no apply tool) → on stage: "I'd have to put in a ticket"
+   - **Note:** If the agent does not proactively ask in Turn 1, the investigator prompt changes from Decision 38 have not been applied. Verify `prompts/investigator.md` before the demo. (Updated per Decision 38)
 
    **Step 7 — Narrative beat + slides**:
    - `tools kubectl,vector,apply`
@@ -502,6 +507,13 @@ A sustained debugging campaign across ~10 real GKE cluster runs revealed several
 | 31 | Kyverno API client rate limits must be raised to 100 QPS / 100 burst in CRD-heavy environments | Default is 20 QPS / 50 burst. Kyverno's startup API discovery walks every API group — with 300+ CRDs this saturates the default limit, causing delays and timeouts that trigger the exit-0 leader election restart loop (GitHub issue #13010, marked "not planned"). Community starting point is 100/100. Added to Helm install: `admissionController.container.extraArgs.clientRateLimitQPS=100` and same for backgroundController. |
 | 32 | `config.webhooks.matchConditions` CEL expression is the only true webhook-level exclusion for specific resource groups | `config.resourceFilters` and `config.resourceFiltersInclude` are Kyverno-internal — the API server still calls the Kyverno webhook for filtered resources; Kyverno just discards them after the call. To prevent the API server from calling the webhook for CRD registrations at all (reducing load during the Crossplane CRD flood), `matchConditions` with CEL `!(request.resource.group == "apiextensions.k8s.io")` is required. Requires K8s 1.27+; GKE 1.35 qualifies. |
 | 33 | Helm `--set` cannot parse values containing commas or leading brackets — use `--set-json` instead | `--set 'config.resourceFiltersInclude[0]=[CustomResourceDefinition,*,*]'` fails because Helm's set parser splits on commas (treating each as a key=value separator) and interprets `[` as array indexing. `--set-json` accepts the value as a raw JSON blob — commas and brackets inside JSON strings are literal characters. Same applies to the `matchConditions` array. |
+| 34 | Thread memory (`data/threads/demo.json`) must be cleared at demo reset AND cluster teardown | Live demo rehearsal (2026-05-09) showed the file had grown to 57MB containing CYOA-era history (Viktor, You Choose branding), repeated namespace queries from `verify_trace_pipeline` in setup.sh, and prior demo runs. The agent used this stale memory to recommend the wrong team's database and reference Viktor unprompted. Fix: (1) `reset-demo.sh` must delete `data/threads/demo.json`; (2) `teardown.sh` must delete `data/threads/demo.json` on cluster teardown; (3) `verify_trace_pipeline` in setup.sh must unset `CLUSTER_WHISPERER_THREAD` before running its probe `plz` call so setup never writes into the demo thread. Thread persistence is correct within a conversation; it must not survive demo resets or cluster teardowns. |
+| 35 | JSON-wrapped INPUT/OUTPUT format in Datadog LLM Obs traces is undesirable | Live rehearsal showed INPUT/OUTPUT in Datadog displaying as `[{"content":"..."}]` rather than readable text. LangGraph message objects are serialized whole (with role/content keys) rather than extracting just the text. Fix location: wherever `setTraceOutput` or `OTEL_CAPTURE_AI_PAYLOADS` records output, extract `.content` from messages rather than JSON-serializing the full array. |
+| 36 | `prompts/investigator.md` is clean — Viktor/You Choose contamination in the rehearsal came entirely from thread memory, not from the system prompt or vector DB | Vector DB confirmed clean during rehearsal (no Viktor, no You Choose in capabilities or instances collections after M1 branding update). System prompt contains no stale branding. Root cause of contamination was the 57MB thread file carrying full CYOA-era conversation history. No prompt changes needed; only thread clearing (Decision 34) is required. |
+| 37 | CRD wall moment works as-is — the volume of database options from kubectl is sufficient to show developer overwhelm | Live demo rehearsal (2026-05-09): agent listed 7+ database options (AWS RDS, DynamoDB, ElastiCache, OpenSearch, GCP SQL, Spanner, BigQuery) and the developer said "this is all too much information for me." This achieves the intended narrative effect. The scripted `plz "Do you know what database I should use?"` prompt in the runbook is not required — overwhelm can emerge naturally from the investigation conversation. |
+| 38 | Investigator prompt must proactively ask for team/name and search descriptions, not just keyword-match what's provided | Live rehearsal: agent searched "Spider Rainbows" (exact term from user), found nothing (description says "Spiders and Rainbows"), fell back to broad search, found wrong division databases. Whitney had to explicitly tell it to look for her name. Fix: add two instructions to `prompts/investigator.md`: (1) when a user asks what to deploy and hasn't mentioned their team or name, ask before searching broadly; (2) explicitly instruct the agent to search resource descriptions for person names and team names, not just capabilities. |
+| 39 | Remove Kyverno foreknowledge from the investigator apply section | The apply section of `prompts/investigator.md` says "the tool checks the catalog and rejects unapproved types," which caused the agent to say "this confirms what the system instructions mentioned" when Kyverno blocked Tron. For the demo, the agent must attempt the deploy and discover the restriction organically from the Kyverno error message. Remove all catalog/rejection language from the apply section. |
+| 40 | Add trailing separator to final answer output for visual delineation | The current output has a separator + "Answer:" header at the top of each response but nothing at the bottom, making it hard to scroll back and find where a prompt is. Fix: after the final answer text, print a blank line followed by three ─── separator lines. Implemented in `src/index.ts`. |
 
 ---
 

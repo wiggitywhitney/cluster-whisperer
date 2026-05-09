@@ -138,7 +138,28 @@ fi
 echo ""
 log_info "Demo reset complete. Cluster is ready for a fresh run."
 echo ""
-echo "  Next steps:"
-echo "    source demo/.env"
-echo "    kubectl get pods  # should fail (no KUBECONFIG in your shell)"
+
+# Detect stale tool state from a prior demo run and warn loudly.
+# The subshell inherits parent env vars, so if these are set here, the presenter's
+# shell is still in a mid-demo tool configuration that will break Act 1.
+stale_vars=()
+[[ -n "${CLUSTER_WHISPERER_TOOLS:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_TOOLS=${CLUSTER_WHISPERER_TOOLS}")
+[[ -n "${CLUSTER_WHISPERER_AGENT:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_AGENT=${CLUSTER_WHISPERER_AGENT}")
+[[ -n "${CLUSTER_WHISPERER_VECTOR_BACKEND:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_VECTOR_BACKEND=${CLUSTER_WHISPERER_VECTOR_BACKEND}")
+
+if [[ ${#stale_vars[@]} -gt 0 ]]; then
+    echo ""
+    log_warning "Stale tool state detected in your shell:"
+    for v in "${stale_vars[@]}"; do
+        echo "    ${v}"
+    done
+    echo ""
+    echo "  Reset your shell by running:"
+    echo "    source demo/.env"
+    echo "  (This unsets all tool vars and restores Act 1 defaults.)"
+else
+    echo "  Next steps:"
+    echo "    source demo/.env"
+    echo "    kubectl get pods  # should fail (no KUBECONFIG in your shell)"
+fi
 echo ""

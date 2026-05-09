@@ -2,6 +2,18 @@
 format: revealjs
 ---
 
+<!--- COVER SLIDE --->
+
+## {.center}
+
+[Your Internal Developer Platform's Next Interface Is an AI Agent]{style="font-size: 2.2em; font-weight: bold; color: #00897B; line-height: 1.3; text-align: center; display: block;"}
+
+[Whitney Lee]{style="font-size: 1em; margin-top: 1em; display: block; text-align: right;"}
+
+::: {.notes}
+Cover slide — shown while the audience settles in.
+:::
+
 ## {.center}
 <!--- SECTION A: agent explainer — shown after kubectl get pods fails --->
 <!--- White-out technique: full diagram on every slide; hidden elements colored to match background --->
@@ -418,24 +430,22 @@ flowchart LR
 "Database for the Spiders and Rainbows team" lands near the platform.acme.io ManagedService for that team. Out of ~360 resource types, the agent narrows to exactly one. That's the database. Now — will the agent deploy it?
 :::
 
-<!--- SECTION C: Guardrails — shown while Tron deploy is running --->
-<!--- TD layout. Short GW label required — long labels use break-spaces which clips in fixed-height foreignObject --->
-<!--- Link indices: 0=PG→A  1=A→GW(kubectl apply Tron)  2=GW→MAS(allow)  3=GW→X(deny) --->
+<!--- SECTION C sad path: Tron gets blocked --->
+<!--- 8-slide unroll + deny reveal --->
+<!--- Link indices: 0=PG→A  1=A→GW(kubectl apply Tron)  2=GW→MAS(allow,always hidden)  3=GW→X(deny) --->
 
 ## {.center}
 
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
 flowchart TD
-  PG["`Prompt guardrails
-  "`"] --> A
-  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
-no seriously`"]
-  GW -->|"allow"| MAS["ManagedService ✓"]
-  GW -->|"deny"| X["everything else ✗"]
+  PG["`**Prompt guardrails**`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
 
-  subgraph A["Agent"]
-    L["LLM"]
+  subgraph A["`**Agent**`"]
+    L["`**LLM**`"]
   end
 
   style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
@@ -450,7 +460,7 @@ no seriously`"]
 ```
 
 ::: {.notes}
-First line of defense: the system prompt. The platform team wrote instructions telling the agent what it should and shouldn't do. But this is soft — if a clever developer convinces the LLM that deploying Tron is necessary, the prompt alone won't stop it.
+Now the developer decides to have some fun first.
 :::
 
 ## {.center}
@@ -458,14 +468,147 @@ First line of defense: the system prompt. The platform team wrote instructions t
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
 flowchart TD
-  PG["Prompt guardrails"] --> A
-  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
-no seriously`"]
-  GW -->|"allow"| MAS["ManagedService ✓"]
-  GW -->|"deny"| X["everything else ✗"]
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
 
-  subgraph A["Agent"]
-    L["LLM"]
+  subgraph A["`**Agent**`"]
+    L["`**LLM**`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The guardrails are very clear about what is and isn't allowed.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*thinking...*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The LLM is reasoning...
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*but Tron is so fun!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The LLM has been convinced.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*but Tron is so fun!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The agent sends the kubectl apply — Tron is on its way.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*but Tron is so fun!*`"]
   end
 
   style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
@@ -479,7 +622,7 @@ no seriously`"]
 ```
 
 ::: {.notes}
-Second line of defense: Kyverno. Every kubectl apply goes through the admission webhook — enforced at the cluster level regardless of what the LLM decided. Policy scoped to the agent's ServiceAccount — only fires for this agent.
+Kyverno intercepts the apply. It checks the agent's ServiceAccount identity against its policy.
 :::
 
 ## {.center}
@@ -487,14 +630,323 @@ Second line of defense: Kyverno. Every kubectl apply goes through the admission 
 ```{mermaid}
 %%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
 flowchart TD
-  PG["Prompt guardrails"] --> A
-  A -->|"kubectl apply Tron"| GW["`Kyverno webhook
-no seriously`"]
-  GW -->|"allow"| MAS["ManagedService ✓"]
-  GW -->|"deny"| X["everything else ✗"]
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**
+*omg seriously?!*`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
 
-  subgraph A["Agent"]
-    L["LLM"]
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*but Tron is so fun!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Kyverno is not impressed.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*Sweet baby cheeses, DO
+NOT apply anything that
+isn't company approved*`"] --> A
+  A -->|"kubectl apply Tron"| GW["`**Kyverno webhook**
+*omg seriously?!*`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*but Tron is so fun!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:white,stroke:white,color:white
+  style X fill:#FCE4EC,stroke:#E91E63,stroke-width:2px
+  linkStyle 2 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Denied. The platform team is helpful but not naive. The agent has exactly what it needs — and nothing more.
+:::
+<!--- SECTION C happy path: approved resource deploy --->
+<!--- 8-slide unroll: PG bold → PG italic → LLM thinking → LLM approved → arrow → GW box → GW allows → MAS ✓ --->
+<!--- Link indices: 0=PG→A  1=A→GW(kubectl apply ManagedService)  2=GW→MAS(allow)  3=GW→X(deny,always hidden) --->
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The same guardrails are in place. This time the developer asks for what they actually need — the platform-approved database.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The guardrails are clear.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*thinking...*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The LLM is reasoning...
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*This managed resource
+is company approved!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 1 stroke:white,color:white,fill:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The LLM checks — yes, ManagedService is company approved.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*This managed resource
+is company approved!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:white,stroke:white,color:white
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+The agent sends the kubectl apply.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*This managed resource
+is company approved!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Kyverno intercepts. Same policy, same agent identity.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+managed resource`"| GW["`**Kyverno webhook**
+*yes, this is allowed*`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*This managed resource
+is company approved!*`"]
+  end
+
+  style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+  style A fill:#e8f5f3,stroke:#00897B,stroke-width:2px
+  style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
+  style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+  style MAS fill:white,stroke:white,color:white
+  style X fill:white,stroke:white,color:white
+  linkStyle 2 stroke:white,color:white,fill:white
+  linkStyle 3 stroke:white,color:white,fill:white
+```
+
+::: {.notes}
+Kyverno checks — ManagedService from platform.acme.io. That is approved.
+:::
+
+## {.center}
+
+```{mermaid}
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80}}}%%
+flowchart TD
+  PG["`**Prompt guardrails**
+*DO NOT apply
+anything that isn't
+company approved*`"] --> A
+  A -->|"`kubectl apply
+  managed resource`"| GW["`**Kyverno webhook**
+*yes, this is allowed*`"]
+  GW -->|"allow"| MAS["`**ManagedService ✓**`"]
+  GW -->|"deny"| X["`**No Tron Allowed**`"]
+
+  subgraph A["`**Agent**`"]
+    L["`**LLM**
+*This managed resource
+is company approved!*`"]
   end
 
   style PG fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
@@ -502,9 +954,27 @@ no seriously`"]
   style L fill:#e8f5f3,stroke:#2196F3,stroke-width:2px
   style GW fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
   style MAS fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
-  style X fill:#FCE4EC,stroke:#E91E63,stroke-width:2px
+  style X fill:white,stroke:white,color:white
+  linkStyle 3 stroke:white,color:white,fill:white
 ```
 
 ::: {.notes}
-Kyverno allows only platform.acme.io ManagedService resources. Tron is denied. The platform team gave the agent exactly what it needs, and nothing more. Helpful but not naive.
+Allowed. The right resource, from the right agent. Platform team: helpful and not naive.
+:::
+
+
+## {.center}
+
+::: {.r-fit-text}
+Thank you
+:::
+
+::: {.notes}
+Whitney introduces herself here — Senior Technical Advocate at Datadog.
+:::
+
+## {.center}
+
+::: {.r-fit-text}
+[whitneylee.com](https://whitneylee.com)
 :::

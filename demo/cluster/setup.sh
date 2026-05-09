@@ -1812,17 +1812,23 @@ verify_trace_pipeline() {
 
     # Send a test trace via a quick agent query with tracing enabled.
     # The OTel collector is in-cluster; use port-forward for the OTLP endpoint.
+    # Use --tools kubectl only — vector tools need a live DB URL (not yet exported)
+    # and slow down startup; kubectl alone is sufficient to generate spans.
     local otlp_port=4318
     kubectl port-forward -n otel-collector \
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
-    sleep 4
+    sleep 10
 
     log_info "Sending test trace via agent query..."
-    OTEL_TRACING_ENABLED=true \
-    OTEL_EXPORTER_TYPE=otlp \
-    OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
-        npx tsx "${REPO_ROOT}/src/index.ts" "what namespaces exist?" &>/dev/null || true
+    # Unset CLUSTER_WHISPERER_THREAD so this probe call never writes into the
+    # demo thread — if demo/.env was previously sourced in this shell, the thread
+    # env var would be inherited and all setup runs would pollute the demo history.
+    env -u CLUSTER_WHISPERER_THREAD \
+        OTEL_TRACING_ENABLED=true \
+        OTEL_EXPORTER_TYPE=otlp \
+        OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
+        npx tsx "${REPO_ROOT}/src/index.ts" --tools kubectl "what namespaces exist?" &>/dev/null || true
 
     kill "${otlp_pf_pid}" 2>/dev/null || true
     wait "${otlp_pf_pid}" 2>/dev/null || true
@@ -2823,15 +2829,17 @@ main() {
     run_helm_step "install_jaeger" install_jaeger
     run_helm_step "install_otel_collector" install_otel_collector
     run_step "verify_observability" verify_observability
-    run_step "verify_trace_pipeline" verify_trace_pipeline
     run_step "deploy_demo_app" deploy_demo_app
 
     # deploy_cluster_whisperer_serve is a hard failure — the agent server must
     # exist for the demo. verify-kyverno-policy.sh runs after it because it
     # impersonates the cluster-whisperer-mcp SA which is created by this step.
+    # verify_trace_pipeline also runs after: it sends a query through the agent
+    # and checks for traces in Jaeger, so the agent must be deployed first.
     deploy_cluster_whisperer_serve
     # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
     run_step "verify-kyverno-policy" "${SCRIPT_DIR}/verify-kyverno-policy.sh"
+    run_step "verify_trace_pipeline" verify_trace_pipeline
     run_step "create_ingress_resources" create_ingress_resources
     run_step "run_capability_inference" run_capability_inference
     run_step "verify_vector_search" verify_vector_search
