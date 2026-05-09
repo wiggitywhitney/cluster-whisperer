@@ -154,12 +154,11 @@ if [[ ${#stale_vars[@]} -gt 0 ]]; then
         echo "    ${v}"
     done
     echo ""
-    echo "  Reset your shell by running:"
-    echo "    source demo/.env"
-    echo "  (This unsets all tool vars and restores Act 1 defaults.)"
-else
-    echo "  Next steps:"
-    echo "    source demo/.env"
-    echo "    kubectl get pods  # should fail (no KUBECONFIG in your shell)"
 fi
+
+echo "  Next steps (order matters — source before setting tools):"
+echo "    source demo/.env   # unsets all tool vars"
+echo "    agent langgraph    # set agent"
+echo "    tools kubectl      # Act 1 starts with kubectl only — set AFTER source"
+echo "    kubectl get pods   # should fail (no KUBECONFIG in your shell)"
 echo ""
