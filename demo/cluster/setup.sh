@@ -1967,11 +1967,20 @@ verify_vector_search() {
 
     # Check Chroma has a capabilities collection.
     # Chroma v2 API requires the full tenant/database path — /api/v2/collections alone returns 404.
-    local chroma_collections
-    chroma_collections=$(curl -sf "${chroma_url}/api/v2/tenants/default_tenant/databases/default_database/collections" 2>/dev/null || true)
-    if echo "${chroma_collections}" | grep -q '"capabilities"'; then
-        log_success "Chroma capabilities collection is populated"
-    else
+    # Retry a few times: the ingress may take a moment to route after creation.
+    local chroma_ok=false
+    local chroma_url_full="${chroma_url}/api/v2/tenants/default_tenant/databases/default_database/collections"
+    for attempt in 1 2 3; do
+        local chroma_collections
+        chroma_collections=$(curl -sf "${chroma_url_full}" 2>/dev/null || true)
+        if echo "${chroma_collections}" | grep -q '"capabilities"'; then
+            log_success "Chroma capabilities collection is populated"
+            chroma_ok=true
+            break
+        fi
+        [[ $attempt -lt 3 ]] && sleep 5
+    done
+    if [[ "${chroma_ok}" != "true" ]]; then
         log_warning "Could not verify Chroma collection — check manually"
     fi
 

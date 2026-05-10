@@ -45,6 +45,15 @@ const EXCLUDED_RESOURCE_NAMES = new Set([
   // objects, not running instances — capability sync covers them as types already.
   "customresourcedefinitions",
   "managedresourcedefinitions",
+  // Access-review resources: ephemeral request objects (create-only, no list verb).
+  // You CREATE them to get a response; they are never persisted or listable.
+  "bindings",
+  "localsubjectaccessreviews",
+  "selfsubjectaccessreviews",
+  "selfsubjectreviews",
+  "selfsubjectrulesreviews",
+  "subjectaccessreviews",
+  "tokenreviews",
 ]);
 
 // ---------------------------------------------------------------------------
