@@ -401,7 +401,17 @@ check_prerequisites_gcp() {
     fi
 
     # Verify Docker is running (needed to build and push demo app image).
-    # On this machine Docker runs via Colima — start it automatically if needed.
+    # On this machine Docker runs via Colima instead of Docker Desktop (Datadog
+    # policy). Switch to the colima context first so all docker calls use the
+    # correct socket — Docker Desktop intercepts the default socket and rejects
+    # buildx calls even when docker info succeeds.
+    if command -v colima &>/dev/null && docker context ls 2>/dev/null | grep -q "^colima"; then
+        docker context use colima &>/dev/null 2>&1 || true
+        log_info "Docker context: colima"
+    fi
+
+    # Now check that Docker (via the active context) is actually responding.
+    # If not and Colima is installed, start it.
     if ! docker info &>/dev/null 2>&1; then
         if command -v colima &>/dev/null; then
             log_info "Docker not running — starting Colima..."
@@ -1997,7 +2007,10 @@ build_demo_app_image() {
     fi
 
     log_info "Building demo app Docker image..."
-    docker build ${platform_flag} -t demo-app:latest "${demo_app_dir}" --quiet
+    if ! docker build ${platform_flag} -t demo-app:latest "${demo_app_dir}" --quiet; then
+        log_error "Failed to build demo app image"
+        return 1
+    fi
     log_success "Demo app image built"
 }
 
@@ -2054,8 +2067,14 @@ deploy_demo_app_gke() {
     gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --quiet 2>/dev/null
 
     log_info "Pushing demo app image to ${tagged_image}..."
-    docker tag demo-app:latest "${tagged_image}"
-    docker push "${tagged_image}" --quiet
+    if ! docker tag demo-app:latest "${tagged_image}"; then
+        log_error "Failed to tag demo app image"
+        return 1
+    fi
+    if ! docker push "${tagged_image}" --quiet; then
+        log_error "Failed to push demo app image to Artifact Registry"
+        return 1
+    fi
     log_success "Image pushed to Artifact Registry"
 
     # Apply manifests with the correct image inline to avoid a double rollout.
@@ -2335,7 +2354,7 @@ setup_cli_identity() {
     # Generate SA token — fail explicitly if the API cannot issue the token.
     # GKE caps token duration at 48h regardless of --duration; regenerate before each demo.
     local token cluster_server cluster_ca
-    if ! token=$(kubectl create token cluster-whisperer-cli -n cluster-whisperer --duration=8760h); then
+    if ! token=$(kubectl create token cluster-whisperer-cli -n cluster-whisperer --duration=48h); then
         log_error "Failed to create token for cluster-whisperer-cli SA"
         return 1
     fi
@@ -2410,7 +2429,10 @@ build_cluster_whisperer_image() {
     fi
 
     log_info "Building cluster-whisperer Docker image..."
-    docker build ${platform_flag} -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
+    if ! docker build ${platform_flag} -t cluster-whisperer:latest "${REPO_ROOT}" --quiet; then
+        log_error "Failed to build cluster-whisperer image"
+        return 1
+    fi
     log_success "cluster-whisperer image built"
 }
 
@@ -2452,8 +2474,14 @@ deploy_cluster_whisperer_serve() {
         local tagged_image="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/cluster-whisperer:latest"
 
         log_info "Pushing cluster-whisperer image to ${tagged_image}..."
-        docker tag cluster-whisperer:latest "${tagged_image}"
-        docker push "${tagged_image}" --quiet
+        if ! docker tag cluster-whisperer:latest "${tagged_image}"; then
+            log_error "Failed to tag cluster-whisperer image"
+            return 1
+        fi
+        if ! docker push "${tagged_image}" --quiet; then
+            log_error "Failed to push cluster-whisperer image to Artifact Registry"
+            return 1
+        fi
         log_success "Image pushed to Artifact Registry"
 
         # Apply manifest with the correct image inline to avoid a double rollout.
