@@ -1965,10 +1965,11 @@ verify_vector_search() {
     local chroma_url="http://chroma.${BASE_DOMAIN}"
     local qdrant_url="http://qdrant.${BASE_DOMAIN}"
 
-    # Check Chroma has documents in the capabilities collection
+    # Check Chroma has a capabilities collection.
+    # Chroma v2 API requires the full tenant/database path — /api/v2/collections alone returns 404.
     local chroma_collections
-    chroma_collections=$(curl -sf "${chroma_url}/api/v2/collections" 2>/dev/null || true)
-    if [[ -n "${chroma_collections}" ]]; then
+    chroma_collections=$(curl -sf "${chroma_url}/api/v2/tenants/default_tenant/databases/default_database/collections" 2>/dev/null || true)
+    if echo "${chroma_collections}" | grep -q '"capabilities"'; then
         log_success "Chroma capabilities collection is populated"
     else
         log_warning "Could not verify Chroma collection — check manually"
