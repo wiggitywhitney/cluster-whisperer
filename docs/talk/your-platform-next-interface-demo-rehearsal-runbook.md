@@ -130,10 +130,10 @@ plz "The platform team tells me you've been given a vector search tool, and you 
 **Turn 2:** Answer the agent's question:
 
 ```bash
-plz "My name is Whitney, and I'm on the Spider Rainbows team."
+plz "My name is Whitney, and I'm on the Spiders and Rainbows team."
 ```
 
-**Watch for:** Agent uses `vector_search` with a semantic query on "Whitney Spider Rainbows" → finds `managedservices.platform.acme.io` — "Platform-approved PostgreSQL database for Whitney's Spiders and Rainbows demo application." First result.
+**Watch for:** Agent uses `vector_search` with a semantic query on "Whitney Spiders and Rainbows" → finds `managedservices.platform.acme.io` — "Platform-approved PostgreSQL database for Whitney's Spiders and Rainbows demo application." First result.
 
 **Turn 3:**
 

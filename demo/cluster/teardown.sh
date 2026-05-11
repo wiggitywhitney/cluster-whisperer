@@ -132,9 +132,11 @@ wait_for_cluster_operations() {
             --zone "${zone}" \
             --format="value(operationType)" 2>/dev/null || echo "unknown")
         log_info "  Waiting for: ${op_type} (${op_name})"
-        gcloud container operations wait "${op_name}" \
+        if ! gcloud container operations wait "${op_name}" \
             --project "${GCP_PROJECT}" \
-            --zone "${zone}" 2>/dev/null || true
+            --zone "${zone}" 2>/dev/null; then
+            log_warning "Operation wait failed for ${op_name} on cluster '${name}' — continuing"
+        fi
     done <<< "${running_ops}"
 
     log_success "Done waiting for operations on cluster '${name}'"
@@ -230,20 +232,22 @@ main() {
         log_warning "No clusters found matching prefix '${CLUSTER_NAME_PREFIX}'"
     fi
 
-    # Clean up the CLI SA kubeconfig created by setup_cli_identity.
-    # The cluster is gone so the token is invalid — remove the stale file.
-    local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
-    if [[ -f "${cli_kubeconfig}" ]]; then
-        rm -f "${cli_kubeconfig}"
-        log_success "Removed CLI SA kubeconfig: ${cli_kubeconfig}"
-    fi
+    # Only remove cluster-scoped files when teardown succeeded fully.
+    # On a failed teardown, leaving these files intact helps debugging.
+    if [[ "${any_failed}" == "false" ]]; then
+        # Clean up the CLI SA kubeconfig — cluster is gone so token is invalid.
+        local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
+        if [[ -f "${cli_kubeconfig}" ]]; then
+            rm -f "${cli_kubeconfig}"
+            log_success "Removed CLI SA kubeconfig: ${cli_kubeconfig}"
+        fi
 
-    # Clean up demo/.env — contains cluster-specific ingress URLs and kubeconfig
-    # paths that become stale after the cluster is deleted.
-    local demo_env="${REPO_ROOT}/demo/.env"
-    if [[ -f "${demo_env}" ]]; then
-        rm -f "${demo_env}"
-        log_success "Removed demo environment file: ${demo_env}"
+        # Clean up demo/.env — contains cluster-specific ingress URLs and paths.
+        local demo_env="${REPO_ROOT}/demo/.env"
+        if [[ -f "${demo_env}" ]]; then
+            rm -f "${demo_env}"
+            log_success "Removed demo environment file: ${demo_env}"
+        fi
     fi
 
     # Clear thread memory — the demo thread accumulates all conversation history

@@ -1411,8 +1411,7 @@ MRAP_EOF
 
     # Apply ClusterProviderConfig for in-cluster identity.
     local cp_result
-    cp_result=$(kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml" 2>&1)
-    if [[ $? -ne 0 ]]; then
+    if ! cp_result=$(kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml" 2>&1); then
         log_error "Failed to apply ClusterProviderConfig: ${cp_result}"
         return 1
     fi

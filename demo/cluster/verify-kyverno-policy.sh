@@ -178,7 +178,8 @@ CLI_POLICY_NAME="cluster-whisperer-cli-resource-allowlist"
 CLI_SA="system:serviceaccount:cluster-whisperer:cluster-whisperer-cli"
 
 if ! kubectl get clusterpolicy "${CLI_POLICY_NAME}" &>/dev/null; then
-    echo -e "${YELLOW}[skip]${NC} CLI SA policy not found — run setup-cli-identity.sh first"
+    echo -e "${RED}[error]${NC} CLI SA policy '${CLI_POLICY_NAME}' not found — cluster may not have been set up with CLI identity"
+    exit 1
 else
     info "Test 5: ConfigMap creation as cluster-whisperer-cli SA should be rejected by Kyverno..."
     # Use kubectl create (not apply) to guarantee a CREATE operation — the Kyverno policy
@@ -200,12 +201,15 @@ else
     fi
 
     info "Test 6: ManagedService creation as cluster-whisperer-cli SA should be allowed by Kyverno..."
+    local cli_allow_exit=0
     CLI_ALLOW_OUTPUT=$(echo "${MANAGED_SERVICE_MANIFEST}" | kubectl apply -f - \
         -n "${NAMESPACE}" \
-        --as="${CLI_SA}" 2>&1 || true)
+        --as="${CLI_SA}" 2>&1) || cli_allow_exit=$?
 
     if echo "${CLI_ALLOW_OUTPUT}" | grep -q "denied the request"; then
         fail "CLI SA: ManagedService was rejected by Kyverno — policy is too broad"
+    elif [[ $cli_allow_exit -ne 0 ]]; then
+        fail "CLI SA: ManagedService apply failed (non-Kyverno error). Exit: ${cli_allow_exit}. Output: ${CLI_ALLOW_OUTPUT}"
     else
         pass "CLI SA: ManagedService not blocked by Kyverno"
     fi
