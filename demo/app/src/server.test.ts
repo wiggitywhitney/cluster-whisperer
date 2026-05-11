@@ -34,29 +34,30 @@ describe("GET /healthz", () => {
 });
 
 describe("GET /", () => {
-  it("returns HTML page with spider image", async () => {
+  it("returns HTML page with rainbow and spider images", async () => {
     const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const body = await res.text();
-    expect(body).toContain("Spider-v3.png");
+    expect(body).toContain("Rainbow.png");
+    expect(body).toContain("Spider-v1.png");
   });
 
-  it("includes YouTube links for Whitney and Viktor", async () => {
+  it("links the whole image to Whitney's YouTube channel", async () => {
     const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
     const body = await res.text();
     expect(body).toContain("https://www.youtube.com/@wiggitywhitney");
-    expect(body).toContain("https://www.youtube.com/@DevOpsToolkit");
+    expect(body).not.toContain("https://www.youtube.com/@DevOpsToolkit");
   });
 
-  it("has clickable top/bottom zones on the image", async () => {
+  it("uses a single link with no split click zones", async () => {
     const app = createApp({ pool: createMockPool() });
     const res = await app.request("/");
     const body = await res.text();
-    // Two link zones covering top and bottom halves
-    expect(body).toContain('height: 50%');
+    // Single link wraps the whole container — no 50% height split zones
+    expect(body).not.toContain('height: 50%');
   });
 });
 

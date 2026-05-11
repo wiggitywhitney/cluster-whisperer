@@ -153,19 +153,12 @@ export class QdrantBackend implements VectorStore {
 
     const url =
       options?.qdrantUrl ?? process.env.CLUSTER_WHISPERER_QDRANT_URL ?? process.env.QDRANT_URL ?? DEFAULT_QDRANT_URL;
-    const parsed = new URL(url);
-
-    // When a port is explicit in the URL (e.g., http://localhost:6333), use it.
-    // When no port is specified (e.g., http://qdrant.nip.io via ingress),
-    // fall back to the protocol default (80/443) — not the Qdrant default (6333).
-    const port = parsed.port
-      ? parseInt(parsed.port, 10)
-      : parsed.protocol === "https:" ? 443 : 80;
-
-    this.client = new QdrantClient({
-      host: parsed.hostname,
-      port,
-    });
+    // Pass the URL directly so the client uses it as-is — no implicit port
+    // appended. Using host+port causes the client to construct a URL like
+    // http://qdrant.nip.io:80, which sends Host: qdrant.nip.io:80 to NGINX.
+    // NGINX ingress rules match on hostname only (no port), so the version
+    // check request fails to route and the compatibility warning fires.
+    this.client = new QdrantClient({ url });
   }
 
   /**

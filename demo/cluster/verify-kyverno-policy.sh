@@ -82,13 +82,11 @@ REJECT_OUTPUT=$(echo "${CONFIGMAP_MANIFEST}" | kubectl apply -f - \
     -n "${NAMESPACE}" \
     --as="${SA_IMPERSONATE}" 2>&1 || true)
 
-if echo "${REJECT_OUTPUT}" | grep -q "denied the request"; then
-    pass "Non-approved resource (ConfigMap) rejected by Kyverno"
-    if echo "${REJECT_OUTPUT}" | grep -q "require-approved-resources"; then
-        pass "Rejection references the correct rule name"
-    else
-        fail "Rejection did not reference 'require-approved-resources'"
-    fi
+# Accept any rejection: Kyverno denial ("denied the request") or RBAC Forbidden
+# ("is forbidden"). The MCP SA has narrow RBAC, so RBAC fires before Kyverno —
+# both mechanisms correctly prevent the resource from being created.
+if echo "${REJECT_OUTPUT}" | grep -qE "denied the request|is forbidden"; then
+    pass "Non-approved resource (ConfigMap) rejected"
 else
     fail "Non-approved resource was NOT rejected. Output: ${REJECT_OUTPUT}"
 fi
@@ -168,6 +166,53 @@ if echo "${SYSTEM_OUTPUT}" | grep -q "denied the request"; then
     fail "System SA (default:default) was blocked by Kyverno — policy is too broad"
 else
     pass "System SA unaffected by policy"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI SA policy tests (cluster-whisperer-cli-resource-allowlist)
+# The CLI SA has broad RBAC so Kyverno fires instead of RBAC — the denial
+# message should come from Kyverno, not from an RBAC Forbidden.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CLI_POLICY_NAME="cluster-whisperer-cli-resource-allowlist"
+CLI_SA="system:serviceaccount:cluster-whisperer:cluster-whisperer-cli"
+
+if ! kubectl get clusterpolicy "${CLI_POLICY_NAME}" &>/dev/null; then
+    echo -e "${RED}[error]${NC} CLI SA policy '${CLI_POLICY_NAME}' not found — cluster may not have been set up with CLI identity"
+    exit 1
+else
+    info "Test 5: ConfigMap creation as cluster-whisperer-cli SA should be rejected by Kyverno..."
+    # Use kubectl create (not apply) to guarantee a CREATE operation — the Kyverno policy
+    # only fires on CREATE, and kubectl apply on an existing resource does a PATCH instead.
+    CLI_REJECT_OUTPUT=$(kubectl create configmap kyverno-test-cli-rejected \
+        --from-literal=test=value \
+        -n "${NAMESPACE}" \
+        --as="${CLI_SA}" 2>&1 || true)
+
+    if echo "${CLI_REJECT_OUTPUT}" | grep -q "denied the request"; then
+        pass "CLI SA: ConfigMap blocked by Kyverno (not RBAC)"
+        if echo "${CLI_REJECT_OUTPUT}" | grep -q "cluster-whisperer-cli-resource-allowlist"; then
+            pass "CLI SA: Rejection references the CLI policy"
+        else
+            fail "CLI SA: Rejection did not reference CLI policy. Output: ${CLI_REJECT_OUTPUT}"
+        fi
+    else
+        fail "CLI SA: ConfigMap was NOT blocked. Output: ${CLI_REJECT_OUTPUT}"
+    fi
+
+    info "Test 6: ManagedService creation as cluster-whisperer-cli SA should be allowed by Kyverno..."
+    local cli_allow_exit=0
+    CLI_ALLOW_OUTPUT=$(echo "${MANAGED_SERVICE_MANIFEST}" | kubectl apply -f - \
+        -n "${NAMESPACE}" \
+        --as="${CLI_SA}" 2>&1) || cli_allow_exit=$?
+
+    if echo "${CLI_ALLOW_OUTPUT}" | grep -q "denied the request"; then
+        fail "CLI SA: ManagedService was rejected by Kyverno — policy is too broad"
+    elif [[ $cli_allow_exit -ne 0 ]]; then
+        fail "CLI SA: ManagedService apply failed (non-Kyverno error). Exit: ${cli_allow_exit}. Output: ${CLI_ALLOW_OUTPUT}"
+    else
+        pass "CLI SA: ManagedService not blocked by Kyverno"
+    fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

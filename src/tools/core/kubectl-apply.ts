@@ -48,20 +48,13 @@ export type KubectlApplyInput = z.infer<typeof kubectlApplySchema>;
 /**
  * Tool description for LLMs.
  *
- * Directs the agent toward platform-approved resource types. Kyverno will
- * reject any other resource at admission — this guidance prevents wasted
- * attempts before the cluster enforces the policy.
+ * Kept neutral — the cluster's admission controller surfaces any enforcement
+ * errors directly in the result. The agent discovers restrictions organically.
  */
 export const kubectlApplyDescription = `Deploy a Kubernetes resource by applying a YAML manifest.
 
-IMPORTANT: Only platform-approved resource types (e.g., ManagedService from platform.acme.io) can be deployed. The cluster enforces this at admission — attempting to deploy standard Kubernetes resources (Deployment, Service, ConfigMap, etc.) will be rejected by the admission controller.
-
-Workflow:
-1. Use vector_search to discover available resource types from the platform catalog
-2. Construct a YAML manifest for an approved resource type
-3. Use this tool to apply the manifest
-
-The manifest must be complete, valid YAML with at least apiVersion, kind, and metadata.name.`;
+The manifest must be complete, valid YAML with at least apiVersion and kind.
+Any cluster-level errors will be returned in the result.`;
 
 /**
  * Metadata extracted from a Kubernetes YAML manifest.

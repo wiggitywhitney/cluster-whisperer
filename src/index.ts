@@ -155,6 +155,19 @@ async function validateServeEnvironment(): Promise<void> {
 }
 
 /**
+ * Progress callback for sync pipelines invoked from setup.
+ * Suppresses per-item lines ("Extracting schema (N of M): ...", etc.) and
+ * passes through milestones, warnings, and completion summaries — the only
+ * output worth showing during a setup run.
+ */
+function setupProgress(message: string): void {
+  if (/^(Extracting schema|Inferring capabilities|Listing instances) \(/.test(message)) {
+    return;
+  }
+  console.log(message); // eslint-disable-line no-console
+}
+
+/**
  * Creates a VectorStore for sync operations.
  *
  * When no explicit --vector-backend is set and both chroma-url and qdrant-url
@@ -350,6 +363,10 @@ async function main() {
           console.log("Answer:");
           console.log(finalAnswer);
           console.log();
+          console.log("─".repeat(60)); // eslint-disable-line no-console
+          console.log("─".repeat(60)); // eslint-disable-line no-console
+          console.log("─".repeat(60)); // eslint-disable-line no-console
+          console.log(); // eslint-disable-line no-console
         } else {
           console.log("─".repeat(60)); // eslint-disable-line no-console
           console.log("The agent completed without producing a final answer."); // eslint-disable-line no-console
@@ -410,6 +427,7 @@ async function main() {
           vectorStore,
           dryRun: options.dryRun,
           cacheDir,
+          onProgress: setupProgress,
           ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 
@@ -469,6 +487,7 @@ async function main() {
         const result = await syncInstances({
           vectorStore,
           dryRun: options.dryRun,
+          onProgress: setupProgress,
           ...(kubectl ? { discoveryOptions: { kubectl } } : {}),
         });
 

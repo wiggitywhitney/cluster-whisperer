@@ -86,6 +86,97 @@ log_error() {
     echo -e "${RED}[error]${NC} $1"
 }
 
+curl_exit_description() {
+    case "$1" in
+        6)  echo "Could not resolve host" ;;
+        7)  echo "Failed to connect to host" ;;
+        22) echo "HTTP error response" ;;
+        28) echo "Operation timed out" ;;
+        35) echo "SSL connect error" ;;
+        52) echo "Empty reply from server" ;;
+        56) echo "Failure in receiving network data" ;;
+        60) echo "SSL certificate problem" ;;
+        *)  echo "curl error $1" ;;
+    esac
+}
+
+# Tracks steps that failed but were skipped so setup could continue.
+# Populated by run_step; printed again by print_summary at the end.
+SETUP_ERRORS=()
+
+# Run a setup step. On failure: log a warning, record the step name in
+# SETUP_ERRORS, and return 0 so the caller (main) continues.
+run_step() {
+    local name="$1"; shift
+    if ! "$@"; then
+        log_warning "Step '${name}' failed — continuing setup"
+        SETUP_ERRORS+=("${name}")
+    fi
+}
+
+# Like run_step, but for Helm installs in GCP mode.
+# Captures output via tee so the full log is available on failure.
+# On any failure: checks GKE operation logs for an in-progress resize
+# (unconditionally — cluster status alone has a race window where a
+# just-started resize still shows RUNNING), waits for full recovery,
+# probes the Kyverno webhook, then retries once.
+run_helm_step() {
+    local name="$1"; shift
+
+    local step_log
+    step_log=$(mktemp "/tmp/cluster-whisperer-${name}-XXXXXX.log")
+
+    # Run with tee: output streams to terminal live AND is captured to log file.
+    # Temporarily disable pipefail so PIPESTATUS captures the command exit code
+    # rather than the pipeline exiting immediately on failure.
+    set +o pipefail
+    "$@" 2>&1 | tee "${step_log}"
+    local step_exit=${PIPESTATUS[0]}
+    set -o pipefail
+
+    if [[ $step_exit -eq 0 ]]; then
+        rm -f "${step_log}"
+        return 0
+    fi
+
+    log_error "Step '${name}' failed:"
+    tail -5 "${step_log}" | sed 's/^/    /'
+    rm -f "${step_log}"
+
+    if [[ "${MODE}" == "gcp" ]]; then
+        # Always check GKE operation logs first — a resize that just started
+        # may not yet be reflected in cluster status, so checking status alone
+        # has a race window. wait_for_gke_operations surfaces any in-progress
+        # operation and waits for it to complete.
+        log_info "  Checking for in-progress GKE operations..."
+        wait_for_gke_operations
+        wait_for_cluster_running
+        wait_for_api_server
+        wait_for_kyverno_webhook
+
+        log_info "  Retrying '${name}'..."
+        local retry_log
+        retry_log=$(mktemp "/tmp/cluster-whisperer-${name}-retry-XXXXXX.log")
+
+        set +o pipefail
+        "$@" 2>&1 | tee "${retry_log}"
+        local retry_exit=${PIPESTATUS[0]}
+        set -o pipefail
+
+        if [[ $retry_exit -eq 0 ]]; then
+            rm -f "${retry_log}"
+            return 0
+        fi
+
+        log_error "Retry of '${name}' also failed:"
+        tail -5 "${retry_log}" | sed 's/^/    /'
+        rm -f "${retry_log}"
+    fi
+
+    log_warning "Step '${name}' failed — continuing setup"
+    SETUP_ERRORS+=("${name}")
+}
+
 # Wait for pods to exist and become ready.
 # Checks for pod existence first — kubectl wait fails immediately if no pods match.
 wait_for_pods() {
@@ -199,22 +290,45 @@ detect_gcp_zone() {
 }
 
 # Returns space-separated fallback zones for a given auto-detected primary zone.
-# Fallbacks stay within the same geographic region to preserve presenter proximity.
+# Tries same-region zones first, then cross-region fallbacks — a working cluster
+# at higher latency beats no cluster at all for a conference demo.
 # Only called when GCP_ZONE was auto-detected — user overrides bypass this entirely.
 get_gcp_zone_fallbacks() {
     local primary_zone="$1"
     case "${primary_zone}" in
-        europe-west1-b)         echo "europe-west1-c europe-west4-b europe-west2-b" ;;
-        us-central1-b)          echo "us-central1-c us-central1-f us-east1-b" ;;
-        us-east1-b)             echo "us-east1-c us-east4-b us-central1-b" ;;
-        us-west1-b)             echo "us-west1-c us-west2-b us-central1-b" ;;
-        asia-northeast1-b)      echo "asia-northeast1-c asia-northeast2-b" ;;
-        asia-east1-b)           echo "asia-east1-c asia-northeast1-b" ;;
-        asia-south1-b)          echo "asia-south1-c asia-south2-b" ;;
-        asia-southeast1-b)      echo "asia-southeast1-c asia-southeast2-b" ;;
-        australia-southeast1-b) echo "australia-southeast1-c australia-southeast2-b" ;;
-        southamerica-east1-b)   echo "southamerica-east1-c southamerica-west1-b" ;;
-        *)                      echo "" ;;
+        europe-west1-b)
+            echo "europe-west1-c europe-west4-b europe-west2-b europe-west3-b europe-west6-b europe-north1-b us-east1-b us-central1-b"
+            ;;
+        us-central1-b)
+            echo "us-central1-c us-central1-f us-east1-b us-east1-c us-east4-b us-east4-c us-east5-b us-south1-b us-west1-b us-west2-b us-west3-b us-west4-b"
+            ;;
+        us-east1-b)
+            echo "us-east1-c us-east4-b us-east4-c us-east5-b us-central1-b us-central1-c us-south1-b us-west1-b"
+            ;;
+        us-west1-b)
+            echo "us-west1-c us-west2-b us-west3-b us-west4-b us-central1-b us-central1-c us-east1-b"
+            ;;
+        asia-northeast1-b)
+            echo "asia-northeast1-c asia-northeast2-b asia-northeast3-b asia-east1-b asia-east2-b asia-southeast1-b"
+            ;;
+        asia-east1-b)
+            echo "asia-east1-c asia-east2-b asia-northeast1-b asia-northeast2-b asia-southeast1-b"
+            ;;
+        asia-south1-b)
+            echo "asia-south1-c asia-south2-b asia-southeast1-b asia-southeast2-b"
+            ;;
+        asia-southeast1-b)
+            echo "asia-southeast1-c asia-southeast2-b asia-east1-b asia-northeast1-b"
+            ;;
+        australia-southeast1-b)
+            echo "australia-southeast1-c australia-southeast2-b asia-southeast1-b asia-east1-b"
+            ;;
+        southamerica-east1-b)
+            echo "southamerica-east1-c southamerica-west1-b us-east1-b us-central1-b"
+            ;;
+        *)
+            echo "us-central1-b us-central1-c us-east1-b us-east4-b"
+            ;;
     esac
 }
 
@@ -286,10 +400,31 @@ check_prerequisites_gcp() {
         exit 1
     fi
 
-    # Verify Docker is running (needed to build and push demo app image)
-    if ! docker info &>/dev/null; then
-        log_error "Docker is not running (needed to build demo app image)"
-        exit 1
+    # Verify Docker is running (needed to build and push demo app image).
+    # On this machine Docker runs via Colima instead of Docker Desktop (Datadog
+    # policy). Switch to the colima context first so all docker calls use the
+    # correct socket — Docker Desktop intercepts the default socket and rejects
+    # buildx calls even when docker info succeeds.
+    if command -v colima &>/dev/null && docker context ls 2>/dev/null | grep -q "^colima"; then
+        docker context use colima &>/dev/null 2>&1 || true
+        log_info "Docker context: colima"
+    fi
+
+    # Now check that Docker (via the active context) is actually responding.
+    # If not and Colima is installed, start it.
+    if ! docker info &>/dev/null 2>&1; then
+        if command -v colima &>/dev/null; then
+            log_info "Docker not running — starting Colima..."
+            colima start
+            if ! docker info &>/dev/null 2>&1; then
+                log_error "Colima started but Docker is still not responding"
+                exit 1
+            fi
+            log_success "Colima started"
+        else
+            log_error "Docker is not running (needed to build demo app image)"
+            exit 1
+        fi
     fi
 
     log_success "All prerequisites met (GCP mode)"
@@ -350,6 +485,24 @@ create_gke_cluster() {
         --filter="name~^${CLUSTER_NAME_PREFIX}" \
         --format="value(name)" 2>/dev/null || true)
     if [[ -n "${existing}" ]]; then
+        # Cluster exists — regenerate credentials then resume. The kubeconfig may
+        # be missing (first run on a new machine) or stale (context was deleted).
+        # Always re-fetch so subsequent kubectl/helm calls work regardless.
+        CLUSTER_NAME="${existing}"
+        GCP_ZONE=$(gcloud container clusters list \
+            --project "${GCP_PROJECT}" \
+            --filter="name~^${CLUSTER_NAME_PREFIX}" \
+            --format="value(location)" 2>/dev/null | head -1 || true)
+        export KUBECONFIG="${KUBECONFIG_PATH}"
+        gcloud container clusters get-credentials "${CLUSTER_NAME}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${GCP_ZONE}" \
+            --quiet 2>/dev/null || true
+        if kubectl cluster-info &>/dev/null; then
+            log_warning "Existing cluster found: ${existing} — skipping creation, resuming setup"
+            log_info "Resuming in zone: ${GCP_ZONE}"
+            return
+        fi
         log_warning "Existing cluster-whisperer GKE cluster(s) found: ${existing}"
         log_info "Run ./demo/cluster/teardown.sh first, or use a different name"
         exit 1
@@ -382,9 +535,13 @@ create_gke_cluster() {
             log_info "Retrying cluster creation in fallback zone: ${zone}"
         fi
 
-        local gcloud_output
-        local gcloud_exit=0
-        gcloud_output=$(gcloud container clusters create "${CLUSTER_NAME}" \
+        # Synchronous creation: blocks until success or failure, one zone at a time.
+        # Async was tried and rejected — it submits multiple simultaneous requests,
+        # leaving dangling clusters in every zone that was attempted before Ctrl+C.
+        # Stockouts return in <2 min; successful creation in 5-10 min;
+        # hung zones are killed by the 12-min timeout.
+        local gcloud_output gcloud_exit=0
+        gcloud_output=$(timeout 720 gcloud container clusters create "${CLUSTER_NAME}" \
             --project "${GCP_PROJECT}" \
             --zone "${zone}" \
             --machine-type "${GKE_MACHINE_TYPE}" \
@@ -402,20 +559,28 @@ create_gke_cluster() {
             break
         fi
 
-        if echo "${gcloud_output}" | grep -q "GCE_STOCKOUT"; then
+        if [[ "${gcloud_exit}" -eq 124 ]]; then
+            log_warning "Zone ${zone}: timed out after 12 minutes — trying next zone"
+        elif echo "${gcloud_output}" | grep -q "GCE_STOCKOUT"; then
             log_warning "Zone ${zone}: no VM capacity available (GCE_STOCKOUT)"
-            if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
-                log_error "GCP_ZONE=${zone} was explicitly set — not retrying other zones"
-                log_info "Tip: unset GCP_ZONE to allow automatic zone fallback on stockout"
-                exit 1
-            fi
-            continue
+        else
+            log_warning "Zone ${zone}: cluster creation failed — trying next zone"
+            log_info "  Error: $(echo "${gcloud_output}" | tail -3)"
         fi
 
-        # Non-stockout failure — log and abort without retrying
-        log_error "Failed to create GKE cluster in zone ${zone}:"
-        echo "${gcloud_output}" >&2
-        exit 1
+        # GKE creates a cluster object even on stockout/failure — clean it up
+        # asynchronously before moving to the next zone (fire and forget).
+        log_info "  Cleaning up partial cluster in zone ${zone}..."
+        gcloud container clusters delete "${CLUSTER_NAME}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --quiet --async 2>/dev/null || true
+
+        if [[ "${GCP_ZONE_IS_OVERRIDE:-false}" == "true" ]]; then
+            log_error "GCP_ZONE=${zone} was explicitly set — not retrying other zones"
+            log_info "Tip: remove the zone argument to allow automatic fallback on failure"
+            exit 1
+        fi
     done
 
     if [[ "${created}" != "true" ]]; then
@@ -423,12 +588,11 @@ create_gke_cluster() {
         for z in "${zones_attempted[@]}"; do
             zones_list="${zones_list:+${zones_list}, }${z}"
         done
-        log_error "GCE stockout in all attempted zones: ${zones_list}"
-        log_error "All zones in this region are capacity-constrained. Try again later or set GCP_ZONE to specify a zone in a different region."
+        log_error "Cluster creation failed in all attempted zones: ${zones_list}"
+        log_error "Try a specific zone: ./demo/cluster/setup.sh gcp us-east1-b"
         exit 1
     fi
 
-    # gcloud create already fetches credentials when KUBECONFIG is set
     log_success "Credentials merged into ${KUBECONFIG_PATH}"
 
     # Verify cluster is accessible
@@ -465,8 +629,11 @@ install_kind_ingress() {
 install_gcp_ingress() {
     log_info "Installing NGINX Ingress Controller for GKE..."
 
-    kubectl apply -f \
-        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"
+    if ! kubectl apply -f \
+        "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_NGINX_VERSION}/deploy/static/provider/cloud/deploy.yaml"; then
+        log_error "Failed to apply NGINX Ingress Controller manifests"
+        return 1
+    fi
 
     wait_for_pods "ingress-nginx" "app.kubernetes.io/component=controller" 180
 
@@ -518,7 +685,7 @@ create_ingress_resources() {
     log_info "Creating Ingress resources (base domain: ${BASE_DOMAIN})..."
 
     # cluster-whisperer Ingress
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -541,11 +708,13 @@ spec:
             port:
               number: 3000
 EOF
-
+        log_error "Failed to create cluster-whisperer ingress"
+        return 1
+    fi
     log_success "Ingress created: http://cluster-whisperer.${BASE_DOMAIN}"
 
     # Jaeger UI Ingress
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -565,12 +734,14 @@ spec:
             port:
               number: 16686
 EOF
-
+        log_error "Failed to create jaeger ingress"
+        return 1
+    fi
     log_success "Ingress created: http://jaeger.${BASE_DOMAIN}"
 
     # Chroma Ingress — external access to the in-cluster Chroma instance.
     # Needed for locally-run agent to reach vector DB via ingress URL.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -594,12 +765,14 @@ spec:
             port:
               number: 8000
 EOF
-
+        log_error "Failed to create chroma ingress"
+        return 1
+    fi
     log_success "Ingress created: http://chroma.${BASE_DOMAIN}"
 
     # Qdrant Ingress — external access to the in-cluster Qdrant instance.
     # Needed for locally-run agent to reach vector DB via ingress URL.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -623,12 +796,14 @@ spec:
             port:
               number: 6333
 EOF
-
+        log_error "Failed to create qdrant ingress"
+        return 1
+    fi
     log_success "Ingress created: http://qdrant.${BASE_DOMAIN}"
 
     # OTel Collector Ingress — external access to the OTLP HTTP receiver.
     # Needed for locally-run agent to export traces into the cluster.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -648,13 +823,15 @@ spec:
             port:
               number: 4318
 EOF
-
+        log_error "Failed to create otel-collector ingress"
+        return 1
+    fi
     log_success "Ingress created: http://otel.${BASE_DOMAIN}"
 
     # Demo app Ingress — accessible to the audience once the app is running.
     # While the app is in CrashLoopBackOff, nginx returns 502 (no healthy backend).
     # The readiness probe ensures traffic only routes when the app is actually serving.
-    kubectl apply -f - <<EOF
+    if ! kubectl apply -f - <<EOF; then
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -674,7 +851,9 @@ spec:
             port:
               number: 80
 EOF
-
+        log_error "Failed to create demo-app ingress"
+        return 1
+    fi
     log_success "Ingress created: http://demo-app.${BASE_DOMAIN}"
 }
 
@@ -707,8 +886,11 @@ generate_demo_env() {
 # Generated by setup.sh — source this before the demo.
 # This file is gitignored. Safe to contain API keys.
 
-# Kubeconfig for cluster-whisperer
-export CLUSTER_WHISPERER_KUBECONFIG=${KUBECONFIG_PATH}
+# Kubeconfig for the cluster-whisperer agent (CLI SA identity — Kyverno-gated).
+# This is NOT the full gcloud kubeconfig — the agent runs as cluster-whisperer-cli SA.
+# The presenter's default kubectl (no KUBECONFIG set) has no cluster access, which
+# is intentional: the developer persona cannot run kubectl directly.
+export CLUSTER_WHISPERER_KUBECONFIG=${HOME}/.kube/config-cluster-whisperer-cli
 
 # Vector DB ingress URLs
 export CLUSTER_WHISPERER_CHROMA_URL=http://chroma.${BASE_DOMAIN}
@@ -802,14 +984,15 @@ install_crossplane() {
         return
     fi
 
-    helm install crossplane crossplane-stable/crossplane \
-        \
+    if ! helm install crossplane crossplane-stable/crossplane \
         --namespace crossplane-system \
         --create-namespace \
         --version "${CROSSPLANE_VERSION}" \
         --values "${SCRIPT_DIR}/helm-values/crossplane.yaml" \
-        --wait --timeout 120s
-
+        --wait --timeout 120s; then
+        log_error "Failed to install Crossplane"
+        return 1
+    fi
     log_success "Crossplane v${CROSSPLANE_VERSION} installed"
 
     # Wait for Crossplane pods to be ready
@@ -845,7 +1028,10 @@ install_crossplane_providers() {
         count=$(grep -c 'kind: Provider' "${batch_file}" || true)
         log_info "Batch $((batch_num + 1))/${total_batches}: applying ${count} providers..."
 
-        kubectl apply -f "${batch_file}"
+        if ! kubectl apply -f "${batch_file}"; then
+            log_error "Failed to apply provider batch $((batch_num + 1))"
+            return 1
+        fi
         log_success "Batch $((batch_num + 1)) applied (${count} providers)"
 
         # Give the API server time to settle between batches.
@@ -977,26 +1163,77 @@ wait_for_gke_operations() {
 # Wait until the Kubernetes API server is actually responding to requests.
 # gcloud may report a resize operation as complete slightly before the API
 # server is fully back. This catches that gap.
-wait_for_api_server() {
-    log_info "Verifying API server connectivity..."
+wait_for_cluster_running() {
+    # Polls gcloud cluster status until RUNNING. More reliable than kubectl-based
+    # checks because GKE exposes the control plane state directly (RUNNING,
+    # RECONCILING, PROVISIONING). RECONCILING means the control plane is mid-resize
+    # and the API server may be temporarily unreachable.
+    local name="${1:-${CLUSTER_NAME}}"
+    local zone="${2:-${GCP_ZONE}}"
+    local max_wait=600
+    local elapsed=0
+    local interval=15
+    local status
 
-    local timeout=300
+    log_info "Polling cluster '${name}' status via gcloud..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        local gcloud_out gcloud_exit=0
+        gcloud_out=$(gcloud container clusters describe "${name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --format="value(status)" 2>&1) || gcloud_exit=$?
+
+        if [[ $gcloud_exit -eq 0 ]]; then
+            status="${gcloud_out}"
+        else
+            status="gcloud error: ${gcloud_out}"
+        fi
+
+        if [[ "${status}" == "RUNNING" ]]; then
+            log_success "Cluster is RUNNING"
+            return 0
+        fi
+
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] ${status} — waiting..."
+        else
+            log_info "  ${status} — waiting..."
+        fi
+
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_error "Cluster did not reach RUNNING state after ${max_wait}s (last status: ${status})"
+    return 1
+}
+
+# Wait until the Kubernetes API server actually responds to requests.
+# GKE's managed control plane can be OOM-killed by the memory pressure of
+# registering 300+ CRDs (~4 MiB each). GKE silently restarts the API server;
+# this does not appear in 'gcloud container operations list' and the cluster
+# status may still read RUNNING throughout. The only reliable ground truth is
+# whether kubectl can complete a request. Polls until it can, with a 10-minute
+# outer timeout to cover the typical 3–10 minute restart window.
+wait_for_api_server() {
+    local max_wait=600
     local elapsed=0
     local interval=10
 
-    while [[ $elapsed -lt $timeout ]]; do
-        if kubectl get nodes --request-timeout=5s &>/dev/null; then
+    log_info "Waiting for API server to respond (GKE control plane may be restarting)..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl version --request-timeout=5s &>/dev/null 2>&1; then
             log_success "API server is responding"
             return 0
         fi
-        if (( elapsed % 30 == 0 && elapsed > 0 )); then
-            log_info "  [${elapsed}s] API server not responding yet, waiting..."
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            log_info "  [${elapsed}s] API server not responding yet..."
         fi
         sleep $interval
         elapsed=$((elapsed + interval))
     done
 
-    log_error "API server did not respond within ${timeout}s"
+    log_error "API server did not respond after ${max_wait}s"
     return 1
 }
 
@@ -1017,7 +1254,7 @@ install_composition_function() {
         return
     fi
 
-    kubectl apply -f - <<'EOF'
+    if ! kubectl apply -f - <<'EOF'; then
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function
 metadata:
@@ -1025,7 +1262,9 @@ metadata:
 spec:
   package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.1
 EOF
-
+        log_error "Failed to apply function-patch-and-transform"
+        return 1
+    fi
     log_success "function-patch-and-transform installed"
 }
 
@@ -1147,8 +1386,35 @@ MRAP_EOF
         log_warning "provider-kubernetes service account not found — RBAC skipped"
     fi
 
-    # Apply ClusterProviderConfig for in-cluster identity
-    kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml"
+    # Wait for the ClusterProviderConfig CRD before applying.
+    local cp_crd="clusterproviderconfigs.kubernetes.m.crossplane.io"
+    local elapsed=0 interval=10 timeout=120
+    log_info "Waiting for ${cp_crd} CRD..."
+    while [[ $elapsed -lt $timeout ]]; do
+        if kubectl get crd "${cp_crd}" &>/dev/null; then
+            log_success "CRD ${cp_crd} registered"
+            break
+        fi
+        sleep $interval; elapsed=$((elapsed + interval))
+    done
+    if ! kubectl get crd "${cp_crd}" &>/dev/null; then
+        log_warning "CRD ${cp_crd} not registered after ${timeout}s — attempting apply anyway"
+    fi
+
+    # Kyverno only discovers API resources at startup — CRDs registered after Kyverno
+    # starts are invisible to it until it restarts. Crossplane registers ~300 CRDs after
+    # Kyverno is installed, so ClusterProviderConfig is always unknown to Kyverno on the
+    # first attempt. Restart the admission controller to force re-discovery before apply.
+    log_info "Restarting Kyverno admission controller to pick up new CRDs from Crossplane..."
+    kubectl rollout restart deployment/kyverno-admission-controller -n kyverno 2>&1
+    kubectl rollout status deployment/kyverno-admission-controller -n kyverno --timeout=120s 2>&1
+
+    # Apply ClusterProviderConfig for in-cluster identity.
+    local cp_result
+    if ! cp_result=$(kubectl apply -f "${SCRIPT_DIR}/manifests/providerconfig-k8s.yaml" 2>&1); then
+        log_error "Failed to apply ClusterProviderConfig: ${cp_result}"
+        return 1
+    fi
     log_success "ClusterProviderConfig kubernetes-in-cluster applied"
 
     # Restart the provider-kubernetes pod so it picks up the new
@@ -1166,7 +1432,7 @@ MRAP_EOF
 }
 
 # Apply 20 ManagedService XRDs and Compositions — one real (platform.acme.io
-# for Whitney/Viktor's You Choose app) and 19 decoys for fake teams. All 20
+# for the Spiders and Rainbows team's app) and 19 decoys for fake teams. All 20
 # look identical from `kubectl get crd`, forcing the agent to use vector search
 # with organizational context to find the right one.
 install_platform_compositions() {
@@ -1175,9 +1441,15 @@ install_platform_compositions() {
     install_composition_function
     configure_provider_kubernetes
 
-    # Apply the real XRD + Composition first
-    kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"
-    kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"
+    # Apply the real XRD + Composition first — hard failure: demo cannot work without these
+    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/xrd.yaml"; then
+        log_error "Failed to apply real XRD (manifests/xrd.yaml)"
+        return 1
+    fi
+    if ! kubectl apply -f "${SCRIPT_DIR}/manifests/composition.yaml"; then
+        log_error "Failed to apply real Composition (manifests/composition.yaml)"
+        return 1
+    fi
     log_success "Real XRD + Composition applied (platform.acme.io)"
 
     # Apply all 19 decoy XRDs + Compositions
@@ -1226,19 +1498,22 @@ install_chroma() {
 
     helm repo add chroma https://amikos-tech.github.io/chromadb-chart/ --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n chroma 2>/dev/null | grep -q chroma; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    # grep for "deployed" — a FAILED release must be cleaned up and reinstalled.
+    if helm list -n chroma 2>/dev/null | grep -q "deployed"; then
         log_success "Chroma already installed"
         return
     fi
+    helm uninstall chroma -n chroma &>/dev/null || true
 
-    helm install chroma chroma/chromadb \
-        \
+    if ! helm install chroma chroma/chromadb \
         --namespace chroma \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/chroma.yaml" \
-        --wait --timeout 180s
-
+        --wait --timeout 180s; then
+        log_error "Failed to install Chroma"
+        return 1
+    fi
     log_success "Chroma installed"
 
     # The chromadb chart uses app.kubernetes.io/instance=chroma as pod label
@@ -1253,19 +1528,21 @@ install_qdrant() {
 
     helm repo add qdrant https://qdrant.github.io/qdrant-helm --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n qdrant 2>/dev/null | grep -q qdrant; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    if helm list -n qdrant 2>/dev/null | grep -q "deployed"; then
         log_success "Qdrant already installed"
         return
     fi
+    helm uninstall qdrant -n qdrant &>/dev/null || true
 
-    helm install qdrant qdrant/qdrant \
-        \
+    if ! helm install qdrant qdrant/qdrant \
         --namespace qdrant \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/qdrant.yaml" \
-        --wait --timeout 300s
-
+        --wait --timeout 300s; then
+        log_error "Failed to install Qdrant"
+        return 1
+    fi
     log_success "Qdrant installed"
 
     # The qdrant chart uses app.kubernetes.io/instance=qdrant as pod label
@@ -1296,7 +1573,7 @@ verify_vector_dbs() {
     log_info "Verifying vector database health..."
 
     local failures=0
-    local retries=12
+    local retries=30
     local retry_interval=10
 
     # Chroma health check with retries: GET /api/v2/heartbeat (Chroma 1.x uses v2 API)
@@ -1307,24 +1584,20 @@ verify_vector_dbs() {
     _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward chroma_pf_pid chroma svc/chroma-chromadb 18000 8000
-        local chroma_health
-        chroma_health=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>/dev/null || true)
-        if [[ -n "${chroma_health}" ]]; then
+        local chroma_result chroma_exit=0
+        chroma_result=$(curl -sf http://localhost:18000/api/v2/heartbeat 2>&1) || chroma_exit=$?
+        if [[ $chroma_exit -eq 0 ]] && [[ -n "${chroma_result}" ]]; then
             log_success "Chroma is responding (heartbeat ok)"
             chroma_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Chroma not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Chroma not ready: ${chroma_result:-no output} ($(curl_exit_description "${chroma_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${chroma_ok}" != "true" ]]; then
-        # Diagnostic: verbose curl while port-forward is still alive
-        local diag
-        diag=$(curl -sv http://localhost:18000/api/v2/heartbeat 2>&1 || true)
         log_warning "Chroma health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $chroma_pf_pid 2>/dev/null || true
@@ -1337,23 +1610,20 @@ verify_vector_dbs() {
     _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward qdrant_pf_pid qdrant qdrant-0 16333 6333
-        local qdrant_health
-        qdrant_health=$(curl -sf http://localhost:16333/healthz 2>/dev/null || true)
-        if [[ -n "${qdrant_health}" ]]; then
+        local qdrant_result qdrant_exit=0
+        qdrant_result=$(curl -sf http://localhost:16333/healthz 2>&1) || qdrant_exit=$?
+        if [[ $qdrant_exit -eq 0 ]] && [[ -n "${qdrant_result}" ]]; then
             log_success "Qdrant is responding (healthz ok)"
             qdrant_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Qdrant not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Qdrant not ready: ${qdrant_result:-no output} ($(curl_exit_description "${qdrant_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${qdrant_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:16333/healthz 2>&1 || true)
         log_warning "Qdrant health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $qdrant_pf_pid 2>/dev/null || true
@@ -1380,19 +1650,21 @@ install_jaeger() {
 
     helm repo add jaegertracing https://jaegertracing.github.io/helm-charts --force-update &>/dev/null
 
-    # Check if already installed (idempotency)
-    if helm list -n jaeger 2>/dev/null | grep -q jaeger; then
+    # Check if already SUCCESSFULLY installed (idempotency).
+    if helm list -n jaeger 2>/dev/null | grep -q "deployed"; then
         log_success "Jaeger already installed"
         return
     fi
+    helm uninstall jaeger -n jaeger &>/dev/null || true
 
-    helm install jaeger jaegertracing/jaeger \
-        \
+    if ! helm install jaeger jaegertracing/jaeger \
         --namespace jaeger \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/jaeger.yaml" \
-        --wait --timeout 300s
-
+        --wait --timeout 300s; then
+        log_error "Failed to install Jaeger"
+        return 1
+    fi
     log_success "Jaeger installed"
 
     # For Kind: patch the service to NodePort with specific port for Jaeger UI.
@@ -1424,10 +1696,11 @@ install_otel_collector() {
     helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update &>/dev/null
 
     # Check if already installed (idempotency)
-    if helm list -n otel-collector 2>/dev/null | grep -q otel-collector; then
+    if helm list -n otel-collector 2>/dev/null | grep -q "deployed"; then
         log_success "OTel Collector already installed"
         return
     fi
+    helm uninstall otel-collector -n otel-collector &>/dev/null || true
 
     # Create K8s secret with DD_API_KEY from the environment.
     # The collector config references it as ${env:DD_API_KEY}.
@@ -1437,20 +1710,27 @@ install_otel_collector() {
         return
     fi
 
-    kubectl create namespace otel-collector \
-        --dry-run=client -o yaml | kubectl apply -f -
+    if ! kubectl create namespace otel-collector \
+            --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create otel-collector namespace"
+        return 1
+    fi
 
-    kubectl create secret generic otel-collector-datadog \
-        --namespace otel-collector \
-        --from-literal=api-key="${DD_API_KEY}" \
-        --dry-run=client -o yaml | kubectl apply -f -
+    if ! kubectl create secret generic otel-collector-datadog \
+            --namespace otel-collector \
+            --from-literal=api-key="${DD_API_KEY}" \
+            --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create otel-collector-datadog secret"
+        return 1
+    fi
 
-    helm install otel-collector open-telemetry/opentelemetry-collector \
-        \
+    if ! helm install otel-collector open-telemetry/opentelemetry-collector \
         --namespace otel-collector \
         --values "${SCRIPT_DIR}/helm-values/otel-collector.yaml" \
-        --wait --timeout 180s
-
+        --wait --timeout 180s; then
+        log_error "Failed to install OTel Collector"
+        return 1
+    fi
     log_success "OTel Collector installed"
 
     # For Kind: patch the service to NodePort with specific ports for OTLP.
@@ -1474,7 +1754,7 @@ verify_observability() {
     log_info "Verifying observability backends..."
 
     local failures=0
-    local retries=12
+    local retries=30
     local retry_interval=10
 
     # Jaeger health check with retries via the v2 healthcheck extension
@@ -1485,23 +1765,20 @@ verify_observability() {
     _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward jaeger_pf_pid jaeger deploy/jaeger 13133 13133
-        local jaeger_health
-        jaeger_health=$(curl -sf http://localhost:13133/status 2>/dev/null || true)
-        if [[ -n "${jaeger_health}" ]]; then
+        local jaeger_result jaeger_exit=0
+        jaeger_result=$(curl -sf http://localhost:13133/status 2>&1) || jaeger_exit=$?
+        if [[ $jaeger_exit -eq 0 ]] && [[ -n "${jaeger_result}" ]]; then
             log_success "Jaeger is responding (health check ok)"
             jaeger_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} Jaeger not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] Jaeger not ready: ${jaeger_result:-no output} ($(curl_exit_description "${jaeger_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${jaeger_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:13133/status 2>&1 || true)
         log_warning "Jaeger health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $jaeger_pf_pid 2>/dev/null || true
@@ -1514,23 +1791,20 @@ verify_observability() {
     _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
     for ((i=1; i<=retries; i++)); do
         _ensure_port_forward otel_pf_pid otel-collector deploy/otel-collector-opentelemetry-collector 13134 13133
-        local otel_health
-        otel_health=$(curl -sf http://localhost:13134 2>/dev/null || true)
-        if [[ -n "${otel_health}" ]]; then
+        local otel_result otel_exit=0
+        otel_result=$(curl -sf http://localhost:13134 2>&1) || otel_exit=$?
+        if [[ $otel_exit -eq 0 ]] && [[ -n "${otel_result}" ]]; then
             log_success "OTel Collector is responding (health check ok)"
             otel_ok=true
             break
         fi
         if [[ $i -lt $retries ]]; then
-            echo -e "  ${BLUE}[attempt ${i}/${retries}]${NC} OTel Collector not ready, retrying in ${retry_interval}s..."
+            log_info "  [attempt ${i}/${retries}] OTel Collector not ready: ${otel_result:-no output} ($(curl_exit_description "${otel_exit}"))"
             sleep $retry_interval
         fi
     done
     if [[ "${otel_ok}" != "true" ]]; then
-        local diag
-        diag=$(curl -sv http://localhost:13134 2>&1 || true)
         log_warning "OTel Collector health check failed after ${retries} attempts"
-        log_warning "Last curl output: ${diag:0:200}"
         failures=$((failures + 1))
     fi
     kill $otel_pf_pid 2>/dev/null || true
@@ -1558,22 +1832,26 @@ verify_trace_pipeline() {
 
     # Send a test trace via a quick agent query with tracing enabled.
     # The OTel collector is in-cluster; use port-forward for the OTLP endpoint.
+    # Use --tools kubectl only — vector tools need a live DB URL (not yet exported)
+    # and slow down startup; kubectl alone is sufficient to generate spans.
     local otlp_port=4318
     kubectl port-forward -n otel-collector \
         svc/otel-collector-opentelemetry-collector "${otlp_port}:${otlp_port}" &>/dev/null &
     local otlp_pf_pid=$!
-    trap "kill ${otlp_pf_pid} 2>/dev/null || true; wait ${otlp_pf_pid} 2>/dev/null || true" EXIT
-    sleep 4
+    sleep 10
 
     log_info "Sending test trace via agent query..."
-    OTEL_TRACING_ENABLED=true \
-    OTEL_EXPORTER_TYPE=otlp \
-    OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
-        npx tsx "${REPO_ROOT}/src/index.ts" "what namespaces exist?" &>/dev/null || true
+    # Unset CLUSTER_WHISPERER_THREAD so this probe call never writes into the
+    # demo thread — if demo/.env was previously sourced in this shell, the thread
+    # env var would be inherited and all setup runs would pollute the demo history.
+    env -u CLUSTER_WHISPERER_THREAD \
+        OTEL_TRACING_ENABLED=true \
+        OTEL_EXPORTER_TYPE=otlp \
+        OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
+        npx tsx "${REPO_ROOT}/src/index.ts" --tools kubectl "what namespaces exist?" &>/dev/null || true
 
     kill "${otlp_pf_pid}" 2>/dev/null || true
     wait "${otlp_pf_pid}" 2>/dev/null || true
-    trap - EXIT
 
     # Wait for trace propagation
     log_info "Waiting for trace propagation (10s)..."
@@ -1583,7 +1861,6 @@ verify_trace_pipeline() {
     kubectl port-forward -n jaeger \
         deploy/jaeger 16686:16686 &>/dev/null &
     local jaeger_pf_pid=$!
-    trap "kill ${jaeger_pf_pid} 2>/dev/null || true; wait ${jaeger_pf_pid} 2>/dev/null || true" EXIT
     sleep 4
 
     local jaeger_services
@@ -1605,7 +1882,6 @@ verify_trace_pipeline() {
 
     kill "${jaeger_pf_pid}" 2>/dev/null || true
     wait "${jaeger_pf_pid}" 2>/dev/null || true
-    trap - EXIT
 
     if [[ "${trace_verified}" != "true" ]]; then
         log_error "Trace pipeline verification failed: cluster-whisperer not found in Jaeger after 30s"
@@ -1688,12 +1964,22 @@ verify_vector_search() {
     local chroma_url="http://chroma.${BASE_DOMAIN}"
     local qdrant_url="http://qdrant.${BASE_DOMAIN}"
 
-    # Check Chroma has documents in the capabilities collection
-    local chroma_collections
-    chroma_collections=$(curl -sf "${chroma_url}/api/v2/collections" 2>/dev/null || true)
-    if [[ -n "${chroma_collections}" ]]; then
-        log_success "Chroma capabilities collection is populated"
-    else
+    # Check Chroma has a capabilities collection.
+    # Chroma v2 API requires the full tenant/database path — /api/v2/collections alone returns 404.
+    # Retry a few times: the ingress may take a moment to route after creation.
+    local chroma_ok=false
+    local chroma_url_full="${chroma_url}/api/v2/tenants/default_tenant/databases/default_database/collections"
+    for attempt in 1 2 3; do
+        local chroma_collections
+        chroma_collections=$(curl -sf "${chroma_url_full}" 2>/dev/null || true)
+        if echo "${chroma_collections}" | grep -q '"capabilities"'; then
+            log_success "Chroma capabilities collection is populated"
+            chroma_ok=true
+            break
+        fi
+        [[ $attempt -lt 3 ]] && sleep 5
+    done
+    if [[ "${chroma_ok}" != "true" ]]; then
         log_warning "Could not verify Chroma collection — check manually"
     fi
 
@@ -1730,7 +2016,10 @@ build_demo_app_image() {
     fi
 
     log_info "Building demo app Docker image..."
-    docker build ${platform_flag} -t demo-app:latest "${demo_app_dir}" --quiet
+    if ! docker build ${platform_flag} -t demo-app:latest "${demo_app_dir}" --quiet; then
+        log_error "Failed to build demo app image"
+        return 1
+    fi
     log_success "Demo app image built"
 }
 
@@ -1787,8 +2076,14 @@ deploy_demo_app_gke() {
     gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --quiet 2>/dev/null
 
     log_info "Pushing demo app image to ${tagged_image}..."
-    docker tag demo-app:latest "${tagged_image}"
-    docker push "${tagged_image}" --quiet
+    if ! docker tag demo-app:latest "${tagged_image}"; then
+        log_error "Failed to tag demo app image"
+        return 1
+    fi
+    if ! docker push "${tagged_image}" --quiet; then
+        log_error "Failed to push demo app image to Artifact Registry"
+        return 1
+    fi
     log_success "Image pushed to Artifact Registry"
 
     # Apply manifests with the correct image inline to avoid a double rollout.
@@ -1818,7 +2113,7 @@ deploy_demo_app_gke() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -1882,6 +2177,38 @@ print_demo_app_diagnostics() {
 #
 # Chart version note: Helm chart 3.7.1 deploys app v1.17.1. These are independent
 # version numbers — do not confuse them. Pin --version to the chart version here.
+wait_for_kyverno_webhook() {
+    # After a GKE control plane resize, the cluster returns to RUNNING but the
+    # webhook connection from the control plane to Kyverno's service endpoint
+    # may not yet be re-established. Test by making a server-side dry-run admission
+    # request — this hits Kyverno's webhook directly. Any response (allow or deny)
+    # means the path is live. "No agent available" / "context deadline exceeded"
+    # means it isn't yet.
+    log_info "Verifying Kyverno admission webhook connectivity..."
+    local timeout=120
+    local elapsed=0
+    local interval=10
+
+    while [[ $elapsed -lt $timeout ]]; do
+        local result
+        result=$(kubectl create configmap kyverno-webhook-probe \
+            --dry-run=server -n default 2>&1 || true)
+
+        if ! echo "${result}" | grep -qiE "context deadline exceeded|No agent available|failed to call webhook|timed out"; then
+            log_success "Kyverno webhook is reachable"
+            return 0
+        fi
+
+        if [[ $elapsed -gt 0 ]]; then
+            log_info "  [${elapsed}s] Webhook not yet reachable, retrying in ${interval}s..."
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_warning "Kyverno webhook unreachable after ${timeout}s — proceeding with retry anyway"
+}
+
 install_kyverno() {
     log_info "Installing Kyverno v${KYVERNO_VERSION} (chart)..."
 
@@ -1889,9 +2216,12 @@ install_kyverno() {
     helm repo add kyverno https://kyverno.github.io/kyverno/ --force-update &>/dev/null
     helm repo update kyverno &>/dev/null
 
-    # Check if already installed (idempotency)
+    # Check if already installed (idempotency). Still probe the webhook —
+    # on a resume the pods may be running but the webhook unreachable.
     if helm list -n kyverno 2>/dev/null | grep -q kyverno; then
         log_success "Kyverno already installed"
+        wait_for_kyverno_webhook
+        patch_kyverno_webhooks
         return
     fi
 
@@ -1906,12 +2236,19 @@ install_kyverno() {
             --namespace kyverno \
             --create-namespace \
             --version "${KYVERNO_VERSION}" \
+            --set features.forceFailurePolicyIgnore.enabled=true \
+            --set-json 'config.resourceFiltersInclude=["[CustomResourceDefinition,*,*]"]' \
+            --set admissionController.container.extraArgs.clientRateLimitQPS=100 \
+            --set admissionController.container.extraArgs.clientRateLimitBurst=100 \
+            --set backgroundController.container.extraArgs.clientRateLimitQPS=100 \
+            --set backgroundController.container.extraArgs.clientRateLimitBurst=100 \
+            --set-json 'config.webhooks.matchConditions=[{"name":"exclude-crd-resources","expression":"!(request.resource.group == \"apiextensions.k8s.io\")"}]' \
             --wait --timeout 5m0s; then
             install_success=true
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] helm install kyverno failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] helm install kyverno failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -1922,14 +2259,59 @@ install_kyverno() {
 
     log_success "Kyverno ${KYVERNO_VERSION} installed"
 
-    # Verify the admission webhook is registered — this confirms the API server
-    # is wired to Kyverno and policies will be enforced.
-    if kubectl get validatingwebhookconfigurations 2>/dev/null | grep -q kyverno; then
-        log_success "Kyverno admission webhook registered"
-    else
-        log_error "Kyverno admission webhook not found — policies will not be enforced"
+    # Kyverno registers its admission webhooks after the admission controller pod
+    # starts — there is a brief window after helm --wait returns where the webhook
+    # is not yet reachable. On GKE, the API server can also be transiently
+    # unreachable right after install. Using `kubectl get 2>/dev/null` would
+    # silently swallow connection errors and look identical to "webhook not found."
+    # Use the functional dry-run probe instead: it captures errors via 2>&1 and
+    # correctly distinguishes connectivity failures from a missing webhook. Wait up
+    # to 5 minutes — Kyverno is a hard dependency and worth waiting for.
+    local webhook_ready=false
+    local webhook_timeout=300
+    local webhook_interval=10
+    local webhook_elapsed=0
+    while [[ $webhook_elapsed -lt $webhook_timeout ]]; do
+        local probe_result
+        probe_result=$(kubectl create configmap kyverno-webhook-probe \
+            --dry-run=server -n default 2>&1 || true)
+        if ! echo "${probe_result}" | grep -qiE "context deadline exceeded|No agent available|failed to call webhook|timed out|connection refused|unable to connect"; then
+            log_success "Kyverno admission webhook registered and reachable"
+            webhook_ready=true
+            break
+        fi
+        if [[ $webhook_elapsed -gt 0 ]]; then
+            log_info "  [${webhook_elapsed}s/${webhook_timeout}s] Webhook not yet reachable, retrying in ${webhook_interval}s..."
+        fi
+        sleep $webhook_interval
+        webhook_elapsed=$((webhook_elapsed + webhook_interval))
+    done
+    if [[ "${webhook_ready}" != "true" ]]; then
+        log_error "Kyverno admission webhook not reachable after ${webhook_timeout}s — policies will not be enforced"
         return 1
     fi
+
+    patch_kyverno_webhooks
+}
+
+# forceFailurePolicyIgnore only affects the primary resource validating webhook.
+# The policy, exception, cleanup, and global-context webhooks remain Fail by default,
+# which causes timeouts to block operations during Kyverno restarts.
+# Patch all of them to Ignore. Called on both fresh install and already-installed paths.
+patch_kyverno_webhooks() {
+    log_info "Setting failurePolicy=Ignore on all Kyverno webhooks..."
+    for cfg in \
+        kyverno-cel-exception-validating-webhook-cfg \
+        kyverno-exception-validating-webhook-cfg \
+        kyverno-global-context-validating-webhook-cfg \
+        kyverno-policy-validating-webhook-cfg \
+        kyverno-cleanup-validating-webhook-cfg; do
+        kubectl patch validatingwebhookconfiguration "${cfg}" \
+            --type=json \
+            -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]' \
+            2>/dev/null || true
+    done
+    log_success "All Kyverno webhooks set to failurePolicy=Ignore"
 }
 
 # Apply Kyverno ClusterPolicy manifests from k8s/ in the repo root.
@@ -1945,7 +2327,7 @@ apply_kyverno_policies() {
             break
         fi
         if [[ ${attempt} -lt ${max_attempts} ]]; then
-            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed (transient API server issue), retrying in 10s..."
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
             sleep 10
         fi
     done
@@ -1963,6 +2345,86 @@ apply_kyverno_policies() {
     fi
 }
 
+setup_cli_identity() {
+    log_info "Setting up cluster-whisperer-cli ServiceAccount identity..."
+    local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
+
+    # Create namespace (idempotent) and apply SA + RBAC — fail explicitly on error.
+    if ! kubectl create namespace cluster-whisperer --dry-run=client -o yaml | kubectl apply -f -; then
+        log_error "Failed to create cluster-whisperer namespace"
+        return 1
+    fi
+    if ! kubectl apply -f "${REPO_ROOT}/k8s/rbac-cli.yaml"; then
+        log_error "Failed to apply CLI SA RBAC (k8s/rbac-cli.yaml)"
+        return 1
+    fi
+    log_success "CLI SA and RBAC applied"
+
+    # Generate SA token — fail explicitly if the API cannot issue the token.
+    # GKE caps token duration at 48h regardless of --duration; regenerate before each demo.
+    local token cluster_server cluster_ca
+    if ! token=$(kubectl create token cluster-whisperer-cli -n cluster-whisperer --duration=48h); then
+        log_error "Failed to create token for cluster-whisperer-cli SA"
+        return 1
+    fi
+    cluster_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+    cluster_ca=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+    if [[ -z "${cluster_server}" || -z "${cluster_ca}" ]]; then
+        log_error "Failed to extract cluster server or CA — run: kubectl config view --minify to debug"
+        return 1
+    fi
+
+    cat > "${cli_kubeconfig}" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: ${cluster_server}
+    certificate-authority-data: ${cluster_ca}
+  name: cluster-whisperer
+contexts:
+- context:
+    cluster: cluster-whisperer
+    user: cluster-whisperer-cli
+  name: default
+current-context: default
+users:
+- name: cluster-whisperer-cli
+  user:
+    token: ${token}
+EOF
+    chmod 600 "${cli_kubeconfig}"
+    log_success "CLI SA kubeconfig written: ${cli_kubeconfig}"
+}
+
+apply_kyverno_cli_policy() {
+    log_info "Applying Kyverno CLI identity ClusterPolicy..."
+
+    local max_attempts=3
+    local apply_success=false
+    for ((attempt=1; attempt<=max_attempts; attempt++)); do
+        if kubectl apply -f "${REPO_ROOT}/k8s/kyverno-cli-allowlist.yaml"; then
+            apply_success=true
+            break
+        fi
+        if [[ ${attempt} -lt ${max_attempts} ]]; then
+            log_warning "  [attempt ${attempt}/${max_attempts}] kubectl apply failed, retrying in 10s..."
+            sleep 10
+        fi
+    done
+    if [[ "${apply_success}" != "true" ]]; then
+        log_error "Failed to apply Kyverno CLI identity ClusterPolicy after ${max_attempts} attempts"
+        return 1
+    fi
+
+    if kubectl get clusterpolicy cluster-whisperer-cli-resource-allowlist &>/dev/null; then
+        log_success "Kyverno CLI identity policy applied"
+    else
+        log_error "Kyverno CLI identity policy not found after apply"
+        return 1
+    fi
+}
+
 # =============================================================================
 # k8s-vectordb-sync Controller and cluster-whisperer Serve
 # =============================================================================
@@ -1976,7 +2438,10 @@ build_cluster_whisperer_image() {
     fi
 
     log_info "Building cluster-whisperer Docker image..."
-    docker build ${platform_flag} -t cluster-whisperer:latest "${REPO_ROOT}" --quiet
+    if ! docker build ${platform_flag} -t cluster-whisperer:latest "${REPO_ROOT}" --quiet; then
+        log_error "Failed to build cluster-whisperer image"
+        return 1
+    fi
     log_success "cluster-whisperer image built"
 }
 
@@ -2018,8 +2483,14 @@ deploy_cluster_whisperer_serve() {
         local tagged_image="${AR_LOCATION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/cluster-whisperer:latest"
 
         log_info "Pushing cluster-whisperer image to ${tagged_image}..."
-        docker tag cluster-whisperer:latest "${tagged_image}"
-        docker push "${tagged_image}" --quiet
+        if ! docker tag cluster-whisperer:latest "${tagged_image}"; then
+            log_error "Failed to tag cluster-whisperer image"
+            return 1
+        fi
+        if ! docker push "${tagged_image}" --quiet; then
+            log_error "Failed to push cluster-whisperer image to Artifact Registry"
+            return 1
+        fi
         log_success "Image pushed to Artifact Registry"
 
         # Apply manifest with the correct image inline to avoid a double rollout.
@@ -2057,7 +2528,10 @@ deploy_cluster_whisperer_serve() {
             return 1
         fi
 
-        kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"
+        if ! kubectl apply -f "${SCRIPT_DIR}/manifests/mcp-rbac.yaml"; then
+            log_error "Failed to apply MCP RBAC manifests"
+            return 1
+        fi
     fi
 
     wait_for_pods "cluster-whisperer" "app=cluster-whisperer" 600
@@ -2108,13 +2582,14 @@ deploy_vectordb_sync() {
         fi
     fi
 
-    helm install k8s-vectordb-sync "${chart_source}" \
-        \
+    if ! helm install k8s-vectordb-sync "${chart_source}" \
         --namespace k8s-vectordb-sync \
         --create-namespace \
         --values "${SCRIPT_DIR}/helm-values/k8s-vectordb-sync.yaml" \
-        --wait --timeout 120s
-
+        --wait --timeout 120s; then
+        log_error "Failed to install k8s-vectordb-sync"
+        return 1
+    fi
     log_success "k8s-vectordb-sync controller deployed"
 }
 
@@ -2236,6 +2711,19 @@ print_summary() {
     log_info "To tear down:"
     echo "  ./demo/cluster/teardown.sh"
     echo ""
+
+    if [[ ${#SETUP_ERRORS[@]} -gt 0 ]]; then
+        echo ""
+        log_warning "=============================================="
+        log_warning "Setup completed with ${#SETUP_ERRORS[@]} failed step(s):"
+        log_warning "=============================================="
+        for step in "${SETUP_ERRORS[@]}"; do
+            log_error "  FAILED: ${step}"
+        done
+        echo ""
+        log_info "Re-run setup.sh to retry failed steps (cluster creation is skipped when a cluster already exists)."
+        echo ""
+    fi
 }
 
 # =============================================================================
@@ -2243,18 +2731,24 @@ print_summary() {
 # =============================================================================
 
 usage() {
-    echo "Usage: $0 <kind|gcp> [--verify-only]"
+    echo "Usage: $0 <kind|gcp> [zone] [--verify-only]"
     echo ""
     echo "Modes:"
     echo "  kind   Create a local Kind cluster (~360 CRDs)"
     echo "  gcp    Create a GKE cluster (~360 CRDs)"
     echo ""
+    echo "Arguments (gcp mode):"
+    echo "  zone   Optional GCP zone to use (e.g., us-east1-b). Skips auto-detection"
+    echo "         and zone fallback. Same as setting GCP_ZONE=<zone> in the environment."
+    echo ""
     echo "Options:"
     echo "  --verify-only   Skip cluster creation, only run verification steps"
     echo "                  against an existing cluster. Completes in ~2 minutes."
     echo ""
-    echo "Environment variables (gcp mode):"
-    echo "  GCP_ZONE    Override auto-detected zone (e.g., GCP_ZONE=europe-west1-b $0 gcp)"
+    echo "Examples:"
+    echo "  $0 gcp                   # auto-detect nearest zone, fall back on stockout"
+    echo "  $0 gcp us-east1-b        # use us-east1-b specifically"
+    echo "  $0 gcp --verify-only     # verify existing cluster only"
     exit 1
 }
 
@@ -2288,13 +2782,25 @@ main() {
         usage
     fi
 
-    # Parse optional flags
+    # Parse optional zone argument and flags
     local verify_only=false
     shift
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --verify-only)
                 verify_only=true
+                shift
+                ;;
+            *-*-*)
+                # Looks like a GCP zone (e.g. us-east1-b, europe-west1-c)
+                if [[ "${MODE}" == "gcp" ]]; then
+                    export GCP_ZONE="$1"
+                    export GCP_ZONE_IS_OVERRIDE=true
+                    log_info "Using zone from argument: ${GCP_ZONE}"
+                else
+                    log_error "Zone argument only valid in gcp mode: '$1'"
+                    usage
+                fi
                 shift
                 ;;
             *)
@@ -2333,38 +2839,61 @@ main() {
         create_gke_cluster
     fi
 
-    install_ingress_controller
-    install_crossplane
-    install_crossplane_providers
-    install_platform_compositions
-    install_chroma
-    install_qdrant
+    run_step "install_ingress_controller" install_ingress_controller
+    run_step "install_crossplane" install_crossplane
 
-    # The Chroma/Qdrant installs push the cumulative object count past GKE's
-    # control plane resize threshold. The resize starts asynchronously — wait
-    # for it and verify API server connectivity before proceeding.
-    if [[ "${MODE}" == "gcp" ]]; then
-        wait_for_gke_operations
-        wait_for_api_server
-    fi
-
-    verify_vector_dbs
-    install_jaeger
-    install_otel_collector
-    verify_observability
-    verify_trace_pipeline
-    deploy_demo_app
+    # Install Kyverno and apply all policies BEFORE Crossplane providers register
+    # 300+ CRDs. The CRD registration triggers a GKE control plane resize
+    # (RECONCILING state) that makes the API server temporarily unreachable.
+    # Kyverno must be installed while the control plane is stable.
+    # Policies reference SAs that don't exist yet — safe: Kyverno never matches
+    # until the SAs are created. Hard failures: the demo cannot run without these.
     install_kyverno
     apply_kyverno_policies
+    setup_cli_identity
+    apply_kyverno_cli_policy
+
+    run_step "install_crossplane_providers" install_crossplane_providers
+    run_step "install_platform_compositions" install_platform_compositions
+    run_helm_step "install_chroma" install_chroma
+    run_helm_step "install_qdrant" install_qdrant
+
+    # Registering 300+ Crossplane CRDs pushes GKE past its control plane resize
+    # threshold, triggering a RECONCILING state. During RECONCILING the API server
+    # is briefly unreachable — kubectl and helm calls fail. We poll via gcloud
+    # (which talks to the GKE control plane API directly, not the API server) until
+    # the cluster returns to RUNNING.
+    if [[ "${MODE}" == "gcp" ]]; then
+        log_info "Waiting for GKE control plane resize to complete (triggered by 300+ CRD registration)..."
+        run_step "wait_for_gke_operations" wait_for_gke_operations
+        wait_for_cluster_running
+        # After resize, the cluster returns to RUNNING but the webhook network path
+        # from the control plane to Kyverno may not yet be re-established.
+        # Probe the webhook before proceeding with any further installs.
+        wait_for_kyverno_webhook
+    fi
+
+    run_step "verify_vector_dbs" verify_vector_dbs
+    run_helm_step "install_jaeger" install_jaeger
+    run_helm_step "install_otel_collector" install_otel_collector
+    run_step "verify_observability" verify_observability
+    run_step "deploy_demo_app" deploy_demo_app
+
+    # deploy_cluster_whisperer_serve is a hard failure — the agent server must
+    # exist for the demo. verify-kyverno-policy.sh runs after it because it
+    # impersonates the cluster-whisperer-mcp SA which is created by this step.
+    # verify_trace_pipeline also runs after: it sends a query through the agent
+    # and checks for traces in Jaeger, so the agent must be deployed first.
     deploy_cluster_whisperer_serve
     # Smoke-test Kyverno policy behavior now that the cluster-whisperer-mcp SA exists
-    "${SCRIPT_DIR}/verify-kyverno-policy.sh"
-    create_ingress_resources
-    run_capability_inference
-    verify_vector_search
-    run_instance_sync
-    generate_demo_env
-    deploy_vectordb_sync
+    run_step "verify-kyverno-policy" "${SCRIPT_DIR}/verify-kyverno-policy.sh"
+    run_step "verify_trace_pipeline" verify_trace_pipeline
+    run_step "create_ingress_resources" create_ingress_resources
+    run_step "run_capability_inference" run_capability_inference
+    run_step "verify_vector_search" verify_vector_search
+    run_step "run_instance_sync" run_instance_sync
+    run_step "generate_demo_env" generate_demo_env
+    run_step "deploy_vectordb_sync" deploy_vectordb_sync
     print_summary
 }
 

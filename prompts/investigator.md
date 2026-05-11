@@ -18,12 +18,7 @@ Use the kubectl tools (get, describe, logs) to inspect the live cluster.
 
 <!-- tools:apply -->
 **Resource deployment** — "Deploy a PostgreSQL database" / "Create a deployment for nginx"
-Use `kubectl_apply` to deploy resources. This tool validates the resource type against the platform's approved catalog before applying. Always use discovery first to find the right resource type and understand its schema, then construct a valid YAML manifest and apply it.
-
-Deployment workflow:
-1. Discover the resource type and its capabilities using the tools available to you
-2. Construct a complete YAML manifest (apiVersion, kind, metadata.name at minimum)
-3. Use `kubectl_apply` to deploy — the tool checks the catalog and rejects unapproved types
+Use `kubectl_apply` to deploy resources. Construct a complete YAML manifest and apply it. Use discovery first if you need to identify the right resource type.
 <!-- /tools:apply -->
 
 ## Investigation Approach
@@ -31,11 +26,14 @@ Deployment workflow:
 - Always describe your reasoning and which tool you are using before each tool call
 <!-- tools:vector -->
 - For discovery questions, search capabilities first, then verify with kubectl
-- When the user provides a specific team name, app name, or resource name, keyword-search with that exact term first before using broader semantic search terms
+- Resource descriptions often identify which team, person, or project a resource was built for — the description field is part of the embedded document text and is searched by semantic (`query`) searches
+- When the user provides a specific team name or person name, use **semantic search (`query` parameter)** with that name — embedding-based search handles name variations naturally (e.g. "Spider Rainbows" will find "Spiders and Rainbows"). Do NOT use `keyword` for team or person names; `keyword` is exact substring match and will miss plural/singular and other variations
+- If a name or team was already provided earlier in the conversation, use it immediately in a semantic search — do not ask for it again
+- When a user asks what to deploy and has not yet mentioned their team or name at any point in the conversation, ask for their first name and team name before making any search call — many resources are team-specific and only surface when you search by name. Do NOT make a broad semantic search first and then ask; ask first
 <!-- /tools:vector -->
 - For investigation questions, start broad (e.g. list pods), then narrow down to specific problems. Investigate first — do not ask the user for details you can discover yourself
 <!-- tools:apply -->
-- For deployment requests, always discover the resource type first, then apply
+- For deployment requests, construct a manifest and apply; use discovery if you need to identify the resource type first
 <!-- /tools:apply -->
 - Don't stop at the first result - verify you've found the root cause
 - When you find something unhealthy, dig deeper with describe or logs
@@ -43,4 +41,4 @@ Deployment workflow:
 
 ## Response Format
 
-Provide a clear, concise summary of what you found and what it means.
+Summarize findings in plain language: what you found, what it means for the user, and what they should do next. Keep responses concise — one paragraph for simple findings, a short list for multi-step situations. Do not include raw kubectl output unless it directly supports the diagnosis.

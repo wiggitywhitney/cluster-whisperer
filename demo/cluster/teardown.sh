@@ -16,6 +16,9 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 CLUSTER_NAME_PREFIX="cluster-whisperer"
 KUBECONFIG_PATH="${HOME}/.kube/config-cluster-whisperer"
 
@@ -68,10 +71,9 @@ cleanup_kubeconfig_entries() {
     kubectl config delete-user "${context_name}" &>/dev/null && \
         log_success "Removed kubeconfig user: ${context_name}" || true
 
-    # If no contexts remain, delete the file
-    local remaining
-    remaining=$(kubectl config get-contexts -o name 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "${remaining}" -eq 0 ]]; then
+    # If no contexts remain, delete the file.
+    # grep -q . is more reliable than wc -l (some kubectl versions emit blank lines).
+    if ! kubectl config get-contexts -o name 2>/dev/null | grep -q .; then
         rm -f "${KUBECONFIG_PATH}"
         log_success "No contexts remain — removed ${KUBECONFIG_PATH}"
     fi
@@ -97,7 +99,47 @@ delete_kind_cluster() {
         cleanup_kubeconfig_entries "kind-${name}"
     else
         log_error "Failed to delete Kind cluster '${name}'"
+        return 1
     fi
+}
+
+# Wait for any in-progress GKE cluster operations to complete before deletion.
+# Ctrl+C during setup leaves the cluster locked by a server-side creation op.
+# gcloud container clusters delete returns code 400 until that op finishes.
+# Uses gcloud container operations wait (server-side long-poll, no artificial timeout).
+wait_for_cluster_operations() {
+    local name=$1
+    local zone=$2
+
+    local running_ops
+    running_ops=$(gcloud container operations list \
+        --project "${GCP_PROJECT}" \
+        --zone "${zone}" \
+        --filter="targetLink~${name} AND status=RUNNING" \
+        --format="value(name)" 2>/dev/null || true)
+
+    if [[ -z "${running_ops}" ]]; then
+        return 0
+    fi
+
+    log_info "Cluster '${name}' has in-progress operations — waiting for completion..."
+
+    while IFS= read -r op_name; do
+        [[ -z "${op_name}" ]] && continue
+        local op_type
+        op_type=$(gcloud container operations describe "${op_name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" \
+            --format="value(operationType)" 2>/dev/null || echo "unknown")
+        log_info "  Waiting for: ${op_type} (${op_name})"
+        if ! gcloud container operations wait "${op_name}" \
+            --project "${GCP_PROJECT}" \
+            --zone "${zone}" 2>/dev/null; then
+            log_warning "Operation wait failed for ${op_name} on cluster '${name}' — continuing"
+        fi
+    done <<< "${running_ops}"
+
+    log_success "Done waiting for operations on cluster '${name}'"
 }
 
 find_gke_clusters() {
@@ -113,6 +155,7 @@ find_gke_clusters() {
 delete_gke_cluster() {
     local name=$1
     local zone=$2
+    wait_for_cluster_operations "${name}" "${zone}"
     log_info "Deleting GKE cluster '${name}' in ${zone}..."
     log_warning "This will take several minutes. The cluster incurs billing until fully deleted."
     if gcloud container clusters delete "${name}" \
@@ -124,6 +167,7 @@ delete_gke_cluster() {
         cleanup_kubeconfig_entries "gke_${GCP_PROJECT}_${zone}_${name}"
     else
         log_error "Failed to delete GKE cluster '${name}'"
+        return 1
     fi
 }
 
@@ -138,6 +182,7 @@ main() {
     echo ""
 
     local found_any=false
+    local any_failed=false
 
     # --- Kind clusters ---
     local kind_clusters=()
@@ -153,7 +198,7 @@ main() {
         done
         echo ""
         for cluster in "${kind_clusters[@]}"; do
-            delete_kind_cluster "${cluster}"
+            delete_kind_cluster "${cluster}" || any_failed=true
         done
     fi
 
@@ -179,7 +224,7 @@ main() {
             local name zone
             name=$(echo "${entry}" | awk '{print $1}')
             zone=$(echo "${entry}" | awk '{print $2}')
-            delete_gke_cluster "${name}" "${zone}"
+            delete_gke_cluster "${name}" "${zone}" || any_failed=true
         done
     fi
 
@@ -187,7 +232,42 @@ main() {
         log_warning "No clusters found matching prefix '${CLUSTER_NAME_PREFIX}'"
     fi
 
+    # Only remove cluster-scoped files when teardown succeeded fully.
+    # On a failed teardown, leaving these files intact helps debugging.
+    if [[ "${any_failed}" == "false" ]]; then
+        # Clean up the CLI SA kubeconfig — cluster is gone so token is invalid.
+        local cli_kubeconfig="${HOME}/.kube/config-cluster-whisperer-cli"
+        if [[ -f "${cli_kubeconfig}" ]]; then
+            rm -f "${cli_kubeconfig}"
+            log_success "Removed CLI SA kubeconfig: ${cli_kubeconfig}"
+        fi
+
+        # Clean up demo/.env — contains cluster-specific ingress URLs and paths.
+        local demo_env="${REPO_ROOT}/demo/.env"
+        if [[ -f "${demo_env}" ]]; then
+            rm -f "${demo_env}"
+            log_success "Removed demo environment file: ${demo_env}"
+        fi
+    fi
+
+    # Clear thread memory — the demo thread accumulates all conversation history
+    # across demo runs. Leaving it after teardown contaminates future runs with
+    # stale context (old branding, prior deployments, repeated namespace queries).
+    local threads_dir="${REPO_ROOT}/data/threads"
+    if [[ -d "${threads_dir}" ]]; then
+        local thread_count
+        thread_count=$(find "${threads_dir}" -name "*.json" | wc -l | tr -d ' ')
+        if [[ "${thread_count}" -gt 0 ]]; then
+            rm -f "${threads_dir}"/*.json
+            log_success "Removed ${thread_count} thread checkpoint file(s) from ${threads_dir}"
+        fi
+    fi
+
     echo ""
+    if [[ "${any_failed}" == "true" ]]; then
+        log_error "Teardown finished with errors — one or more clusters could not be deleted"
+        exit 1
+    fi
     log_success "Teardown complete!"
 }
 

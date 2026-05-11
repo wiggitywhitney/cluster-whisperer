@@ -8,7 +8,8 @@
 #   1. Any deployed ManagedService claims (from Act 3b)
 #   2. The PostgreSQL deployment/service created by the Composition
 #   3. Demo app — restarted so it's back in CrashLoopBackOff
-#   4. Thread checkpoint files (conversation memory from Act 3a)
+#   4. CLI SA kubeconfig token — refreshed (GKE caps tokens at 48h)
+#   5. Thread checkpoint files (conversation memory from Act 3a)
 #
 # Usage:
 #   ./demo/cluster/reset-demo.sh
@@ -120,7 +121,38 @@ else
     log_warn "Demo app status: ${pod_status} (expected CrashLoopBackOff — may need more time)"
 fi
 
-# ─── Step 4: Clean up thread checkpoint files ─────────────────────────────────
+# ─── Step 4: Refresh CLI SA kubeconfig token ──────────────────────────────────
+# GKE caps SA tokens at 48h regardless of the requested duration. The token
+# written by setup.sh expires 48 hours after it was created — refresh it now
+# so it's always fresh at demo time, even if the cluster has been running a while.
+CLI_KUBECONFIG="${HOME}/.kube/config-cluster-whisperer-cli"
+if [[ -f "${CLI_KUBECONFIG}" ]]; then
+    ADMIN_KUBECONFIG="${HOME}/.kube/config-cluster-whisperer"
+    if [[ -f "${ADMIN_KUBECONFIG}" ]]; then
+        new_token=$(kubectl --kubeconfig "${ADMIN_KUBECONFIG}" \
+            create token cluster-whisperer-cli \
+            -n cluster-whisperer \
+            --duration=48h 2>/dev/null)
+        if [[ -n "${new_token}" ]]; then
+            # Patch the token in-place using Python (avoids sed quoting issues with long tokens)
+            python3 -c "
+import sys, re
+with open('${CLI_KUBECONFIG}', 'r') as f:
+    content = f.read()
+content = re.sub(r'(token: ).*', r'\g<1>${new_token}', content)
+with open('${CLI_KUBECONFIG}', 'w') as f:
+    f.write(content)
+"
+            log_info "CLI SA kubeconfig token refreshed (48h)"
+        else
+            log_warn "Could not refresh CLI SA token — cluster may not be ready"
+        fi
+    else
+        log_warn "Admin kubeconfig not found — skipping token refresh"
+    fi
+fi
+
+# ─── Step 5: Clean up thread checkpoint files ─────────────────────────────────
 THREADS_DIR="${REPO_ROOT}/data/threads"
 if [[ -d "${THREADS_DIR}" ]]; then
     local_count=$(find "${THREADS_DIR}" -name "*.json" | wc -l | tr -d ' ')
@@ -138,7 +170,27 @@ fi
 echo ""
 log_info "Demo reset complete. Cluster is ready for a fresh run."
 echo ""
-echo "  Next steps:"
-echo "    source demo/.env"
-echo "    kubectl get pods  # should fail (no KUBECONFIG in your shell)"
+
+# Detect stale tool state from a prior demo run and warn loudly.
+# The subshell inherits parent env vars, so if these are set here, the presenter's
+# shell is still in a mid-demo tool configuration that will break Act 1.
+stale_vars=()
+[[ -n "${CLUSTER_WHISPERER_TOOLS:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_TOOLS=${CLUSTER_WHISPERER_TOOLS}")
+[[ -n "${CLUSTER_WHISPERER_AGENT:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_AGENT=${CLUSTER_WHISPERER_AGENT}")
+[[ -n "${CLUSTER_WHISPERER_VECTOR_BACKEND:-}" ]] && stale_vars+=("CLUSTER_WHISPERER_VECTOR_BACKEND=${CLUSTER_WHISPERER_VECTOR_BACKEND}")
+
+if [[ ${#stale_vars[@]} -gt 0 ]]; then
+    echo ""
+    log_warn "Stale tool state detected in your shell:"
+    for v in "${stale_vars[@]}"; do
+        echo "    ${v}"
+    done
+    echo ""
+fi
+
+echo "  Next steps (order matters — source before setting tools):"
+echo "    source demo/.env   # unsets all tool vars"
+echo "    agent langgraph    # set agent"
+echo "    tools kubectl      # Act 1 starts with kubectl only — set AFTER source"
+echo "    kubectl get pods   # should fail (no KUBECONFIG in your shell)"
 echo ""

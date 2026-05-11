@@ -1,0 +1,35 @@
+# ABOUTME: RBAC manifests for the cluster-whisperer CLI agent ServiceAccount.
+# ABOUTME: Broad permissions so Kyverno (not RBAC) is the effective guardrail for the demo.
+
+# ServiceAccount: the CLI agent authenticates as this identity via a generated kubeconfig.
+# Broad RBAC is intentional — the Kyverno allowlist policy (kyverno-cli-allowlist.yaml)
+# is the enforcement layer. Narrow RBAC would block non-ManagedService creates before
+# Kyverno evaluates them, preventing the denial message from appearing in the demo.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-whisperer-cli
+  namespace: cluster-whisperer
+---
+# ClusterRole: broad read + write on all resources so Kyverno fires for any create attempt.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-whisperer-cli
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-whisperer-cli
+subjects:
+  - kind: ServiceAccount
+    name: cluster-whisperer-cli
+    namespace: cluster-whisperer
+roleRef:
+  kind: ClusterRole
+  name: cluster-whisperer-cli
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,30 @@
+/*-- scss:defaults --*/
+$font-family-sans-serif: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+$presentation-font-size-root: 42px;
+$link-color: #00897B;
+
+/*-- scss:rules --*/
+.reveal .slide-number {
+  font-size: 0.6em;
+}
+
+.reveal .r-fit-text {
+  color: $link-color;
+}
+
+.spaced {
+  line-height: 1.8;
+}
+
+.big-text {
+  font-size: 1.4em;
+  line-height: 1.6;
+}
+
+/* Rainbow accent colors for build-up slides */
+.rainbow-1 { color: #E91E63; } /* pink */
+.rainbow-2 { color: #F57C00; } /* orange — projector-safe */
+.rainbow-3 { color: #2E7D32; } /* green — projector-safe */
+.rainbow-4 { color: #2196F3; } /* blue */
+.rainbow-5 { color: #9C27B0; } /* purple */
+.rainbow-6 { color: #0097A7; } /* cyan — projector-safe */

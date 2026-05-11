@@ -40,6 +40,20 @@ const EXCLUDED_RESOURCE_NAMES = new Set([
   "endpoints",
   "leases",
   "endpointslices",
+  // Schema registry types: listing all instances produces enormous JSON payloads
+  // (85MB+ for CRDs, 71MB+ for MRDs on a 300+ CRD cluster). These are schema
+  // objects, not running instances — capability sync covers them as types already.
+  "customresourcedefinitions",
+  "managedresourcedefinitions",
+  // Access-review resources: ephemeral request objects (create-only, no list verb).
+  // You CREATE them to get a response; they are never persisted or listable.
+  "bindings",
+  "localsubjectaccessreviews",
+  "selfsubjectaccessreviews",
+  "selfsubjectreviews",
+  "selfsubjectrulesreviews",
+  "subjectaccessreviews",
+  "tokenreviews",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -319,7 +333,10 @@ export async function discoverResources(
 /**
  * Fetches the list of CRD names from the cluster.
  *
- * Runs `kubectl get crd -o json` and extracts metadata.name from each item.
+ * Uses jsonpath to fetch only metadata.name — avoids transferring full CRD
+ * specs (each ~50KB) for 300+ CRDs. Full specs would exceed spawnSync buffer
+ * limits and cause silent empty-set returns.
+ *
  * CRD names are fully qualified (e.g., "sqls.devopstoolkit.live"), matching
  * the format returned by buildFullyQualifiedName.
  *
@@ -328,19 +345,20 @@ export async function discoverResources(
 function getCrdNames(
   kubectl: (args: string[]) => { output: string; isError: boolean }
 ): Set<string> {
-  const result = kubectl(["get", "crd", "-o", "json"]);
+  const result = kubectl([
+    "get",
+    "crd",
+    "-o",
+    "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}",
+  ]);
 
-  if (result.isError) {
+  if (result.isError || !result.output.trim()) {
     return new Set();
   }
 
-  try {
-    const parsed = JSON.parse(result.output);
-    const names = (parsed.items || [])
-      .filter((item: { metadata?: { name?: string } }) => item?.metadata?.name)
-      .map((item: { metadata: { name: string } }) => item.metadata.name);
-    return new Set(names);
-  } catch {
-    return new Set();
-  }
+  const names = result.output
+    .trim()
+    .split("\n")
+    .filter((n) => n.length > 0);
+  return new Set(names);
 }

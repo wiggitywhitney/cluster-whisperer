@@ -28,8 +28,8 @@ export function createApp(deps: AppDependencies): Hono {
   });
 
   /**
-   * Root route — serves the spider page with clickable YouTube links.
-   * Top half of the spider links to Whitney's YouTube, bottom half to Viktor's.
+   * Root route — serves the Spiders and Rainbows page.
+   * Rainbow background with spider foreground; clicking anywhere opens Whitney's YouTube.
    * The app only reaches this route if the database was reachable at startup
    * (otherwise the process crashes before serving any requests).
    */
@@ -51,49 +51,51 @@ export function createApp(deps: AppDependencies): Hono {
     }
     .container {
       position: relative;
-      display: inline-block;
+      width: 90vw;
+      max-width: 1200px;
     }
-    .container img {
-      max-height: 90vh;
-      max-width: 90vw;
-      display: block;
-    }
-    .zone {
-      position: absolute;
-      left: 0;
+    .rainbow {
       width: 100%;
-      height: 50%;
+      height: auto;
       display: block;
     }
-    .zone-top { top: 0; }
-    .zone-bottom { top: 50%; }
+    .spider {
+      position: absolute;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 25%;
+      height: auto;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <img src="/Spider-v3.png" alt="Spider">
-    <a class="zone zone-top" href="https://www.youtube.com/@wiggitywhitney" target="_blank" rel="noopener"></a>
-    <a class="zone zone-bottom" href="https://www.youtube.com/@DevOpsToolkit" target="_blank" rel="noopener"></a>
-  </div>
+  <a href="https://www.youtube.com/@wiggitywhitney" target="_blank" rel="noopener" style="display: block; width: fit-content; margin: 0 auto;">
+    <div class="container">
+      <img class="rainbow" src="/Rainbow.png" alt="Rainbow">
+      <img class="spider" src="/Spider-v1.png" alt="Spider">
+    </div>
+  </a>
 </body>
 </html>`);
   });
 
   /**
-   * Serve the spider image from the public directory.
-   * Single static asset — no middleware needed.
+   * Serve static images from the public directory.
    */
-  app.get("/Spider-v3.png", (c) => {
-    const imagePath = path.resolve(process.cwd(), "public", "Spider-v3.png");
-    try {
-      const imageBuffer = fs.readFileSync(imagePath);
-      return new Response(imageBuffer, {
-        headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" },
-      });
-    } catch {
-      return c.text("Image not found", 404);
-    }
-  });
+  for (const filename of ["Rainbow.png", "Spider-v1.png"]) {
+    app.get(`/${filename}`, (c) => {
+      const imagePath = path.resolve(process.cwd(), "public", filename);
+      try {
+        const imageBuffer = fs.readFileSync(imagePath);
+        return new Response(imageBuffer, {
+          headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" },
+        });
+      } catch {
+        return c.text("Image not found", 404);
+      }
+    });
+  }
 
   return app;
 }
