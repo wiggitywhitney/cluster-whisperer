@@ -116,6 +116,7 @@ clients never get cluster access.
 **Success criteria**: The MCP server runs in-cluster as a pod. Claude Code connects via HTTP transport. The pod's ServiceAccount RBAC is the only cluster access — no local kubeconfig required. Stdio mode for local development is unaffected.
 
 ### M5: OTel Context for Remote Execution
+**Step 0:** Read related research before starting: [Research: OTel GenAI Semantic Conventions for Agents](../docs/research/otel-genai-agents-semconv.md)
 - [ ] Root span created on serve side (not CLI side) for remote investigations
 - [ ] Span attributes include: question, agent type, tool groups, vector backend
 - [ ] Tool spans (kubectl, vector search) are children of the investigation span

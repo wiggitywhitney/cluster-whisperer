@@ -16,3 +16,4 @@
 | viktors-pipeline-assessment.md | Viktor's pipeline assessment | — |
 | weaver-research.md | Weaver research | — |
 | kyverno-helm-install.md | Kyverno Helm install on GKE — chart version, subjects syntax, GKE firewall gotcha | 2026-04-06 |
+| otel-genai-agents-semconv.md | OTel GenAI semconv current status — spec moved to dedicated repo, invoke_workflow, events vs attributes, Datadog support | 2026-05-07 |
