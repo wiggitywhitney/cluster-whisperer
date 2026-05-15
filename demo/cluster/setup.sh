@@ -415,7 +415,13 @@ check_prerequisites_gcp() {
     if ! docker info &>/dev/null 2>&1; then
         if command -v colima &>/dev/null; then
             log_info "Docker not running — starting Colima..."
-            colima start
+            if ! colima start 2>&1; then
+                # Colima can get into a state where the VM is running but the host
+                # agent is not. Force-stop to clear the stale state, then retry.
+                log_info "Colima failed to start — attempting force-stop and retry..."
+                colima stop --force 2>/dev/null || true
+                colima start
+            fi
             if ! docker info &>/dev/null 2>&1; then
                 log_error "Colima started but Docker is still not responding"
                 exit 1
@@ -855,6 +861,12 @@ EOF
         return 1
     fi
     log_success "Ingress created: http://demo-app.${BASE_DOMAIN}"
+
+    # NGINX ingress controller takes ~30s to program routes after resources are
+    # created. Wait before returning so callers can immediately use the URLs.
+    log_info "Waiting 30s for NGINX to program ingress routes..."
+    sleep 30
+    log_success "Ingress routes ready"
 }
 
 # Generate a demo/.env file with resolved ingress URLs and kubeconfig path.
@@ -1845,10 +1857,12 @@ verify_trace_pipeline() {
     # demo thread — if demo/.env was previously sourced in this shell, the thread
     # env var would be inherited and all setup runs would pollute the demo history.
     env -u CLUSTER_WHISPERER_THREAD \
+        -u ANTHROPIC_BASE_URL \
+        -u ANTHROPIC_CUSTOM_HEADERS \
         OTEL_TRACING_ENABLED=true \
         OTEL_EXPORTER_TYPE=otlp \
         OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${otlp_port}" \
-        npx tsx "${REPO_ROOT}/src/index.ts" --tools kubectl "what namespaces exist?" &>/dev/null || true
+        timeout 60 npx tsx "${REPO_ROOT}/src/index.ts" --tools kubectl "what namespaces exist?" &>/dev/null || true
 
     kill "${otlp_pf_pid}" 2>/dev/null || true
     wait "${otlp_pf_pid}" 2>/dev/null || true
@@ -2889,9 +2903,9 @@ main() {
     run_step "verify-kyverno-policy" "${SCRIPT_DIR}/verify-kyverno-policy.sh"
     run_step "verify_trace_pipeline" verify_trace_pipeline
     run_step "create_ingress_resources" create_ingress_resources
-    run_step "run_capability_inference" run_capability_inference
+    run_helm_step "run_capability_inference" run_capability_inference
     run_step "verify_vector_search" verify_vector_search
-    run_step "run_instance_sync" run_instance_sync
+    run_helm_step "run_instance_sync" run_instance_sync
     run_step "generate_demo_env" generate_demo_env
     run_step "deploy_vectordb_sync" deploy_vectordb_sync
     print_summary

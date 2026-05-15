@@ -24,6 +24,17 @@ FAILURES=0
 NAMESPACE="kyverno-test-$$"
 
 cleanup() {
+    # Crossplane reconciles ManagedService objects into Object resources with
+    # finalizers. Those finalizers block namespace deletion indefinitely.
+    # Strip them first so the namespace can terminate cleanly.
+    local stuck_objects
+    stuck_objects=$(kubectl get objects.kubernetes.m.crossplane.io \
+        -n "${NAMESPACE}" -o name 2>/dev/null || true)
+    if [[ -n "${stuck_objects}" ]]; then
+        echo "${stuck_objects}" | xargs -I{} kubectl patch {} \
+            -n "${NAMESPACE}" --type=merge \
+            -p '{"metadata":{"finalizers":[]}}' &>/dev/null || true
+    fi
     kubectl delete namespace "${NAMESPACE}" --ignore-not-found &>/dev/null || true
 }
 trap cleanup EXIT
@@ -104,8 +115,8 @@ metadata:
   name: kyverno-test-allowed
 spec:
   engine: postgresql
-  version: "15"
-  storage: 20
+  engineVersion: "15"
+  storageGB: 20
 EOF
 )
 
@@ -201,7 +212,7 @@ else
     fi
 
     info "Test 6: ManagedService creation as cluster-whisperer-cli SA should be allowed by Kyverno..."
-    local cli_allow_exit=0
+    cli_allow_exit=0
     CLI_ALLOW_OUTPUT=$(echo "${MANAGED_SERVICE_MANIFEST}" | kubectl apply -f - \
         -n "${NAMESPACE}" \
         --as="${CLI_SA}" 2>&1) || cli_allow_exit=$?

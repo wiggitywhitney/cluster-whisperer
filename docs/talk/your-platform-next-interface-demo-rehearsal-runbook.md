@@ -106,7 +106,11 @@ The audience should feel the developer's frustration: too many options, no way t
 
 ## Step 5 (Slides): Section B — Vector search explainer
 
-Walk through Section B slides. Explain why semantic search over embedded descriptions beats listing 360 CRDs by name.
+Walk through Section B slides. Three reasons vector search beats listing 360 CRDs by name:
+
+1. **Scale** — Finding the right resource with kubectl would require `kubectl explain` on hundreds of CRDs — hundreds of tool calls, thousands of lines of YAML in the context window. One vector search returns 3–5 most relevant results. Context stays clean.
+2. **Semantic matching** — String matching fails silently. "What database should I use?" shares no words with "platform.acme.io/v1alpha1 ManagedService." Vector similarity succeeds because "database" and "managed PostgreSQL service" are close in embedding space even though they share no words.
+3. **Richer descriptions** — The LLM-generated capability descriptions capture meaning that raw kubectl output doesn't. "Managed database for the Spiders and Rainbows team, low complexity, supports PostgreSQL" is far more searchable than 200 lines of OpenAPI schema.
 
 ---
 
