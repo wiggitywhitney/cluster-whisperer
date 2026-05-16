@@ -27,6 +27,13 @@ spec:
               - kind: ServiceAccount
                 name: cluster-whisperer-mcp
                 namespace: cluster-whisperer
+              # cluster-whisperer is the serve pod's own SA. Its ClusterRole
+              # only grants get/list/watch so it cannot create resources today,
+              # but including it here ensures Kyverno enforces the same boundary
+              # if the RBAC is ever broadened.
+              - kind: ServiceAccount
+                name: cluster-whisperer
+                namespace: cluster-whisperer
       validate:
         message: "Only ManagedService resources from platform.acme.io are allowed through the cluster whisperer agent."
         deny:

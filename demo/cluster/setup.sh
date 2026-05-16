@@ -947,6 +947,16 @@ agent() {
   esac
 }
 tools() {
+  if [[ -z "\${CLUSTER_WHISPERER_KUBECONFIG:-}" ]]; then
+    echo "Error: CLUSTER_WHISPERER_KUBECONFIG is not set." >&2
+    echo "Run: source demo/.env" >&2
+    return 1
+  fi
+  if [[ ! -f "\${CLUSTER_WHISPERER_KUBECONFIG}" ]]; then
+    echo "Error: kubeconfig file not found: \${CLUSTER_WHISPERER_KUBECONFIG}" >&2
+    echo "Run: source demo/.env" >&2
+    return 1
+  fi
   local input="\$*"
   input=\$(echo "\$input" | sed 's/[, ][, ]*/,/g; s/^,//; s/,\$//')
   local valid=true result=""

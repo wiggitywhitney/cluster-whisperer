@@ -75,14 +75,20 @@ describe("kyverno-allowlist.yaml ClusterPolicy", () => {
           expect(resources.operations).toEqual(["CREATE"]);
         });
 
-        it("scopes to the cluster-whisperer-mcp ServiceAccount", () => {
+        it("scopes to the cluster-whisperer-mcp and cluster-whisperer ServiceAccounts", () => {
           const any = match().any as Record<string, unknown>[];
           const subjects = any[0].subjects as Record<string, string>[];
-          expect(subjects).toHaveLength(1);
+          // MCP SA: the primary demo identity
+          expect(subjects).toHaveLength(2);
           expect(subjects[0].kind).toBe("ServiceAccount");
           expect(subjects[0].name).toBe("cluster-whisperer-mcp");
           // namespace is required for SA kind — without it, match is ambiguous
           expect(subjects[0].namespace).toBe("cluster-whisperer");
+          // Serve pod SA: read-only RBAC today, but included so any future
+          // RBAC expansion is automatically covered by the same policy
+          expect(subjects[1].kind).toBe("ServiceAccount");
+          expect(subjects[1].name).toBe("cluster-whisperer");
+          expect(subjects[1].namespace).toBe("cluster-whisperer");
         });
 
         it("subjects is a sibling of resources (not nested inside it)", () => {
