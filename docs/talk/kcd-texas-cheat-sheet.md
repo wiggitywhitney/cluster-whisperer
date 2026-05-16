@@ -27,25 +27,25 @@
 
 ## The Controller — What, When, Why
 
-**What it syncs:**
+### **What it syncs:**
 - All Kubernetes resources that support `list` + `watch` verbs
 - CRDs
 - Instances
 
 
-**What it skips** (high-churn, low signal for semantic search):
+### **What it skips** (high-churn, low signal for semantic search):
 - `events`
 - `leases`
 - `endpointslices`
 - `componentstatuses`
 
 
-**When it syncs:**
+### **When it syncs:**
 - On resource changes (add, update, delete) via **Kubernetes watch events**
 - **Full resync every 24 hours** for eventual consistency
 
 
-**Why:** Keeps the agent's knowledge current — queries always reflect **live cluster state**, not a stale snapshot
+### **Why:** Keeps the agent's knowledge current — queries always reflect **live cluster state**, not a stale snapshot
 
 ---
 
